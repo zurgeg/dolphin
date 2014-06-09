@@ -50,6 +50,7 @@ public:
 		GAMECUBE_DISC = 0,
 		WII_DISC,
 		WII_WAD,
+		WIIU_DISC,
 		NUMBER_OF_PLATFORMS
 	};
 

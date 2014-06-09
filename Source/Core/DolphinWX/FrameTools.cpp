@@ -289,6 +289,8 @@ void CFrame::CreateMenu()
 
 	wxMenu *platformMenu = new wxMenu;
 	viewMenu->AppendSubMenu(platformMenu, _("Show Platforms"));
+	platformMenu->AppendCheckItem(IDM_LISTWIIU, _("Show Wii U"));
+	platformMenu->Check(IDM_LISTWIIU, SConfig::GetInstance().m_ListWiiU);
 	platformMenu->AppendCheckItem(IDM_LISTWII, _("Show Wii"));
 	platformMenu->Check(IDM_LISTWII, SConfig::GetInstance().m_ListWii);
 	platformMenu->AppendCheckItem(IDM_LISTGC, _("Show GameCube"));
@@ -667,10 +669,10 @@ void CFrame::DoOpen(bool Boot)
 	std::string currentDir = File::GetCurrentDir();
 
 	wxString path = wxFileSelector(
-			_("Select the file to load"),
-			wxEmptyString, wxEmptyString, wxEmptyString,
-			_("All GC/Wii files (elf, dol, gcm, iso, wbfs, ciso, gcz, wad)") +
-			wxString::Format("|*.elf;*.dol;*.gcm;*.iso;*.wbfs;*.ciso;*.gcz;*.wad;*.dff;*.tmd|%s",
+		_("Select the file to load"),
+		wxEmptyString, wxEmptyString, wxEmptyString,
+		_("All GC/Wii/WiiU files (elf, dol, rpx, gcm, iso, wud, wbfs, ciso, gcz, wad)") +
+				wxString::Format("|*.elf;*.dol;*.rpx;*.rpl;*.gcm;*.iso;*.wud;*.wbfs;*.ciso;*.gcz;*.wad;*.dff;*.tmd|%s",
 				wxGetTranslation(wxALL_FILES)),
 			wxFD_OPEN | wxFD_FILE_MUST_EXIST,
 			this);
@@ -1806,6 +1808,9 @@ void CFrame::GameListChanged(wxCommandEvent& event)
 {
 	switch (event.GetId())
 	{
+	case IDM_LISTWIIU:
+		SConfig::GetInstance().m_ListWiiU = event.IsChecked();
+		break;
 	case IDM_LISTWII:
 		SConfig::GetInstance().m_ListWii = event.IsChecked();
 		break;

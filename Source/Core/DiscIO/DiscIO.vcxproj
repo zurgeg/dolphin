@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="12.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -66,6 +66,7 @@
     <ClCompile Include="VolumeGC.cpp" />
     <ClCompile Include="VolumeWad.cpp" />
     <ClCompile Include="VolumeWiiCrypted.cpp" />
+    <ClCompile Include="VolumeWiiU.cpp" />
     <ClCompile Include="WbfsBlob.cpp" />
     <ClCompile Include="WiiWad.cpp" />
   </ItemGroup>
@@ -91,6 +92,7 @@
     <ClInclude Include="VolumeGC.h" />
     <ClInclude Include="VolumeWad.h" />
     <ClInclude Include="VolumeWiiCrypted.h" />
+    <ClInclude Include="VolumeWiiU.h" />
     <ClInclude Include="WbfsBlob.h" />
     <ClInclude Include="WiiWad.h" />
   </ItemGroup>

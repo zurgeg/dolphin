@@ -77,6 +77,7 @@
 #include "DolphinWX/resources/Platform_Gamecube.xpm"
 #include "DolphinWX/resources/Platform_Wad.xpm"
 #include "DolphinWX/resources/Platform_Wii.xpm"
+#include "DolphinWX/resources/Platform_WiiU.xpm"
 #include "DolphinWX/resources/rating_gamelist.h"
 
 size_t CGameListCtrl::m_currentItem = 0;
@@ -245,10 +246,11 @@ void CGameListCtrl::InitBitmaps()
 	m_FlagImageIndex[DiscIO::IVolume::COUNTRY_SDK]     = m_imageListSmall->Add(wxBitmap(Flag_SDK_xpm));
 	m_FlagImageIndex[DiscIO::IVolume::COUNTRY_UNKNOWN] = m_imageListSmall->Add(wxBitmap(Flag_Unknown_xpm));
 
-	m_PlatformImageIndex.resize(3);
+	m_PlatformImageIndex.resize(4);
 	m_PlatformImageIndex[0] = m_imageListSmall->Add(wxBitmap(Platform_Gamecube_xpm));
 	m_PlatformImageIndex[1] = m_imageListSmall->Add(wxBitmap(Platform_Wii_xpm));
 	m_PlatformImageIndex[2] = m_imageListSmall->Add(wxBitmap(Platform_Wad_xpm));
+	m_PlatformImageIndex[3] = m_imageListSmall->Add(wxBitmap(Platform_WiiU_xpm));
 
 	m_EmuStateImageIndex.resize(6);
 	m_EmuStateImageIndex[0] = m_imageListSmall->Add(wxBitmap(rating_0));
@@ -370,6 +372,7 @@ void CGameListCtrl::Update()
 		// second message instead
 		if ((SConfig::GetInstance().m_ListGC  &&
 			SConfig::GetInstance().m_ListWii  &&
+			SConfig::GetInstance().m_ListWiiU  &&
 			SConfig::GetInstance().m_ListWad) &&
 			(SConfig::GetInstance().m_ListJap &&
 			SConfig::GetInstance().m_ListUsa  &&
@@ -529,11 +532,16 @@ void CGameListCtrl::ScanForISOs()
 
 	CFileSearch::XStringVector Extensions;
 
+	if (SConfig::GetInstance().m_ListWiiU)
+		Extensions.push_back("*.wud");
 	if (SConfig::GetInstance().m_ListGC)
 		Extensions.push_back("*.gcm");
-	if (SConfig::GetInstance().m_ListWii || SConfig::GetInstance().m_ListGC)
+	if (SConfig::GetInstance().m_ListWiiU || SConfig::GetInstance().m_ListWii || SConfig::GetInstance().m_ListGC)
 	{
 		Extensions.push_back("*.iso");
+	}
+	if (SConfig::GetInstance().m_ListWii || SConfig::GetInstance().m_ListGC)
+	{
 		Extensions.push_back("*.ciso");
 		Extensions.push_back("*.gcz");
 		Extensions.push_back("*.wbfs");
@@ -577,6 +585,10 @@ void CGameListCtrl::ScanForISOs()
 
 				switch(iso_file->GetPlatform())
 				{
+					case GameListItem::WIIU_DISC:
+						if (!SConfig::GetInstance().m_ListWiiU)
+							list = false;
+						break;
 					case GameListItem::WII_DISC:
 						if (!SConfig::GetInstance().m_ListWii)
 							list = false;

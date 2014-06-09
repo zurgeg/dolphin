@@ -18,6 +18,7 @@
 #include "DiscIO/VolumeGC.h"
 #include "DiscIO/VolumeWad.h"
 #include "DiscIO/VolumeWiiCrypted.h"
+#include "DiscIO/VolumeWiiU.h"
 
 
 namespace DiscIO
@@ -28,7 +29,8 @@ enum EDiscType
 	DISC_TYPE_WII,
 	DISC_TYPE_WII_CONTAINER,
 	DISC_TYPE_GC,
-	DISC_TYPE_WAD
+	DISC_TYPE_WAD,
+	DISC_TYPE_WIIU
 };
 
 #ifndef _WIN32
@@ -80,6 +82,9 @@ IVolume* CreateVolumeFromFilename(const std::string& _rFilename, u32 _PartitionG
 
 	switch (GetDiscType(*pReader))
 	{
+		case DISC_TYPE_WIIU:
+			return new CVolumeWiiU(pReader);
+
 		case DISC_TYPE_WII:
 		case DISC_TYPE_GC:
 			return new CVolumeGC(pReader);
@@ -133,6 +138,14 @@ bool IsVolumeWiiDisc(const IVolume *_rVolume)
 
 	return (Common::swap32(MagicWord) == 0x5D1C9EA3);
 	//Gamecube 0xc2339f3d
+}
+
+bool IsVolumeWiiUDisc(const IVolume *_rVolume)
+{
+	u16 MagicWord = 0;
+	_rVolume->Read(0x0, 2, (u8*)&MagicWord);
+
+	return (Common::swap16(MagicWord) == 0x5755);	
 }
 
 bool IsVolumeWadFile(const IVolume *_rVolume)
@@ -227,6 +240,11 @@ EDiscType GetDiscType(IBlobReader& _rReader)
 	u32 WiiContainerMagic = Reader.Read32(0x60);
 	u32 WADMagic = Reader.Read32(0x02);
 	u32 GCMagic = Reader.Read32(0x1C);
+	u16 WiiUMagic = Reader.Read16(0x00);
+
+	// check for Wii U ("WU")
+	if (WiiUMagic == 0x5755)
+		return DISC_TYPE_WIIU;
 
 	// check for Wii
 	if (WiiMagic == 0x5D1C9EA3 && WiiContainerMagic != 0)

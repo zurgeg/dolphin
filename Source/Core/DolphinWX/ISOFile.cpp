@@ -59,11 +59,17 @@ GameListItem::GameListItem(const std::string& _rFileName)
 
 		if (pVolume != nullptr)
 		{
-			if (!DiscIO::IsVolumeWadFile(pVolume))
-				m_Platform = DiscIO::IsVolumeWiiDisc(pVolume) ? WII_DISC : GAMECUBE_DISC;
-			else
+			if (DiscIO::IsVolumeWadFile(pVolume))
 			{
 				m_Platform = WII_WAD;
+			}
+			else if (DiscIO::IsVolumeWiiUDisc(pVolume))
+			{
+				m_Platform = WIIU_DISC;
+			}
+			else
+			{
+				m_Platform = DiscIO::IsVolumeWiiDisc(pVolume) ? WII_DISC : GAMECUBE_DISC;
 			}
 
 			m_volume_names = pVolume->GetNames();
