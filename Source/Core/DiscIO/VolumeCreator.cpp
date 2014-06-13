@@ -240,10 +240,10 @@ EDiscType GetDiscType(IBlobReader& _rReader)
 	u32 WiiContainerMagic = Reader.Read32(0x60);
 	u32 WADMagic = Reader.Read32(0x02);
 	u32 GCMagic = Reader.Read32(0x1C);
-	u16 WiiUMagic = Reader.Read16(0x00);
+	u32 WiiUMagic = Reader.Read32(0x00);
 
-	// check for Wii U ("WU")
-	if (WiiUMagic == 0x5755)
+	// check for Wii U ("WUP-"), all Wii U product codes begin with "WUP-", not just games.
+	if (WiiUMagic == 0x5755502D)
 		return DISC_TYPE_WIIU;
 
 	// check for Wii
