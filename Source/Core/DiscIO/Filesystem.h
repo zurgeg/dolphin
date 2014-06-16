@@ -1,4 +1,4 @@
-// Copyright 2013 Dolphin Emulator Project
+// Copyright 2014 Dolphin Emulator Project
 // Licensed under GPLv2
 // Refer to the license.txt file included.
 
@@ -23,15 +23,16 @@ struct SFileInfo
 	u64 m_Offset;
 	u64 m_FileSize;
 	std::string m_FullPath;
+	u32 m_Unknown;
 
 	bool IsDirectory() const { return (m_NameOffset & 0xFF000000) != 0; }
 
-	SFileInfo() : m_NameOffset(0), m_Offset(0), m_FileSize(0)
+	SFileInfo() : m_NameOffset(0), m_Offset(0), m_FileSize(0), m_Unknown(0)
 	{
 	}
 
 	SFileInfo(const SFileInfo& rhs) : m_NameOffset(rhs.m_NameOffset),
-	    m_Offset(rhs.m_Offset), m_FileSize(rhs.m_FileSize), m_FullPath(rhs.m_FullPath)
+		m_Offset(rhs.m_Offset), m_FileSize(rhs.m_FileSize), m_FullPath(rhs.m_FullPath), m_Unknown(rhs.m_Unknown)
 	{
 	}
 };

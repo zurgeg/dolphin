@@ -6,42 +6,50 @@
 
 #include <string>
 #include <vector>
+#include <polarssl/aes.h>
 
 #include "Common/CommonTypes.h"
 #include "DiscIO/Volume.h"
 
-// --- this volume type is used for undecryptable WiiU disc images ---
+// --- this volume type is used for encrypted Wii U images ---
 
 namespace DiscIO
 {
 
 class IBlobReader;
 
-class CVolumeWiiU : public IVolume
+class CVolumeWiiUCrypted : public IVolume
 {
 public:
-	CVolumeWiiU(IBlobReader* _pReader);
-	~CVolumeWiiU();
+	CVolumeWiiUCrypted(IBlobReader* _pReader, u64 _VolumeOffset, const unsigned char* _pVolumeKey);
+	~CVolumeWiiUCrypted();
 	bool Read(u64 _Offset, u64 _Length, u8* _pBuffer) const override;
 	bool RAWRead(u64 _Offset, u64 _Length, u8* _pBuffer) const override;
+	bool GetTitleID(u8* _pBuffer) const override;
+	void GetTMD(u8* _pBuffer, u32* _sz) const override;
 	std::string GetUniqueID() const override;
-	std::string GetRevisionSpecificUniqueID() const override;
 	std::string GetMakerID() const override;
-	int GetRevision() const override;
 	std::vector<std::string> GetNames() const override;
 	u32 GetFSTSize() const override;
 	std::string GetApploaderDate() const override;
 	ECountry GetCountry() const override;
 	u64 GetSize() const override;
 	u64 GetRawSize() const override;
-	bool IsDiscTwo() const override;
 
-	typedef std::string(*StringDecoder)(const std::string&);
-
-	static StringDecoder GetStringDecoder(ECountry country);
+	bool SupportsIntegrityCheck() const override { return true; }
+	bool CheckIntegrity() const override;
 
 private:
 	IBlobReader* m_pReader;
+
+	u8* m_pBuffer;
+	aes_context* m_AES_ctx;
+
+	u64 m_VolumeOffset;
+	u64 dataOffset;
+
+	mutable u64 m_LastDecryptedBlockOffset;
+	mutable unsigned char m_LastDecryptedBlock[0x8000];
 };
 
 } // namespace

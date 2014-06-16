@@ -91,6 +91,12 @@
     <ClCompile Include="VolumeWiiU.cpp">
       <Filter>Volume</Filter>
     </ClCompile>
+    <ClCompile Include="FileSystemWiiU.cpp">
+      <Filter>FileSystem</Filter>
+    </ClCompile>
+    <ClCompile Include="VolumeWiiUCrypted.cpp">
+      <Filter>Volume</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DiscScrubber.h">
@@ -161,6 +167,12 @@
     </ClInclude>
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="VolumeWiiU.h">
+      <Filter>Volume</Filter>
+    </ClInclude>
+    <ClInclude Include="FileSystemWiiU.h">
+      <Filter>FileSystem</Filter>
+    </ClInclude>
+    <ClInclude Include="VolumeWiiUCrypted.h">
       <Filter>Volume</Filter>
     </ClInclude>
   </ItemGroup>

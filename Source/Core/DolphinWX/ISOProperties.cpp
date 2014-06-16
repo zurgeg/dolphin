@@ -1,4 +1,4 @@
-// Copyright 2013 Dolphin Emulator Project
+// Copyright 2014 Dolphin Emulator Project
 // Licensed under GPLv2
 // Refer to the license.txt file included.
 
@@ -132,7 +132,9 @@ CISOProperties::CISOProperties(const std::string fileName, wxWindow* parent, wxW
 	OpenISO = DiscIO::CreateVolumeFromFilename(fileName);
 	bool IsWad = DiscIO::IsVolumeWadFile(OpenISO);
 	bool IsWiiDisc = DiscIO::IsVolumeWiiDisc(OpenISO);
-	if (IsWiiDisc)
+	bool IsWiiUDisc = DiscIO::IsVolumeWiiUDisc(OpenISO);
+
+	if (IsWiiDisc || IsWiiUDisc)
 	{
 		for (u32 i = 0; i < 0xFFFFFFFF; i++) // yes, technically there can be OVER NINE THOUSAND partitions...
 		{
@@ -252,7 +254,7 @@ CISOProperties::CISOProperties(const std::string fileName, wxWindow* parent, wxW
 		break;
 	}
 
-	if (IsWiiDisc) // Only one language with wii banners
+	if (IsWiiDisc || IsWiiUDisc) // Only one language with wii banners
 	{
 		m_Lang->SetSelection(0);
 		m_Lang->Disable();
@@ -281,14 +283,15 @@ CISOProperties::CISOProperties(const std::string fileName, wxWindow* parent, wxW
 	// TODO : Should we add a way to browse the wad file ?
 	if (!DiscIO::IsVolumeWadFile(OpenISO))
 	{
-		if (DiscIO::IsVolumeWiiDisc(OpenISO))
+		if (IsWiiUDisc || DiscIO::IsVolumeWiiDisc(OpenISO))
 		{
 			for (u32 i = 0; i < WiiDisc.size(); i++)
 			{
 				WiiPartition partition = WiiDisc.at(i);
 				wxTreeItemId PartitionRoot =
 					m_Treectrl->AppendItem(RootId, wxString::Format(_("Partition %i"), i), 0, 0);
-				CreateDirectoryTree(PartitionRoot, partition.Files, 1, partition.Files.at(0)->m_FileSize);
+				if (partition.Files.size()>0)
+					CreateDirectoryTree(PartitionRoot, partition.Files, 1, partition.Files.at(0)->m_FileSize);
 				if (i == 1)
 					m_Treectrl->Expand(PartitionRoot);
 			}
@@ -304,7 +307,7 @@ CISOProperties::CISOProperties(const std::string fileName, wxWindow* parent, wxW
 
 CISOProperties::~CISOProperties()
 {
-	if (!IsVolumeWiiDisc(OpenISO) && !IsVolumeWadFile(OpenISO) && pFileSystem)
+	if (!IsVolumeWiiUDisc(OpenISO) && !IsVolumeWiiDisc(OpenISO) && !IsVolumeWadFile(OpenISO) && pFileSystem)
 		delete pFileSystem;
 	// two vector's items are no longer valid after deleting filesystem
 	WiiDisc.clear();
@@ -446,7 +449,7 @@ void CISOProperties::CreateGUIControls(bool IsWad)
 	sbCoreOverrides->Add(DSPHLE, 0, wxLEFT, 5);
 
 	wxStaticBoxSizer * const sbWiiOverrides = new wxStaticBoxSizer(wxVERTICAL, m_GameConfig, _("Wii Console"));
-	if (!DiscIO::IsVolumeWiiDisc(OpenISO) && !DiscIO::IsVolumeWadFile(OpenISO))
+	if (!DiscIO::IsVolumeWiiUDisc(OpenISO) && !DiscIO::IsVolumeWiiDisc(OpenISO) && !DiscIO::IsVolumeWadFile(OpenISO))
 	{
 		sbWiiOverrides->ShowItems(false);
 		EnableWideScreen->Hide();
@@ -707,7 +710,7 @@ void CISOProperties::OnRightClickOnTree(wxTreeEvent& event)
 
 	popupMenu->Append(IDM_EXTRACTALL, _("Extract All Files..."));
 
-	if (!DiscIO::IsVolumeWiiDisc(OpenISO) ||
+	if (!(DiscIO::IsVolumeWiiUDisc(OpenISO) || DiscIO::IsVolumeWiiDisc(OpenISO)) ||
 		(m_Treectrl->GetItemImage(m_Treectrl->GetSelection()) == 0 &&
 		m_Treectrl->GetFirstVisibleItem() != m_Treectrl->GetSelection()))
 	{
@@ -750,7 +753,7 @@ void CISOProperties::OnExtractFile(wxCommandEvent& WXUNUSED (event))
 		m_Treectrl->SelectItem(m_Treectrl->GetItemParent(m_Treectrl->GetSelection()));
 	}
 
-	if (DiscIO::IsVolumeWiiDisc(OpenISO))
+	if (DiscIO::IsVolumeWiiUDisc(OpenISO) || DiscIO::IsVolumeWiiDisc(OpenISO))
 	{
 		int partitionNum = wxAtoi(File.Mid(File.find_first_of("/") - 1, 1));
 		File.Remove(0, File.find_first_of("/") + 1); // Remove "Partition x/"
@@ -769,7 +772,7 @@ void CISOProperties::ExportDir(const char* _rFullPath, const char* _rExportFolde
 	std::vector<const DiscIO::SFileInfo *> fst;
 	DiscIO::IFileSystem *FS = nullptr;
 
-	if (DiscIO::IsVolumeWiiDisc(OpenISO))
+	if (DiscIO::IsVolumeWiiUDisc(OpenISO) || DiscIO::IsVolumeWiiDisc(OpenISO))
 	{
 		FS = WiiDisc.at(partitionNum).FileSystem;
 	}
@@ -785,8 +788,9 @@ void CISOProperties::ExportDir(const char* _rFullPath, const char* _rExportFolde
 		index[0] = 0;
 		index[1] = (u32)fst.size();
 
-		FS->ExportApploader(_rExportFolder);
-		if (!DiscIO::IsVolumeWiiDisc(OpenISO))
+		if (!DiscIO::IsVolumeWiiUDisc(OpenISO))
+			FS->ExportApploader(_rExportFolder);
+		if (!DiscIO::IsVolumeWiiUDisc(OpenISO) && !DiscIO::IsVolumeWiiDisc(OpenISO))
 			FS->ExportDOL(_rExportFolder);
 	}
 	else // Look for the dir we are going to extract
@@ -870,7 +874,7 @@ void CISOProperties::OnExtractDir(wxCommandEvent& event)
 
 	if (event.GetId() == IDM_EXTRACTALL)
 	{
-		if (DiscIO::IsVolumeWiiDisc(OpenISO))
+		if (DiscIO::IsVolumeWiiUDisc(OpenISO) || DiscIO::IsVolumeWiiDisc(OpenISO))
 			for (u32 i = 0; i < WiiDisc.size(); i++)
 				ExportDir(nullptr, WxStrToStr(Path).c_str(), i);
 		else
@@ -887,7 +891,7 @@ void CISOProperties::OnExtractDir(wxCommandEvent& event)
 		m_Treectrl->SelectItem(m_Treectrl->GetItemParent(m_Treectrl->GetSelection()));
 	}
 
-	if (DiscIO::IsVolumeWiiDisc(OpenISO))
+	if (DiscIO::IsVolumeWiiUDisc(OpenISO) || DiscIO::IsVolumeWiiDisc(OpenISO))
 	{
 		int partitionNum = wxAtoi(Directory.Mid(Directory.find_first_of("/") - 1, 1));
 		Directory.Remove(0, Directory.find_first_of("/") + 1); // Remove "Partition x/"
@@ -907,7 +911,7 @@ void CISOProperties::OnExtractDataFromHeader(wxCommandEvent& event)
 	if (Path.empty())
 		return;
 
-	if (DiscIO::IsVolumeWiiDisc(OpenISO))
+	if (DiscIO::IsVolumeWiiUDisc(OpenISO) || DiscIO::IsVolumeWiiDisc(OpenISO))
 	{
 		wxString Directory = m_Treectrl->GetItemText(m_Treectrl->GetSelection());
 		unsigned int partitionNum = wxAtoi(Directory.Mid(Directory.find_first_of("0123456789"), 2));

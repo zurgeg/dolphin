@@ -1,4 +1,4 @@
-// Copyright 2013 Dolphin Emulator Project
+// Copyright 2014 Dolphin Emulator Project
 // Licensed under GPLv2
 // Refer to the license.txt file included.
 
@@ -54,8 +54,9 @@ std::string CVolumeWiiU::GetUniqueID() const
 		return NO_UID;
 	}
 
+	ID[4] = ID[5];
+	ID[5] = ID[6];
 	ID[6] = '\0';
-
 	return ID;
 }
 
@@ -77,17 +78,11 @@ IVolume::ECountry CVolumeWiiU::GetCountry() const
 
 std::string CVolumeWiiU::GetMakerID() const
 {
-	if (m_pReader == nullptr)
-		return std::string();
-
 	return std::string();
 }
 
 int CVolumeWiiU::GetRevision() const
 {
-	if (!m_pReader)
-		return 0;
-
 	return 0;
 }
 
@@ -117,17 +112,11 @@ std::vector<std::string> CVolumeWiiU::GetNames() const
 
 u32 CVolumeWiiU::GetFSTSize() const
 {
-	if (m_pReader == nullptr)
-		return 0;
-
 	return 0;
 }
 
 std::string CVolumeWiiU::GetApploaderDate() const
 {
-	if (m_pReader == nullptr)
-		return std::string();
-
 	return std::string();
 }
 
