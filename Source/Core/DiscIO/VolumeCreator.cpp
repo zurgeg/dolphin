@@ -277,6 +277,7 @@ static IVolume* CreateVolumeFromCryptedWiiUImage(IBlobReader& _rReader, u32 _Par
 	const u8 MarioKartKey[16] = { 0xc3, 0xf8, 0x73, 0xc4, 0xe0, 0x1e, 0xa0, 0x28, 0x17, 0xe1, 0x82, 0x89, 0x8e, 0xce, 0xbc, 0x74 };
 	const u8 ZeldaKey[16] = { 0xc0, 0xfe, 0x8a, 0xae, 0xe5, 0xf6, 0xe7, 0xb5, 0xb1, 0x07, 0x4a, 0x46, 0x09, 0x06, 0xa2, 0x8f };
 	const u8 AvengersKey[16] = { 0x02, 0x7c, 0x95, 0x57, 0x64, 0x8a, 0x1a, 0x99, 0x9a, 0xa7, 0x84, 0x83, 0x19, 0xbb, 0x5e, 0xf2 };
+	const u8 DonkeyKongKey[16] = { 0x77, 0xf5, 0x14, 0x31, 0x74, 0x69, 0x83, 0xae, 0xa5, 0x01, 0xd1, 0xea, 0xcb, 0x8d, 0xaf, 0x54 };
 
 	switch (game_id)
 	{
@@ -295,6 +296,11 @@ static IVolume* CreateVolumeFromCryptedWiiUImage(IBlobReader& _rReader, u32 _Par
 	case GAMECODE('A', 'R', 'D', 'E'):
 		title_key = SM3DWKey;
 		break;
+	case GAMECODE('A', 'R', 'K', 'E'):
+	case GAMECODE('A', 'R', 'K', 'P'):
+	case GAMECODE('A', 'R', 'K', 'J'):
+		title_key = DonkeyKongKey;
+		break;
 	case GAMECODE('A', 'R', 'P', 'E'):
 		title_key = NSMBKey;
 		break;
@@ -312,6 +318,7 @@ static IVolume* CreateVolumeFromCryptedWiiUImage(IBlobReader& _rReader, u32 _Par
 	case GAMECODE('B', 'C', 'Z', 'E'):
 		title_key = ZeldaKey;
 		break;
+	case GAMECODE('A', 'S', 'A', 'E'):
 	case GAMECODE('G', 'W', 'W', 'E'):
 		title_key = WarioKey;
 		break;
