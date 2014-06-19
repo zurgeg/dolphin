@@ -11,6 +11,7 @@ set(SRCS	BannerLoader.cpp
 			FileHandlerARC.cpp
 			FileMonitor.cpp
 			FileSystemGCWii.cpp
+			FileSystemWiiU.cpp			
 			Filesystem.cpp
 			NANDContentLoader.cpp
 			VolumeCommon.cpp
@@ -19,6 +20,8 @@ set(SRCS	BannerLoader.cpp
 			VolumeGC.cpp
 			VolumeWad.cpp
 			VolumeWiiCrypted.cpp
+			VolumeWiiU.cpp
+			VolumeWiiUCrypted.cpp
 			WiiWad.cpp)
 
 add_dolphin_library(discio "${SRCS}" "")
