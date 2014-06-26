@@ -26,6 +26,7 @@ public:
 
 	static bool BootUp();
 	static bool IsElfWii(const std::string& filename);
+	static bool IsElfWiiU(const std::string& filename);
 
 	// Tries to find a map file for the current game by looking first in the
 	// local user directory, then in the shared user directory.

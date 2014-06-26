@@ -1,4 +1,4 @@
-// Copyright 2013 Dolphin Emulator Project
+// Copyright 2014 Dolphin Emulator Project
 // Licensed under GPLv2
 // Refer to the license.txt file included.
 
@@ -30,9 +30,13 @@ private:
 	bool bRelocate;
 	u32 entryPoint;
 
+	// an array of pointers to decompressed sections
+	u8 **decompressed;
+	u32 m_number_of_sections;
+
 public:
 	ElfReader(void *ptr);
-	~ElfReader() { }
+	~ElfReader();
 
 	u32 Read32(int off) const { return base32[off>>2]; }
 
@@ -48,15 +52,7 @@ public:
 	int GetNumSections() const { return (int)(header->e_shnum); }
 	const u8 *GetPtr(int offset) const { return (u8*)base + offset; }
 	const char *GetSectionName(int section) const;
-	const u8 *GetSectionDataPtr(int section) const
-	{
-		if (section < 0 || section >= header->e_shnum)
-			return nullptr;
-		if (sections[section].sh_type != SHT_NOBITS)
-			return GetPtr(sections[section].sh_offset);
-		else
-			return nullptr;
-	}
+	const u8 *GetSectionDataPtr(int section) const;
 	bool IsCodeSection(int section) const
 	{
 		return sections[section].sh_type == SHT_PROGBITS;
@@ -72,4 +68,7 @@ public:
 	bool DidRelocate() {
 		return bRelocate;
 	}
+
+	// true for Wii U .rpx or .rpl files
+	bool is_rpx = false;
 };

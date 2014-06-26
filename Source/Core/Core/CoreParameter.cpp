@@ -128,6 +128,7 @@ bool SCoreStartupParameter::AutoSetup(EBootBS2 _BootBS2)
 			SplitPath(m_strFilename, nullptr, nullptr, &Extension);
 			if (!strcasecmp(Extension.c_str(), ".gcm") ||
 				!strcasecmp(Extension.c_str(), ".iso") ||
+				!strcasecmp(Extension.c_str(), ".wud") ||
 				!strcasecmp(Extension.c_str(), ".wbfs") ||
 				!strcasecmp(Extension.c_str(), ".ciso") ||
 				!strcasecmp(Extension.c_str(), ".gcz") ||
@@ -139,11 +140,11 @@ bool SCoreStartupParameter::AutoSetup(EBootBS2 _BootBS2)
 				{
 					if (bootDrive)
 						PanicAlertT("Could not read \"%s\".  "
-								"There is no disc in the drive, or it is not a GC/Wii backup.  "
+								"There is no disc in the drive, or it is not a GC/Wii/U backup.  "
 								"Please note that original Gamecube and Wii discs cannot be read "
 								"by most PC DVD drives.", m_strFilename.c_str());
 					else
-						PanicAlertT("\"%s\" is an invalid GCM/ISO file, or is not a GC/Wii ISO.",
+						PanicAlertT("\"%s\" is an invalid GCM/ISO/WUD file, or is not a GC/Wii/U ISO.",
 								m_strFilename.c_str());
 					return false;
 				}
@@ -177,7 +178,7 @@ bool SCoreStartupParameter::AutoSetup(EBootBS2 _BootBS2)
 					break;
 
 				default:
-					if (PanicYesNoT("Your GCM/ISO file seems to be invalid (invalid country)."
+					if (PanicYesNoT("Your GCM/ISO/WUD file seems to be invalid (invalid country)."
 								   "\nContinue with PAL region?"))
 					{
 						bNTSC = false;
@@ -187,6 +188,13 @@ bool SCoreStartupParameter::AutoSetup(EBootBS2 _BootBS2)
 				}
 
 				delete pVolume;
+			}
+			else if (!strcasecmp(Extension.c_str(), ".rpx") || !strcasecmp(Extension.c_str(), ".rpl"))
+			{
+				bWii = true;
+				Region = USA_DIR;
+				m_BootType = BOOT_ELF;
+				bNTSC = true;
 			}
 			else if (!strcasecmp(Extension.c_str(), ".elf"))
 			{

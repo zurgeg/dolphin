@@ -34,6 +34,10 @@ bool CBoot::IsElfWii(const std::string& filename)
 	ElfReader reader(mem);
 	bool isWii = false;
 
+	// WiiU is not a Wii
+	if (reader.is_rpx)
+		return false;
+
 	for (int i = 0; i < reader.GetNumSections(); ++i)
 	{
 		if (reader.IsCodeSection(i))
@@ -52,6 +56,39 @@ bool CBoot::IsElfWii(const std::string& filename)
 
 	delete[] mem;
 	return isWii;
+}
+
+bool CBoot::IsElfWiiU(const std::string& filename)
+{
+	/* We already check if filename existed before we called this function, so
+	there is no need for another check, just read the file right away */
+
+	const u64 filesize = File::GetSize(filename);
+	u8 *const mem = new u8[(size_t)filesize];
+
+	{
+		File::IOFile f(filename, "rb");
+		f.ReadBytes(mem, (size_t)filesize);
+	}
+
+	ElfReader reader(mem);
+	bool isWiiU = false;
+
+	
+
+	for (int i = 0; i < reader.GetNumSections(); ++i)
+	{
+		if (reader.IsCodeSection(i))
+		{
+			for (unsigned int j = 0; j < reader.GetSectionSize(i) / sizeof (u32); ++j)
+			{
+				u32 word = Common::swap32(((u32*)reader.GetSectionDataPtr(i))[j]);
+			}
+		}
+	}
+
+	delete[] mem;
+	return isWiiU;
 }
 
 
