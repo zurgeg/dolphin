@@ -321,13 +321,12 @@ bool CBoot::BootUp()
 
 		// Check if we have gotten a Wii file or not
 		bool elfWiiU = IsElfWiiU(_StartupPara.m_strFilename);
-
-
 		bool elfWii = IsElfWii(_StartupPara.m_strFilename);
 		if (elfWii != _StartupPara.bWii)
 		{
 			PanicAlertT("Warning - starting ELF in wrong console mode!");
 		}
+		elfWii = elfWii || elfWiiU;
 
 		bool BS2Success = false;
 

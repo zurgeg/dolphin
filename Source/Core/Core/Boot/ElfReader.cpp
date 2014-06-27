@@ -196,8 +196,9 @@ bool ElfReader::LoadInto(u32 vaddr)
 //	sectionOffsets = new u32[GetNumSections()];
 	sectionAddrs = new u32[GetNumSections()];
 
-	// Should we relocate?
-	bRelocate = (header->e_type != ET_EXEC);
+	// Should we relocate? (if it's a library not an executable)
+	// Wii U RPX files don't set the ET_EXEC flag, but do set e_entry to the entry point.
+	bRelocate = (header->e_type != ET_EXEC && header->e_entry == 0);
 
 	if (bRelocate)
 	{
@@ -209,6 +210,7 @@ bool ElfReader::LoadInto(u32 vaddr)
 		DEBUG_LOG(MASTER_LOG,"Prerelocated executable");
 	}
 
+	// Note... Wii U RPX files have no segments, only sections
 	INFO_LOG(MASTER_LOG,"%i segments:", header->e_phnum);
 
 	// First pass : Get the bits into RAM
@@ -258,6 +260,17 @@ bool ElfReader::LoadInto(u32 vaddr)
 		if (s->sh_flags & SHF_ALLOC)
 		{
 			INFO_LOG(MASTER_LOG,"Data Section found: %s     Sitting at %08x, size %08x", name, writeAddr, s->sh_size);
+			const u8 *src = GetSectionDataPtr(i);
+			u8 *dst = Memory::GetPointer(writeAddr);
+			u32 srcSize = GetSectionSize(i);
+			u32 dstSize = GetSectionSize(i);
+			if (s->sh_type == SHT_NOBITS)
+				srcSize = 0;
+			for (u32 num = 0; num < srcSize; ++num)
+				Memory::Write_U8(src[num], writeAddr + num);
+			// zero out bss
+			for (u32 num = srcSize; num < dstSize; ++num)
+				Memory::Write_U8(0, writeAddr + num);
 		}
 		else
 		{
@@ -266,6 +279,15 @@ bool ElfReader::LoadInto(u32 vaddr)
 	}
 	INFO_LOG(MASTER_LOG,"Done loading.");
 	return true;
+}
+
+int ElfReader::GetSectionSize(SectionID section) const
+{
+	if (section <= 0 || section >= header->e_shnum)
+		return 0;
+	if (sections[section].sh_flags & SHF_DEFLATED)
+		return Common::swap32(*((u32 *)GetPtr(sections[section].sh_offset)));
+	return sections[section].sh_size;
 }
 
 SectionID ElfReader::GetSectionByName(const char *name, int firstSection) const

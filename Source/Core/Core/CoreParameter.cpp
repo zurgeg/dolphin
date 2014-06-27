@@ -191,6 +191,7 @@ bool SCoreStartupParameter::AutoSetup(EBootBS2 _BootBS2)
 			}
 			else if (!strcasecmp(Extension.c_str(), ".rpx") || !strcasecmp(Extension.c_str(), ".rpl"))
 			{
+				// although technically it is a Wii U, not a Wii
 				bWii = true;
 				Region = USA_DIR;
 				m_BootType = BOOT_ELF;
@@ -198,7 +199,7 @@ bool SCoreStartupParameter::AutoSetup(EBootBS2 _BootBS2)
 			}
 			else if (!strcasecmp(Extension.c_str(), ".elf"))
 			{
-				bWii = CBoot::IsElfWii(m_strFilename);
+				bWii = CBoot::IsElfWiiU(m_strFilename) || CBoot::IsElfWii(m_strFilename);
 				Region = USA_DIR;
 				m_BootType = BOOT_ELF;
 				bNTSC = true;

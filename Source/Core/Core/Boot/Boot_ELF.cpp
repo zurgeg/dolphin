@@ -36,19 +36,23 @@ bool CBoot::IsElfWii(const std::string& filename)
 
 	// WiiU is not a Wii
 	if (reader.is_rpx)
-		return false;
-
-	for (int i = 0; i < reader.GetNumSections(); ++i)
 	{
-		if (reader.IsCodeSection(i))
+		isWii = false;
+	}
+	else
+	{
+		for (int i = 0; i < reader.GetNumSections(); ++i)
 		{
-			for (unsigned int j = 0; j < reader.GetSectionSize(i) / sizeof (u32); ++j)
+			if (reader.IsCodeSection(i))
 			{
-				u32 word = Common::swap32(((u32*)reader.GetSectionDataPtr(i))[j]);
-				if ((word & HID4_mask) == HID4_pattern)
+				for (unsigned int j = 0; j < reader.GetSectionSize(i) / sizeof (u32); ++j)
 				{
-					isWii = true;
-					break;
+					u32 word = Common::swap32(((u32*)reader.GetSectionDataPtr(i))[j]);
+					if ((word & HID4_mask) == HID4_pattern)
+					{
+						isWii = true;
+						break;
+					}
 				}
 			}
 		}
@@ -56,6 +60,22 @@ bool CBoot::IsElfWii(const std::string& filename)
 
 	delete[] mem;
 	return isWii;
+}
+
+// Thanks to Tom
+// returns 1 iff str ends with suffix 
+int str_ends_with(const char * str, const char * suffix)
+{
+	if (str == NULL || suffix == NULL)
+		return 0;
+
+	size_t str_len = strlen(str);
+	size_t suffix_len = strlen(suffix);
+
+	if (suffix_len > str_len)
+		return 0;
+
+	return 0 == strncmp(str + str_len - suffix_len, suffix, suffix_len);
 }
 
 bool CBoot::IsElfWiiU(const std::string& filename)
@@ -74,19 +94,21 @@ bool CBoot::IsElfWiiU(const std::string& filename)
 	ElfReader reader(mem);
 	bool isWiiU = false;
 
-	
-
-	for (int i = 0; i < reader.GetNumSections(); ++i)
+	if (reader.is_rpx)
 	{
-		if (reader.IsCodeSection(i))
+		isWiiU = true;
+	}
+	else
+	{
+		for (int i = 0; i < reader.GetNumSections(); ++i)
 		{
-			for (unsigned int j = 0; j < reader.GetSectionSize(i) / sizeof (u32); ++j)
+			if (str_ends_with(reader.GetSectionName(i), ".rpl"))
 			{
-				u32 word = Common::swap32(((u32*)reader.GetSectionDataPtr(i))[j]);
+				isWiiU = true;
+				break;
 			}
 		}
 	}
-
 	delete[] mem;
 	return isWiiU;
 }

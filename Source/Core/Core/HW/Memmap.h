@@ -53,7 +53,7 @@ enum
 	// what will be reported in lowmem, and thus used by emulated software.
 	// Note: Writing to lowmem is done by IPL. If using retail IPL, it will
 	// always be set to 24MB.
-	REALRAM_SIZE  = 0x1800000,
+	REALRAM_SIZE  = 0xf000000,
 	RAM_SIZE      = ROUND_UP_POW2(REALRAM_SIZE),
 	RAM_MASK      = RAM_SIZE - 1,
 	FAKEVMEM_SIZE = 0x2000000,
