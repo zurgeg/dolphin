@@ -313,7 +313,7 @@ bool ElfReader::LoadSymbols()
 
 		//We have a symbol table!
 		Elf32_Sym *symtab = (Elf32_Sym *)(GetSectionDataPtr(sec));
-		int numSymbols = sections[sec].sh_size / sizeof(Elf32_Sym);
+		int numSymbols = GetSectionSize(sec) / sizeof(Elf32_Sym);
 		for (int sym = 0; sym < numSymbols; sym++)
 		{
 			int size = Common::swap32(symtab[sym].st_size);
