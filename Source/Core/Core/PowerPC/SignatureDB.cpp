@@ -45,6 +45,7 @@ bool SignatureDB::Load(const std::string& filename)
 		dbf.name = temp.name;
 		dbf.size = temp.size;
 		database[temp.checkSum] = dbf;
+		INFO_LOG(OSHLE, "Hash %8x = %s(), length %d", temp.checkSum, temp.name, temp.size);
 	}
 
 	return true;

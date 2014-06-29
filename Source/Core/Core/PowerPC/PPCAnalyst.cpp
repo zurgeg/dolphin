@@ -362,7 +362,7 @@ void FindFunctions(u32 startAddr, u32 endAddr, PPCSymbolDB *func_db)
 		}
 		AnalyzeFunction2(&(func.second));
 		Symbol &f = func.second;
-		if (f.name.substr(0, 3) == "zzz")
+		if (f.name.substr(0, 3) == "zz_")
 		{
 			if (f.flags & FFLAG_LEAF)
 				f.name += "_leaf";
