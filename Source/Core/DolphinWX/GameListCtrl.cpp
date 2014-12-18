@@ -565,7 +565,10 @@ void CGameListCtrl::ScanForISOs()
 	CFileSearch::XStringVector Extensions;
 
 	if (SConfig::GetInstance().m_ListGC)
+	{
 		Extensions.push_back("*.gcm");
+		Extensions.push_back("*.tgc");
+	}
 	if (SConfig::GetInstance().m_ListWii || SConfig::GetInstance().m_ListGC)
 	{
 		Extensions.push_back("*.iso");

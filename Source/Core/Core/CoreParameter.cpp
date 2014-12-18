@@ -127,6 +127,7 @@ bool SCoreStartupParameter::AutoSetup(EBootBS2 _BootBS2)
 			std::string Extension;
 			SplitPath(m_strFilename, nullptr, nullptr, &Extension);
 			if (!strcasecmp(Extension.c_str(), ".gcm") ||
+				!strcasecmp(Extension.c_str(), ".tgc") ||
 				!strcasecmp(Extension.c_str(), ".iso") ||
 				!strcasecmp(Extension.c_str(), ".wbfs") ||
 				!strcasecmp(Extension.c_str(), ".ciso") ||

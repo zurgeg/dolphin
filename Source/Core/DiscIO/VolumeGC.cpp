@@ -31,12 +31,20 @@ bool CVolumeGC::Read(u64 _Offset, u64 _Length, u8* _pBuffer) const
 
 	FileMon::FindFilename(_Offset);
 
-	return m_pReader->Read(_Offset, _Length, _pBuffer);
+	bool b = m_pReader->Read(_Offset, _Length, _pBuffer);
+	//if (_Length == 4)
+		//PanicAlertT("GC read %8x = %8x  (would be %8x)", _Offset, *((u32*)_pBuffer), *((u32*)_pBuffer) + 0x8000);
+	return b;
 }
 
 bool CVolumeGC::RAWRead(u64 _Offset, u64 _Length, u8* _pBuffer) const
 {
-	return Read(_Offset, _Length, _pBuffer);
+	if (m_pReader == nullptr)
+		return false;
+
+	FileMon::FindFilename(_Offset);
+
+	return m_pReader->Read(_Offset, _Length, _pBuffer);
 }
 
 std::string CVolumeGC::GetUniqueID() const
@@ -65,11 +73,9 @@ std::string CVolumeGC::GetRevisionSpecificUniqueID() const
 
 IVolume::ECountry CVolumeGC::GetCountry() const
 {
-	if (!m_pReader)
-		return COUNTRY_UNKNOWN;
-
 	u8 CountryCode;
-	m_pReader->Read(3, 1, &CountryCode);
+	if (!Read(3, 1, &CountryCode))
+		return COUNTRY_UNKNOWN;
 
 	return CountrySwitch(CountryCode);
 }

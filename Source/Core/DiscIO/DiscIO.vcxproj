@@ -52,6 +52,7 @@
     <ClCompile Include="VolumeCreator.cpp" />
     <ClCompile Include="VolumeDirectory.cpp" />
     <ClCompile Include="VolumeGC.cpp" />
+    <ClCompile Include="VolumeTGC.cpp" />
     <ClCompile Include="VolumeWad.cpp" />
     <ClCompile Include="VolumeWiiCrypted.cpp" />
     <ClCompile Include="WbfsBlob.cpp" />
@@ -75,6 +76,7 @@
     <ClInclude Include="VolumeCreator.h" />
     <ClInclude Include="VolumeDirectory.h" />
     <ClInclude Include="VolumeGC.h" />
+    <ClInclude Include="VolumeTGC.h" />
     <ClInclude Include="VolumeWad.h" />
     <ClInclude Include="VolumeWiiCrypted.h" />
     <ClInclude Include="WbfsBlob.h" />

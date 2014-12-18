@@ -167,7 +167,7 @@ bool DolphinApp::OnInit()
 		},
 		{
 			wxCMD_LINE_OPTION, "e", "exec",
-			"Loads the specified file (ELF, DOL, GCM, ISO, WBFS, CISO, GCZ, WAD)",
+			"Loads the specified file (ELF, DOL, GCM, TGC, ISO, WBFS, CISO, GCZ, WAD)",
 			wxCMD_LINE_VAL_STRING, wxCMD_LINE_PARAM_OPTIONAL
 		},
 		{

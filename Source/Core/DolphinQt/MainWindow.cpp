@@ -142,7 +142,7 @@ QString DMainWindow::ShowFileDialog()
 {
 	return QFileDialog::getOpenFileName(this, tr("Open File"), QString(),
 		tr("All supported ROMs (%1);;All files (*)")
-		.arg(SL("*.gcm *.iso *.ciso *.gcz *.wbfs *.elf *.dol *.dff *.tmd *.wad")));
+		.arg(SL("*.gcm *.iso *.ciso *.gcz *.tgc *.wbfs *.elf *.dol *.dff *.tmd *.wad")));
 }
 
 void DMainWindow::DoStartPause()

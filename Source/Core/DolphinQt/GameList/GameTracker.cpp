@@ -112,6 +112,7 @@ void DGameTracker::ScanForGames()
 	if (SConfig::GetInstance().m_ListGC)
 	{
 		exts.push_back("*.gcm");
+		exts.push_back("*.tgc");
 		exts.push_back("*.gcz");
 	}
 	if (SConfig::GetInstance().m_ListWii || SConfig::GetInstance().m_ListGC)
