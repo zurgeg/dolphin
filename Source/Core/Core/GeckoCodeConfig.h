@@ -4,9 +4,10 @@
 
 #pragma once
 
-#include "Common/IniFile.h"
-
+#include <vector>
 #include "Core/GeckoCode.h"
+
+class IniFile;
 
 namespace Gecko
 {
@@ -14,4 +15,4 @@ namespace Gecko
 void LoadCodes(const IniFile& globalIni, const IniFile& localIni, std::vector<GeckoCode>& gcodes);
 void SaveCodes(IniFile& inifile, const std::vector<GeckoCode>& gcodes);
 
-};
+}

@@ -12,6 +12,7 @@
 
 #if defined(HAVE_WX) && HAVE_WX
 #include <wx/image.h>
+#include <wx/bitmap.h>
 #endif
 
 class PointerWrap;
@@ -62,7 +63,7 @@ private:
 
 	// Stuff from banner
 	std::string m_company;
-	std::vector<std::string> m_names;
+	std::vector<std::string> m_banner_names;
 	std::vector<std::string> m_descriptions;
 
 	std::string m_UniqueID;

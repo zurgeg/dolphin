@@ -24,16 +24,23 @@ class Jit64AsmRoutineManager : public CommonAsmRoutines
 {
 private:
 	void Generate();
+	void ResetStack();
 	void GenerateCommon();
+	u8* m_stack_top;
 
 public:
-	void Init() {
-		AllocCodeSpace(8192);
+	void Init(u8* stack_top)
+	{
+		m_stack_top = stack_top;
+		// NOTE: When making large additions to the AsmCommon code, you might
+		// want to ensure this number is big enough.
+		AllocCodeSpace(16384);
 		Generate();
 		WriteProtect();
 	}
 
-	void Shutdown() {
+	void Shutdown()
+	{
 		FreeCodeSpace();
 	}
 };

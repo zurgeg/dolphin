@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 #include "Common/FileUtil.h"
 #include "Common/SysConf.h"
 
@@ -154,7 +154,7 @@ bool SysConf::LoadFromFileInternal(FILE *fh)
 }
 
 // Returns the size of the item in file
-unsigned int create_item(SSysConfEntry &item, SysconfType type, const std::string &name,
+static unsigned int create_item(SSysConfEntry &item, SysconfType type, const std::string &name,
 		const int data_length, unsigned int offset)
 {
 	item.offset = offset;

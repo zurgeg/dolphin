@@ -5,27 +5,29 @@
 #include "Common/Common.h"
 #include "Core/HW/Memmap.h"
 #include "VideoCommon/CPMemory.h"
+#include "VideoCommon/DataReader.h"
+#include "VideoCommon/Fifo.h"
+#include "VideoCommon/GeometryShaderManager.h"
 #include "VideoCommon/PixelShaderManager.h"
 #include "VideoCommon/VertexManagerBase.h"
 #include "VideoCommon/VertexShaderManager.h"
 #include "VideoCommon/VideoCommon.h"
 #include "VideoCommon/XFMemory.h"
 
-void XFMemWritten(u32 transferSize, u32 baseAddress)
+static void XFMemWritten(u32 transferSize, u32 baseAddress)
 {
 	VertexManager::Flush();
 	VertexShaderManager::InvalidateXFRange(baseAddress, baseAddress + transferSize);
-	PixelShaderManager::InvalidateXFRange(baseAddress, baseAddress + transferSize);
 }
 
-void XFRegWritten(int transferSize, u32 baseAddress, u32 *pData)
+static void XFRegWritten(int transferSize, u32 baseAddress, DataReader src)
 {
 	u32 address = baseAddress;
 	u32 dataIndex = 0;
 
 	while (transferSize > 0 && address < 0x1058)
 	{
-		u32 newValue = pData[dataIndex];
+		u32 newValue = src.Peek<u32>(dataIndex * sizeof(u32));
 		u32 nextAddress = address + 1;
 
 		switch (address)
@@ -61,7 +63,6 @@ void XFRegWritten(int transferSize, u32 baseAddress, u32 *pData)
 				{
 					VertexManager::Flush();
 					VertexShaderManager::SetMaterialColorChanged(chan, newValue);
-					PixelShaderManager::SetMaterialColorChanged(chan, newValue);
 				}
 				break;
 			}
@@ -74,7 +75,6 @@ void XFRegWritten(int transferSize, u32 baseAddress, u32 *pData)
 				{
 					VertexManager::Flush();
 					VertexShaderManager::SetMaterialColorChanged(chan + 2, newValue);
-					PixelShaderManager::SetMaterialColorChanged(chan + 2, newValue);
 				}
 				break;
 			}
@@ -111,6 +111,7 @@ void XFRegWritten(int transferSize, u32 baseAddress, u32 *pData)
 			VertexManager::Flush();
 			VertexShaderManager::SetViewportChanged();
 			PixelShaderManager::SetViewportChanged();
+			GeometryShaderManager::SetViewportChanged();
 
 			nextAddress = XFMEM_SETVIEWPORT + 6;
 			break;
@@ -124,6 +125,7 @@ void XFRegWritten(int transferSize, u32 baseAddress, u32 *pData)
 		case XFMEM_SETPROJECTION+6:
 			VertexManager::Flush();
 			VertexShaderManager::SetProjectionChanged();
+			GeometryShaderManager::SetProjectionChanged();
 
 			nextAddress = XFMEM_SETPROJECTION + 7;
 			break;
@@ -194,7 +196,7 @@ void XFRegWritten(int transferSize, u32 baseAddress, u32 *pData)
 	}
 }
 
-void LoadXFReg(u32 transferSize, u32 baseAddress, u32 *pData)
+void LoadXFReg(u32 transferSize, u32 baseAddress, DataReader src)
 {
 	// do not allow writes past registers
 	if (baseAddress + transferSize > 0x1058)
@@ -228,16 +230,20 @@ void LoadXFReg(u32 transferSize, u32 baseAddress, u32 *pData)
 		}
 
 		XFMemWritten(xfMemTransferSize, xfMemBase);
-		memcpy((u32*)(&xfmem) + xfMemBase, pData, xfMemTransferSize * 4);
-
-		pData += xfMemTransferSize;
+		for (u32 i = 0; i < xfMemTransferSize; i++)
+		{
+			((u32*)&xfmem)[xfMemBase + i] = src.Read<u32>();
+		}
 	}
 
 	// write to XF regs
 	if (transferSize > 0)
 	{
-		XFRegWritten(transferSize, baseAddress, pData);
-		memcpy((u32*)(&xfmem) + baseAddress, pData, transferSize * 4);
+		XFRegWritten(transferSize, baseAddress, src);
+		for (u32 i = 0; i < transferSize; i++)
+		{
+			((u32*)&xfmem)[baseAddress + i] = src.Read<u32>();
+		}
 	}
 }
 
@@ -250,7 +256,15 @@ void LoadIndexedXF(u32 val, int refarray)
 	//load stuff from array to address in xf mem
 
 	u32* currData = (u32*)(&xfmem) + address;
-	u32* newData = (u32*)Memory::GetPointer(arraybases[refarray] + arraystrides[refarray] * index);
+	u32* newData;
+	if (g_use_deterministic_gpu_thread)
+	{
+		newData = (u32*)PopFifoAuxBuffer(size * sizeof(u32));
+	}
+	else
+	{
+		newData = (u32*)Memory::GetPointer(g_main_cp_state.array_bases[refarray] + g_main_cp_state.array_strides[refarray] * index);
+	}
 	bool changed = false;
 	for (int i = 0; i < size; ++i)
 	{
@@ -266,4 +280,15 @@ void LoadIndexedXF(u32 val, int refarray)
 		for (int i = 0; i < size; ++i)
 			currData[i] = Common::swap32(newData[i]);
 	}
+}
+
+void PreprocessIndexedXF(u32 val, int refarray)
+{
+	int index = val >> 16;
+	int size = ((val >> 12) & 0xF) + 1;
+
+	u32* new_data = (u32*)Memory::GetPointer(g_preprocess_cp_state.array_bases[refarray] + g_preprocess_cp_state.array_strides[refarray] * index);
+
+	size_t buf_size = size * sizeof(u32);
+	PushFifoAuxBuffer(new_data, buf_size);
 }

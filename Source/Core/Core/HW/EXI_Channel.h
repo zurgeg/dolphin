@@ -83,9 +83,6 @@ private:
 	// Since channels operate a bit differently from each other
 	u32 m_ChannelId;
 
-	int updateInterrupts;
-
-	static void UpdateInterrupts(u64 userdata, int cyclesLate);
 public:
 	// get device
 	IEXIDevice* GetDevice(const u8 _CHIP_SELECT);
@@ -96,13 +93,14 @@ public:
 
 	void RegisterMMIO(MMIO::Mapping* mmio, u32 base);
 
+	void SendTransferComplete();
+
 	void AddDevice(const TEXIDevices device_type, const int device_num);
 	void AddDevice(IEXIDevice* pDevice, const int device_num, bool notifyPresenceChanged=true);
 
 	// Remove all devices
 	void RemoveDevices();
 
-	void Update();
 	bool IsCausingInterrupt();
 	void DoState(PointerWrap &p);
 	void PauseAndLock(bool doLock, bool unpauseOnUnlock);

@@ -4,26 +4,10 @@
 
 #include "Core/HW/WiimoteEmu/Attachment/Nunchuk.h"
 
-#include "InputCommon/UDPWiimote.h"
-#include "InputCommon/UDPWrapper.h"
-
 namespace WiimoteEmu
 {
 
-static const u8 nunchuck_id[] = { 0x00, 0x00, 0xa4, 0x20, 0x00, 0x00 };
-/* Default calibration for the nunchuck. It should be written to 0x20 - 0x3f of the
-   extension register. 0x80 is the neutral x and y accelerators and 0xb3 is the
-   neutral z accelerometer that is adjusted for gravity. */
-static const u8 nunchuck_calibration[] =
-{
-	0x80, 0x80, 0x80, 0x00, // accelerometer x, y, z neutral
-	0xb3, 0xb3, 0xb3, 0x00, //  x, y, z g-force values
-
-	// 0x80 = analog stick x and y axis center
-	0xff, 0x00, 0x80,
-	0xff, 0x00, 0x80,
-	0xec, 0x41 // checksum on the last two bytes
-};
+static const u8 nunchuk_id[] = { 0x00, 0x00, 0xa4, 0x20, 0x00, 0x00 };
 
 static const u8 nunchuk_button_bitmasks[] =
 {
@@ -31,8 +15,7 @@ static const u8 nunchuk_button_bitmasks[] =
 	Nunchuk::BUTTON_Z,
 };
 
-Nunchuk::Nunchuk(UDPWrapper *wrp, WiimoteEmu::ExtensionReg& _reg)
-	: Attachment(_trans("Nunchuk"), _reg) , m_udpWrap(wrp)
+Nunchuk::Nunchuk(WiimoteEmu::ExtensionReg& _reg) : Attachment(_trans("Nunchuk"), _reg)
 {
 	// buttons
 	groups.emplace_back(m_buttons = new Buttons("Buttons"));
@@ -40,7 +23,7 @@ Nunchuk::Nunchuk(UDPWrapper *wrp, WiimoteEmu::ExtensionReg& _reg)
 	m_buttons->controls.emplace_back(new ControlGroup::Input("Z"));
 
 	// stick
-	groups.emplace_back(m_stick = new AnalogStick("Stick"));
+	groups.emplace_back(m_stick = new AnalogStick("Stick", DEFAULT_ATTACHMENT_STICK_RADIUS));
 
 	// swing
 	groups.emplace_back(m_swing = new Force("Swing"));
@@ -54,106 +37,73 @@ Nunchuk::Nunchuk(UDPWrapper *wrp, WiimoteEmu::ExtensionReg& _reg)
 	m_shake->controls.emplace_back(new ControlGroup::Input("Y"));
 	m_shake->controls.emplace_back(new ControlGroup::Input("Z"));
 
-	// set up register
-	// calibration
-	memcpy(&calibration, nunchuck_calibration, sizeof(nunchuck_calibration));
 	// id
-	memcpy(&id, nunchuck_id, sizeof(nunchuck_id));
+	memcpy(&id, nunchuk_id, sizeof(nunchuk_id));
 
 	// this should get set to 0 on disconnect, but it isn't, o well
 	memset(m_shake_step, 0, sizeof(m_shake_step));
 }
 
-void Nunchuk::GetState(u8* const data, const bool focus)
+void Nunchuk::GetState(u8* const data)
 {
-	wm_extension* const ncdata = (wm_extension*)data;
-	ncdata->bt = 0;
+	wm_nc* const ncdata = (wm_nc*)data;
+	ncdata->bt.hex = 0;
 
 	// stick
-	ControlState state[2];
-	m_stick->GetState(&state[0], &state[1], 0, 1);
+	double jx, jy;
+	m_stick->GetState(&jx, &jy);
 
-	nu_cal &cal = *(nu_cal*)&reg.calibration;
-	nu_js cal_js[2];
-	cal_js[0] = *&cal.jx;
-	cal_js[1] = *&cal.jy;
+	ncdata->jx = u8(STICK_CENTER + jx * STICK_RADIUS);
+	ncdata->jy = u8(STICK_CENTER + jy * STICK_RADIUS);
 
-	for (int i = 0; i < 2; i++) {
-		ControlState &s = *&state[i];
-		nu_js c = *&cal_js[i];
-		if (s < 0)
-			s = s * abs(c.min - c.center) + c.center;
-		else if (s > 0)
-			s = s * abs(c.max - c.center) + c.center;
-		else
-			s = c.center;
-	}
-
-	ncdata->jx = u8(trim(state[0]));
-	ncdata->jy = u8(trim(state[1]));
-
-	if (ncdata->jx != cal.jx.center || ncdata->jy != cal.jy.center)
+	// Some terribly coded games check whether to move with a check like
+	//
+	//     if (x != 0 && y != 0)
+	//         do_movement(x, y);
+	//
+	// With keyboard controls, these games break if you simply hit
+	// of the axes. Adjust this if you're hitting one of the axes so that
+	// we slightly tweak the other axis.
+	if (ncdata->jx != STICK_CENTER || ncdata->jy != STICK_CENTER)
 	{
-		if (ncdata->jy == cal.jy.center)
-			ncdata->jy = cal.jy.center + 1;
-		if (ncdata->jx == cal.jx.center)
-			ncdata->jx = cal.jx.center + 1;
-	}
-
-	if (!focus)
-	{
-		ncdata->jx = cal.jx.center;
-		ncdata->jy = cal.jy.center;
+		if (ncdata->jx == STICK_CENTER)
+			++ncdata->jx;
+		if (ncdata->jy == STICK_CENTER)
+			++ncdata->jy;
 	}
 
 	AccelData accel;
 
 	// tilt
-	EmulateTilt(&accel, m_tilt, focus);
+	EmulateTilt(&accel, m_tilt);
 
-	if (focus)
-	{
-		// swing
-		EmulateSwing(&accel, m_swing);
-		// shake
-		EmulateShake(&accel, m_shake, m_shake_step);
-		// buttons
-		m_buttons->GetState(&ncdata->bt, nunchuk_button_bitmasks);
-	}
+	// swing
+	EmulateSwing(&accel, m_swing);
+	// shake
+	EmulateShake(&accel, m_shake, m_shake_step);
+	// buttons
+	m_buttons->GetState(&ncdata->bt.hex, nunchuk_button_bitmasks);
 
 	// flip the button bits :/
-	ncdata->bt ^= 0x03;
+	ncdata->bt.hex ^= 0x03;
 
-	if (m_udpWrap->inst)
-	{
-		if (m_udpWrap->updNun)
-		{
-			u8 mask;
-			float x, y;
-			m_udpWrap->inst->getNunchuck(&x, &y, &mask);
-			// buttons
-			if (mask & UDPWM_NC)
-				ncdata->bt &= ~WiimoteEmu::Nunchuk::BUTTON_C;
-			if (mask & UDPWM_NZ)
-				ncdata->bt &= ~WiimoteEmu::Nunchuk::BUTTON_Z;
-			// stick
-			if (ncdata->jx == 0x80 && ncdata->jy == 0x80)
-			{
-				ncdata->jx = u8(0x80 + x*127);
-				ncdata->jy = u8(0x80 + y*127);
-			}
-		}
-		if (m_udpWrap->updNunAccel)
-		{
-			float x, y, z;
-			m_udpWrap->inst->getNunchuckAccel(&x, &y, &z);
-			accel.x = x;
-			accel.y = y;
-			accel.z = z;
-		}
-	}
+	u16 accel_x = (u16)(accel.x * ACCEL_RANGE + ACCEL_ZERO_G);
+	u16 accel_y = (u16)(accel.y * ACCEL_RANGE + ACCEL_ZERO_G);
+	u16 accel_z = (u16)(accel.z * ACCEL_RANGE + ACCEL_ZERO_G);
 
-	FillRawAccelFromGForceData(*(wm_accel*)&ncdata->ax, *(accel_cal*)&reg.calibration, accel);
+	if (accel_x > 1024)
+		accel_x = 1024;
+	if (accel_y > 1024)
+		accel_y = 1024;
+	if (accel_z > 1024)
+		accel_z = 1024;
+
+	ncdata->ax = accel_x & 0xFF;
+	ncdata->ay = accel_y & 0xFF;
+	ncdata->az = accel_z & 0xFF;
+	ncdata->passthrough_data.acc_x_lsb = accel_x >> 8 & 0x3;
+	ncdata->passthrough_data.acc_y_lsb = accel_y >> 8 & 0x3;
+	ncdata->passthrough_data.acc_z_lsb = accel_z >> 8 & 0x3;
 }
 
 void Nunchuk::LoadDefaults(const ControllerInterface& ciface)

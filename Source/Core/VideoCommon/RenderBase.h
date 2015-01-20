@@ -19,9 +19,12 @@
 #include "Common/MathUtil.h"
 #include "Common/Thread.h"
 #include "VideoCommon/BPMemory.h"
+#include "VideoCommon/FPSCounter.h"
 #include "VideoCommon/FramebufferManagerBase.h"
 #include "VideoCommon/NativeVertexFormat.h"
 #include "VideoCommon/VideoCommon.h"
+
+class PostProcessingShaderImplementation;
 
 // TODO: Move these out of here.
 extern int frameCount;
@@ -54,7 +57,6 @@ public:
 	virtual void SetDepthMode() = 0;
 	virtual void SetLogicOpMode() = 0;
 	virtual void SetDitherMode() = 0;
-	virtual void SetLineWidth() = 0;
 	virtual void SetSamplerState(int stage,int texindex) = 0;
 	virtual void SetInterlacingMode() = 0;
 	virtual void SetViewport() = 0;
@@ -80,6 +82,8 @@ public:
 	static const TargetRectangle& GetTargetRectangle() { return target_rc; }
 	static void UpdateDrawRectangle(int backbuffer_width, int backbuffer_height);
 
+	// Use this to convert a single target rectangle to two stereo rectangles
+	static void ConvertStereoRectangle(const TargetRectangle& rc, TargetRectangle& leftRc, TargetRectangle& rightRc);
 
 	// Use this to upscale native EFB coordinates to IDEAL internal resolution
 	static int EFBToScaledX(int x);
@@ -101,23 +105,30 @@ public:
 
 	virtual u32 AccessEFB(EFBAccessType type, u32 x, u32 y, u32 poke_data) = 0;
 
+	virtual u16 BBoxRead(int index) = 0;
+	virtual void BBoxWrite(int index, u16 value) = 0;
+
 	// What's the real difference between these? Too similar names.
 	virtual void ResetAPIState() = 0;
 	virtual void RestoreAPIState() = 0;
 
 	// Finish up the current frame, print some stats
-	static void Swap(u32 xfbAddr, u32 fbWidth, u32 fbHeight, const EFBRectangle& rc,float Gamma = 1.0f);
-	virtual void SwapImpl(u32 xfbAddr, u32 fbWidth, u32 fbHeight, const EFBRectangle& rc,float Gamma = 1.0f) = 0;
+	static void Swap(u32 xfbAddr, u32 fbWidth, u32 fbStride, u32 fbHeight, const EFBRectangle& rc,float Gamma = 1.0f);
+	virtual void SwapImpl(u32 xfbAddr, u32 fbWidth, u32 fbStride, u32 fbHeight, const EFBRectangle& rc, float Gamma = 1.0f) = 0;
 
 	virtual bool SaveScreenshot(const std::string &filename, const TargetRectangle &rc) = 0;
 
 	static PEControl::PixelFormat GetPrevPixelFormat() { return prev_efb_format; }
 	static void StorePixelFormat(PEControl::PixelFormat new_format) { prev_efb_format = new_format; }
 
+	PostProcessingShaderImplementation* GetPostProcessor() { return m_post_processor; }
+	// Max height/width
+	virtual int GetMaxTextureSize() = 0;
+
 protected:
 
-	static void CalculateTargetScale(int x, int y, int &scaledX, int &scaledY);
-	static bool CalculateTargetSize(unsigned int framebuffer_width, unsigned int framebuffer_height);
+	static void CalculateTargetScale(int x, int y, int* scaledX, int* scaledY);
+	bool CalculateTargetSize(unsigned int framebuffer_width, unsigned int framebuffer_height);
 
 	static void CheckFifoRecording();
 	static void RecordVideoMemory();
@@ -144,11 +155,14 @@ protected:
 
 	static TargetRectangle target_rc;
 
-	// can probably eliminate this static var
-	static int s_LastEFBScale;
+	// TODO: Can probably eliminate this static var.
+	static int s_last_efb_scale;
 
-	static bool s_skipSwap;
 	static bool XFBWrited;
+
+	FPSCounter m_fps_counter;
+
+	static PostProcessingShaderImplementation* m_post_processor;
 
 private:
 	static PEControl::PixelFormat prev_efb_format;

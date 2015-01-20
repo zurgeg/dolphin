@@ -30,8 +30,6 @@ void get_ng_cert(u8* ng_cert_out, u32 NG_id, u32 NG_key_id, const u8* NG_priv, c
 void get_ap_sig_and_cert(u8 *sig_out, u8 *ap_cert_out, u64 title_id, u8 *data, u32 data_size, const u8 *NG_priv, u32 NG_id);
 
 void make_blanksig_ec_cert(u8 *cert_out, const char *signer, const char *name, const u8 *private_key, u32 key_id);
-void get_shared_secret(u8* shared_secret_out, u8* remote_public_key, const u8* NG_priv);
-
 
 
 class EcWii
@@ -43,7 +41,7 @@ public:
 	u32 getNgId()         {return Common::swap32(BootMiiKeysBin.ng_id);}
 	u32 getNgKeyId()      {return Common::swap32(BootMiiKeysBin.ng_key_id);}
 	const u8* getNgPriv() {return BootMiiKeysBin.ng_priv;}
-	const u8* getNgSig()  {return BootMiiKeysBin.ng_sig;};
+	const u8* getNgSig()  {return BootMiiKeysBin.ng_sig;}
 private:
 	void InitDefaults();
 
@@ -68,12 +66,16 @@ private:
 		u8 boot1_hash           [ 0x14]; // 0x100
 		u8 common_key           [ 0x10]; // 0x114
 		u32 ng_id;                       // 0x124
-		union {
-			struct {
+		union
+		{
+			struct
+			{
 				u8 ng_priv      [ 0x1e]; // 0x128
 				u8 pad1         [ 0x12];
 			};
-			struct {
+
+			struct
+			{
 				u8 pad2         [ 0x1c];
 				u8 nand_hmac    [ 0x14]; //0x144
 			};

@@ -6,22 +6,33 @@
 
 #include "Core/HW/WiimoteEmu/Attachment/Attachment.h"
 
-class UDPWrapper;
-
 namespace WiimoteEmu
 {
 
 class Nunchuk : public Attachment
 {
 public:
-	Nunchuk(UDPWrapper * wrp, WiimoteEmu::ExtensionReg& _reg);
+	Nunchuk(WiimoteEmu::ExtensionReg& _reg);
 
-	virtual void GetState(u8* const data, const bool focus) override;
+	virtual void GetState(u8* const data) override;
 
 	enum
 	{
 		BUTTON_C = 0x02,
 		BUTTON_Z = 0x01,
+	};
+
+	enum
+	{
+		ACCEL_ZERO_G = 0x80,
+		ACCEL_ONE_G = 0xB3,
+		ACCEL_RANGE = (ACCEL_ONE_G - ACCEL_ZERO_G),
+	};
+
+	enum
+	{
+		STICK_CENTER = 0x80,
+		STICK_RADIUS = 0x7F,
 	};
 
 	void LoadDefaults(const ControllerInterface& ciface) override;
@@ -36,8 +47,6 @@ private:
 	AnalogStick* m_stick;
 
 	u8 m_shake_step[3];
-
-	UDPWrapper* const m_udpWrap;
 };
 
 }

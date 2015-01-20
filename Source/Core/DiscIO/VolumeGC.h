@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -22,8 +23,7 @@ class CVolumeGC : public IVolume
 public:
 	CVolumeGC(IBlobReader* _pReader);
 	~CVolumeGC();
-	bool Read(u64 _Offset, u64 _Length, u8* _pBuffer) const override;
-	bool RAWRead(u64 _Offset, u64 _Length, u8* _pBuffer) const override;
+	bool Read(u64 _Offset, u64 _Length, u8* _pBuffer, bool decrypt = false) const override;
 	std::string GetUniqueID() const override;
 	std::string GetRevisionSpecificUniqueID() const override;
 	std::string GetMakerID() const override;
@@ -41,7 +41,7 @@ public:
 	static StringDecoder GetStringDecoder(ECountry country);
 
 private:
-	IBlobReader* m_pReader;
+	std::unique_ptr<IBlobReader> m_pReader;
 };
 
 } // namespace

@@ -4,14 +4,12 @@
 
 #pragma once
 
-#include <functional>
 #include <map>
 #include <queue>
 #include <sstream>
 
 #include <SFML/Network.hpp>
 
-#include "Common/Common.h"
 #include "Common/CommonTypes.h"
 #include "Common/FifoQueue.h"
 #include "Common/Thread.h"
@@ -21,20 +19,10 @@
 
 #include "InputCommon/GCPadStatus.h"
 
-class NetPad
-{
-public:
-	NetPad();
-	NetPad(const SPADStatus* const);
-
-	u32 nHi;
-	u32 nLo;
-};
-
 class NetPlayUI
 {
 public:
-	virtual ~NetPlayUI() {};
+	virtual ~NetPlayUI() {}
 
 	virtual void BootGame(const std::string& filename) = 0;
 	virtual void StopGame() = 0;
@@ -78,7 +66,7 @@ public:
 
 	// Send and receive pads values
 	bool WiimoteUpdate(int _number, u8* data, const u8 size);
-	bool GetNetPads(const u8 pad_nb, const SPADStatus* const, NetPad* const netvalues);
+	bool GetNetPads(const u8 pad_nb, GCPadStatus* pad_status);
 
 	u8 LocalPadToInGamePad(u8 localPad);
 	u8 InGamePadToLocalPad(u8 localPad);
@@ -95,13 +83,13 @@ protected:
 		std::recursive_mutex players, send;
 	} m_crit;
 
-	Common::FifoQueue<NetPad>     m_pad_buffer[4];
-	Common::FifoQueue<NetWiimote> m_wiimote_buffer[4];
+	Common::FifoQueue<GCPadStatus> m_pad_buffer[4];
+	Common::FifoQueue<NetWiimote>  m_wiimote_buffer[4];
 
 	NetPlayUI*    m_dialog;
-	sf::SocketTCP m_socket;
+	sf::TcpSocket m_socket;
 	std::thread   m_thread;
-	sf::Selector<sf::SocketTCP> m_selector;
+	sf::SocketSelector m_selector;
 
 	std::string   m_selected_game;
 	volatile bool m_is_running;
@@ -120,7 +108,7 @@ protected:
 
 private:
 	void UpdateDevices();
-	void SendPadState(const PadMapping in_game_pad, const NetPad& np);
+	void SendPadState(const PadMapping in_game_pad, const GCPadStatus& np);
 	void SendWiimoteState(const PadMapping in_game_pad, const NetWiimote& nw);
 	unsigned int OnData(sf::Packet& packet);
 

@@ -34,6 +34,10 @@ enum Hotkey
 	HK_WIIMOTE4_CONNECT,
 	HK_BALANCEBOARD_CONNECT,
 
+	HK_VOLUME_UP,
+	HK_VOLUME_DOWN,
+	HK_VOLUME_TOGGLE_MUTE,
+
 	HK_TOGGLE_IR,
 	HK_TOGGLE_AR,
 	HK_TOGGLE_EFBCOPIES,
@@ -42,6 +46,22 @@ enum Hotkey
 
 	HK_INCREASE_FRAME_LIMIT,
 	HK_DECREASE_FRAME_LIMIT,
+
+	HK_FREELOOK_INCREASE_SPEED,
+	HK_FREELOOK_DECREASE_SPEED,
+	HK_FREELOOK_RESET_SPEED,
+	HK_FREELOOK_UP,
+	HK_FREELOOK_DOWN,
+	HK_FREELOOK_LEFT,
+	HK_FREELOOK_RIGHT,
+	HK_FREELOOK_ZOOM_IN,
+	HK_FREELOOK_ZOOM_OUT,
+	HK_FREELOOK_RESET,
+
+	HK_INCREASE_DEPTH,
+	HK_DECREASE_DEPTH,
+	HK_INCREASE_CONVERGENCE,
+	HK_DECREASE_CONVERGENCE,
 
 	HK_LOAD_STATE_SLOT_1,
 	HK_LOAD_STATE_SLOT_2,
@@ -65,6 +85,20 @@ enum Hotkey
 	HK_SAVE_STATE_SLOT_9,
 	HK_SAVE_STATE_SLOT_10,
 
+	HK_SELECT_STATE_SLOT_1,
+	HK_SELECT_STATE_SLOT_2,
+	HK_SELECT_STATE_SLOT_3,
+	HK_SELECT_STATE_SLOT_4,
+	HK_SELECT_STATE_SLOT_5,
+	HK_SELECT_STATE_SLOT_6,
+	HK_SELECT_STATE_SLOT_7,
+	HK_SELECT_STATE_SLOT_8,
+	HK_SELECT_STATE_SLOT_9,
+	HK_SELECT_STATE_SLOT_10,
+
+	HK_SAVE_STATE_SLOT_SELECTED,
+	HK_LOAD_STATE_SLOT_SELECTED,
+
 	HK_LOAD_LAST_STATE_1,
 	HK_LOAD_LAST_STATE_2,
 	HK_LOAD_LAST_STATE_3,
@@ -83,10 +117,17 @@ enum Hotkey
 	NUM_HOTKEYS,
 };
 
+enum GPUDeterminismMode
+{
+	GPU_DETERMINISM_AUTO,
+	GPU_DETERMINISM_NONE,
+	// This is currently the only mode.  There will probably be at least
+	// one more at some point.
+	GPU_DETERMINISM_FAKE_COMPLETION,
+};
+
 struct SCoreStartupParameter
 {
-	void* hInstance;  // HINSTANCE but we don't want to include <windows.h>
-
 	// Settings
 	bool bEnableDebugging;
 	#ifdef USE_GDBSTUB
@@ -95,14 +136,18 @@ struct SCoreStartupParameter
 	bool bAutomaticStart;
 	bool bBootToPause;
 
-	// 0 = Interpreter
-	// 1 = Jit
-	// 2 = JitIL
-	// 3 = JIT ARM
+	enum
+	{
+		CORE_INTERPRETER,
+		CORE_JIT64,
+		CORE_JITIL64,
+		CORE_JITARM,
+		CORE_JITARM64
+	};
 	int iCPUCore;
 
 	// JIT (shared between JIT and JITIL)
-	bool bJITNoBlockCache, bJITBlockLinking;
+	bool bJITNoBlockCache, bJITNoBlockLinking;
 	bool bJITOff;
 	bool bJITLoadStoreOff, bJITLoadStorelXzOff, bJITLoadStorelwzOff, bJITLoadStorelbzxOff;
 	bool bJITLoadStoreFloatingOff;
@@ -116,12 +161,13 @@ struct SCoreStartupParameter
 	bool bJITILOutputIR;
 
 	bool bFastmem;
-	bool bEnableFPRF;
+	bool bFPRF;
 
 	bool bCPUThread;
 	bool bDSPThread;
 	bool bDSPHLE;
 	bool bSkipIdle;
+	bool bSyncGPUOnSkipIdleHack;
 	bool bNTSC;
 	bool bForceNTSCJ;
 	bool bHLE_BS2;
@@ -135,9 +181,9 @@ struct SCoreStartupParameter
 	bool bRunCompareServer;
 	bool bRunCompareClient;
 
+	bool bBAT;
 	bool bMMU;
 	bool bDCBZOFF;
-	bool bTLBHack;
 	int iBBDumpPort;
 	bool bVBeamSpeedHack;
 	bool bSyncGPU;
@@ -188,12 +234,16 @@ struct SCoreStartupParameter
 	EBootType m_BootType;
 
 	std::string m_strVideoBackend;
+	std::string m_strGPUDeterminismMode;
+
+	// set based on the string version
+	GPUDeterminismMode m_GPUDeterminismMode;
 
 	// files
 	std::string m_strFilename;
 	std::string m_strBootROM;
 	std::string m_strSRAM;
-	std::string m_strDefaultGCM;
+	std::string m_strDefaultISO;
 	std::string m_strDVDRoot;
 	std::string m_strApploader;
 	std::string m_strUniqueID;
@@ -202,6 +252,8 @@ struct SCoreStartupParameter
 	std::string m_strGameIniDefault;
 	std::string m_strGameIniDefaultRevisionSpecific;
 	std::string m_strGameIniLocal;
+
+	std::string m_perfDir;
 
 	// Constructor just calls LoadDefaults
 	SCoreStartupParameter();

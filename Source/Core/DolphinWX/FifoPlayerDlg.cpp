@@ -20,6 +20,7 @@
 #include <wx/filedlg.h>
 #include <wx/gdicmn.h>
 #include <wx/listbox.h>
+#include <wx/msgdlg.h>
 #include <wx/notebook.h>
 #include <wx/panel.h>
 #include <wx/sizer.h>
@@ -32,7 +33,7 @@
 #include <wx/translation.h>
 #include <wx/utils.h>
 
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 #include "Core/FifoPlayer/FifoDataFile.h"
 #include "Core/FifoPlayer/FifoPlaybackAnalyzer.h"
 #include "Core/FifoPlayer/FifoPlayer.h"
@@ -42,17 +43,10 @@
 #include "VideoCommon/BPMemory.h"
 #include "VideoCommon/OpcodeDecoding.h"
 
-class wxWindow;
+wxDEFINE_EVENT(RECORDING_FINISHED_EVENT, wxCommandEvent);
+wxDEFINE_EVENT(FRAME_WRITTEN_EVENT, wxCommandEvent);
 
-DECLARE_EVENT_TYPE(RECORDING_FINISHED_EVENT, -1)
-DEFINE_EVENT_TYPE(RECORDING_FINISHED_EVENT)
-
-DECLARE_EVENT_TYPE(FRAME_WRITTEN_EVENT, -1)
-DEFINE_EVENT_TYPE(FRAME_WRITTEN_EVENT)
-
-using namespace std;
-
-std::recursive_mutex sMutex;
+static std::recursive_mutex sMutex;
 wxEvtHandler *volatile FifoPlayerDlg::m_EvtHandler = nullptr;
 
 FifoPlayerDlg::FifoPlayerDlg(wxWindow * const parent) :
@@ -71,25 +65,6 @@ FifoPlayerDlg::FifoPlayerDlg(wxWindow * const parent) :
 
 FifoPlayerDlg::~FifoPlayerDlg()
 {
-	Unbind(RECORDING_FINISHED_EVENT, &FifoPlayerDlg::OnRecordingFinished, this);
-	Unbind(FRAME_WRITTEN_EVENT, &FifoPlayerDlg::OnFrameWritten, this);
-
-	// Disconnect Events
-	Unbind(wxEVT_PAINT, &FifoPlayerDlg::OnPaint, this);
-	m_FrameFromCtrl->Unbind(wxEVT_SPINCTRL, &FifoPlayerDlg::OnFrameFrom, this);
-	m_FrameToCtrl->Unbind(wxEVT_SPINCTRL, &FifoPlayerDlg::OnFrameTo, this);
-	m_ObjectFromCtrl->Unbind(wxEVT_SPINCTRL, &FifoPlayerDlg::OnObjectFrom, this);
-	m_ObjectToCtrl->Unbind(wxEVT_SPINCTRL, &FifoPlayerDlg::OnObjectTo, this);
-	m_EarlyMemoryUpdates->Unbind(wxEVT_CHECKBOX, &FifoPlayerDlg::OnCheckEarlyMemoryUpdates, this);
-	m_RecordStop->Unbind(wxEVT_BUTTON, &FifoPlayerDlg::OnRecordStop, this);
-	m_Save->Unbind(wxEVT_BUTTON, &FifoPlayerDlg::OnSaveFile, this);
-	m_FramesToRecordCtrl->Unbind(wxEVT_SPINCTRL, &FifoPlayerDlg::OnNumFramesToRecord, this);
-	m_Close->Unbind(wxEVT_BUTTON, &FifoPlayerDlg::OnCloseClick, this);
-
-	m_framesList->Unbind(wxEVT_LISTBOX, &FifoPlayerDlg::OnFrameListSelectionChanged, this);
-	m_objectsList->Unbind(wxEVT_LISTBOX, &FifoPlayerDlg::OnObjectListSelectionChanged, this);
-	m_objectCmdList->Unbind(wxEVT_LISTBOX, &FifoPlayerDlg::OnObjectCmdListSelectionChanged, this);
-
 	FifoPlayer::GetInstance().SetFrameWrittenCallback(nullptr);
 
 	sMutex.lock();
@@ -418,7 +393,7 @@ void FifoPlayerDlg::OnSaveFile(wxCommandEvent& WXUNUSED(event))
 
 			// Wasn't able to save the file, shit's whack, yo.
 			if (!result)
-				PanicAlertT("Error saving file");
+				WxUtils::ShowErrorDialog(_("Error saving file."));
 		}
 	}
 }
@@ -464,13 +439,13 @@ void FifoPlayerDlg::OnBeginSearch(wxCommandEvent& event)
 		return;
 
 	// TODO: Limited to even str lengths...
-	if (str_search_val.Length() && str_search_val.Length() % 2)
+	if (!str_search_val.empty() && str_search_val.length() % 2)
 	{
 		m_numResultsText->SetLabel(_("Invalid search string (only even string lengths supported)"));
 		return;
 	}
 
-	unsigned int const val_length = str_search_val.Length() / 2;
+	unsigned int const val_length = str_search_val.length() / 2;
 	std::vector<u8> search_val(val_length);
 	for (unsigned int i = 0; i < val_length; ++i)
 	{
@@ -954,7 +929,7 @@ wxString FifoPlayerDlg::CreateRecordingMemSizeLabel() const
 		size_t memBytes = 0;
 		for (size_t frameNum = 0; frameNum < file->GetFrameCount(); ++frameNum)
 		{
-			const vector<MemoryUpdate>& memUpdates = file->GetFrame(frameNum).memoryUpdates;
+			const std::vector<MemoryUpdate>& memUpdates = file->GetFrame(frameNum).memoryUpdates;
 			for (auto& memUpdate : memUpdates)
 				memBytes += memUpdate.size;
 		}

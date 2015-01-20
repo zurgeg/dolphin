@@ -5,11 +5,10 @@
 #pragma once
 
 #ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #endif
 
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 #include "Common/MathUtil.h"
 #include "VideoCommon/VideoBackendBase.h"
 
@@ -28,11 +27,6 @@ const u32 MAX_XFB_WIDTH = EFB_WIDTH;
 // vertical scaling by the EFB copy operation or copying to multiple XFB's
 // that are next to each other in memory (TODO: handle that situation).
 const u32 MAX_XFB_HEIGHT = 574;
-
-// Logging
-// ----------
-void HandleGLError();
-
 
 // This structure should only be used to represent a rectangle in EFB
 // coordinates, where the origin is at the upper left and the frame dimensions
@@ -67,7 +61,7 @@ struct TargetRectangle : public MathUtil::Rectangle<int>
 #endif
 
 // warning: mapping buffer should be disabled to use this
-// #define LOG_VTX() DEBUG_LOG(VIDEO, "vtx: %f %f %f, ", ((float*)VertexManager::s_pCurBufferPointer)[-3], ((float*)VertexManager::s_pCurBufferPointer)[-2], ((float*)VertexManager::s_pCurBufferPointer)[-1]);
+// #define LOG_VTX() DEBUG_LOG(VIDEO, "vtx: %f %f %f, ", ((float*)g_vertex_manager_write_ptr)[-3], ((float*)g_vertex_manager_write_ptr)[-2], ((float*)g_vertex_manager_write_ptr)[-1]);
 
 #define LOG_VTX()
 

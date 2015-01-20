@@ -2,15 +2,21 @@
 // Licensed under GPLv2
 // Refer to the license.txt file included.
 
+#include <thread>
+
 #include "AudioCommon/aldlist.h"
 #include "AudioCommon/DPL2Decoder.h"
 #include "AudioCommon/OpenALStream.h"
-#include "Common/StdThread.h"
 #include "Common/Thread.h"
+#include "Core/ConfigManager.h"
 
 #if defined HAVE_OPENAL && HAVE_OPENAL
 
-soundtouch::SoundTouch soundTouch;
+#ifdef _WIN32
+#pragma comment(lib, "openal32.lib")
+#endif
+
+static soundtouch::SoundTouch soundTouch;
 
 //
 // AyuanX: Spec says OpenAL1.1 is thread safe already
@@ -38,7 +44,7 @@ bool OpenALStream::Start()
 				//period_size_in_millisec = 1000 / refresh;
 
 				alcMakeContextCurrent(pContext);
-				thread = std::thread(std::mem_fn(&OpenALStream::SoundLoop), this);
+				thread = std::thread(&OpenALStream::SoundLoop, this);
 				bReturn = true;
 			}
 			else
@@ -58,7 +64,7 @@ bool OpenALStream::Start()
 	}
 
 	// Initialize DPL2 parameters
-	dpl2reset();
+	DPL2Reset();
 
 	soundTouch.clear();
 	return bReturn;
@@ -122,7 +128,7 @@ void OpenALStream::SoundLoop()
 {
 	Common::SetCurrentThreadName("Audio thread - openal");
 
-	bool surround_capable = Core::g_CoreStartupParameter.bDPL2Decoder;
+	bool surround_capable = SConfig::GetInstance().m_LocalCoreStartupParameter.bDPL2Decoder;
 #if defined(__APPLE__)
 	bool float32_capable = false;
 	const ALenum AL_FORMAT_STEREO_FLOAT32 = 0;
@@ -134,7 +140,7 @@ void OpenALStream::SoundLoop()
 #endif
 
 	u32 ulFrequency = m_mixer->GetSampleRate();
-	numBuffers = Core::g_CoreStartupParameter.iLatency + 2; // OpenAL requires a minimum of two buffers
+	numBuffers = SConfig::GetInstance().m_LocalCoreStartupParameter.iLatency + 2; // OpenAL requires a minimum of two buffers
 
 	memset(uiBuffers, 0, numBuffers * sizeof(ALuint));
 	uiSource = 0;
@@ -195,7 +201,7 @@ void OpenALStream::SoundLoop()
 		// Convert the samples from short to float
 		float dest[OAL_MAX_SAMPLES * STEREO_CHANNELS];
 		for (u32 i = 0; i < numSamples * STEREO_CHANNELS; ++i)
-			dest[i] = (float)realtimeBuffer[i] / (1 << 16);
+			dest[i] = (float)realtimeBuffer[i] / (1 << 15);
 
 		soundTouch.putSamples(dest, numSamples);
 
@@ -218,8 +224,6 @@ void OpenALStream::SoundLoop()
 			// many silence samples.  These do not need to be timestretched.
 			if (rate > 0.10)
 			{
-				// Adjust SETTING_SEQUENCE_MS to balance between lag vs hollow audio
-				soundTouch.setSetting(SETTING_SEQUENCE_MS, (int)(1 / (rate * rate)));
 				soundTouch.setTempo(rate);
 				if (rate > 10)
 				{
@@ -246,7 +250,7 @@ void OpenALStream::SoundLoop()
 			if (surround_capable)
 			{
 				float dpl2[OAL_MAX_SAMPLES * OAL_MAX_BUFFERS * SURROUND_CHANNELS];
-				dpl2decode(sampleBuffer, nSamples, dpl2);
+				DPL2Decode(sampleBuffer, nSamples, dpl2);
 				alBufferData(uiBufferTemp[iBuffersFilled], AL_FORMAT_51CHN32, dpl2, nSamples * FRAME_SURROUND_FLOAT, ulFrequency);
 				ALenum err = alGetError();
 				if (err == AL_INVALID_ENUM)

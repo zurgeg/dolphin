@@ -10,7 +10,8 @@
 #include <string>
 #include <vector>
 
-#include "Common/Common.h"
+#include "Common/BitSet.h"
+#include "Common/CommonTypes.h"
 #include "Core/PowerPC/PPCTables.h"
 
 class PPCSymbolDB;
@@ -26,18 +27,37 @@ struct CodeOp //16B
 	u32 address;
 	u32 branchTo; //if 0, not a branch
 	int branchToIndex; //index of target block
-	s8 regsOut[2];
-	s8 regsIn[3];
+	BitSet32 regsOut;
+	BitSet32 regsIn;
+	BitSet32 fregsIn;
 	s8 fregOut;
-	s8 fregsIn[3];
 	bool isBranchTarget;
 	bool wantsCR0;
 	bool wantsCR1;
-	bool wantsPS1;
+	bool wantsFPRF;
+	bool wantsCA;
+	bool wantsCAInFlags;
 	bool outputCR0;
 	bool outputCR1;
-	bool outputPS1;
+	bool outputFPRF;
+	bool outputCA;
+	bool canEndBlock;
 	bool skip;  // followed BL-s for example
+	// which registers are still needed after this instruction in this block
+	BitSet32 fprInUse;
+	BitSet32 gprInUse;
+	// just because a register is in use doesn't mean we actually need or want it in an x86 register.
+	BitSet32 gprInReg;
+	// we do double stores from GPRs, so we don't want to load a PowerPC floating point register into
+	// an XMM only to move it again to a GPR afterwards.
+	BitSet32 fprInXmm;
+	// whether an fpr is known to be an actual single-precision value at this point in the block.
+	BitSet32 fprIsSingle;
+	// whether an fpr is known to have identical top and bottom halves (e.g. due to a single instruction)
+	BitSet32 fprIsDuplicated;
+	// whether an fpr is the output of a single-precision arithmetic instruction, i.e. whether we can safely
+	// skip PPC_FP.
+	BitSet32 fprIsStoreSafe;
 };
 
 struct BlockStats
@@ -60,23 +80,30 @@ struct BlockRegStats
 	bool anyTimer;
 
 	int GetTotalNumAccesses(int reg) {return numReads[reg] + numWrites[reg];}
-	int GetUseRange(int reg) {
+	int GetUseRange(int reg)
+	{
 		return std::max(lastRead[reg], lastWrite[reg]) -
-			   std::min(firstRead[reg], firstWrite[reg]);}
+			   std::min(firstRead[reg], firstWrite[reg]);
+	}
+
+	bool IsUsed(int reg)
+	{
+		return (numReads[reg] + numWrites[reg]) > 0;
+	}
 
 	inline void SetInputRegister(int reg, short opindex)
 	{
 		if (firstRead[reg] == -1)
-			firstRead[reg] = (short)(opindex);
-		lastRead[reg] = (short)(opindex);
+			firstRead[reg] = opindex;
+		lastRead[reg] = opindex;
 		numReads[reg]++;
 	}
 
 	inline void SetOutputRegister(int reg, short opindex)
 	{
 		if (firstWrite[reg] == -1)
-			firstWrite[reg] = (short)(opindex);
-		lastWrite[reg] = (short)(opindex);
+			firstWrite[reg] = opindex;
+		lastWrite[reg] = opindex;
 		numWrites[reg]++;
 	}
 
@@ -127,12 +154,26 @@ struct CodeBlock
 
 	// Did we have a memory_exception?
 	bool m_memory_exception;
+
+	// Which GQRs this block uses, if any.
+	BitSet8 m_gqr_used;
+
+	// Which GQRs this block modifies, if any.
+	BitSet8 m_gqr_modified;
 };
 
 class PPCAnalyzer
 {
 private:
 
+	enum ReorderType
+	{
+		REORDER_CARRY,
+		REORDER_CMP,
+		REORDER_CROR
+	};
+
+	void ReorderInstructionsCore(u32 instructions, CodeOp* code, bool reverse, ReorderType type);
 	void ReorderInstructions(u32 instructions, CodeOp *code);
 	void SetInstructionStats(CodeBlock *block, CodeOp *code, GekkoOPInfo *opinfo, u32 index);
 
@@ -165,6 +206,17 @@ public:
 		// Requires JIT support to work.
 		// XXX: NOT COMPLETE
 		OPTION_FORWARD_JUMP = (1 << 3),
+
+		// Reorder compare/Rc instructions next to their associated branches and
+		// merge in the JIT (for common cases, anyway).
+		OPTION_BRANCH_MERGE = (1 << 4),
+
+		// Reorder carry instructions next to their associated branches and pass
+		// carry flags in the x86 flags between them, instead of in XER.
+		OPTION_CARRY_MERGE = (1 << 5),
+
+		// Reorder cror instructions next to their associated fcmp.
+		OPTION_CROR_MERGE =  (1 << 6),
 	};
 
 

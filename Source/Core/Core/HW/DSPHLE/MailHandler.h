@@ -5,9 +5,9 @@
 #pragma once
 
 #include <queue>
+#include "Common/CommonTypes.h"
 
-#include "Common/ChunkFile.h"
-#include "Common/Common.h"
+class PointerWrap;
 
 class CMailHandler
 {

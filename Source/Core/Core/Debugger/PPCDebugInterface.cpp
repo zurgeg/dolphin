@@ -2,7 +2,9 @@
 // Licensed under GPLv2
 // Refer to the license.txt file included.
 
-#include "PowerPCDisasm.h"
+#include <string>
+
+#include "Common/GekkoDisassembler.h"
 
 #include "Core/Core.h"
 #include "Core/Host.h"
@@ -15,31 +17,39 @@
 #include "Core/PowerPC/PPCSymbolDB.h"
 #include "Core/PowerPC/JitCommon/JitBase.h"
 
-void PPCDebugInterface::Disassemble(unsigned int address, char *dest, int max_size)
+std::string PPCDebugInterface::Disassemble(unsigned int address)
 {
 	// Memory::ReadUnchecked_U32 seemed to crash on shutdown
-	if (PowerPC::GetState() == PowerPC::CPU_POWERDOWN) return;
+	if (PowerPC::GetState() == PowerPC::CPU_POWERDOWN)
+		return "";
 
 	if (Core::GetState() != Core::CORE_UNINITIALIZED)
 	{
-		if (Memory::IsRAMAddress(address, true, true))
+		if (!Memory::IsRAMAddress(address, true, true))
 		{
-			u32 op = Memory::Read_Instruction(address);
-			DisassembleGekko(op, address, dest, max_size);
-			UGeckoInstruction inst;
-			inst.hex = Memory::ReadUnchecked_U32(address);
-			if (inst.OPCD == 1) {
-				strcat(dest, " (hle)");
+			if (!SConfig::GetInstance().m_LocalCoreStartupParameter.bMMU || !((address & JIT_ICACHE_VMEM_BIT) &&
+				Memory::TranslateAddress<Memory::FLAG_NO_EXCEPTION>(address)))
+			{
+				return "(No RAM here)";
 			}
 		}
-		else
+
+		u32 op = Memory::Read_Instruction(address);
+		std::string disasm = GekkoDisassembler::Disassemble(op, address);
+
+		UGeckoInstruction inst;
+		inst.hex = Memory::ReadUnchecked_U32(address);
+
+		if (inst.OPCD == 1)
 		{
-			strcpy(dest, "(No RAM here)");
+			disasm += " (hle)";
 		}
+
+		return disasm;
 	}
 	else
 	{
-		strcpy(dest, "<unknown>");
+		return "<unknown>";
 	}
 }
 
@@ -119,6 +129,11 @@ void PPCDebugInterface::ToggleBreakpoint(unsigned int address)
 		PowerPC::breakpoints.Remove(address);
 	else
 		PowerPC::breakpoints.Add(address);
+}
+
+void PPCDebugInterface::AddWatch(unsigned int address)
+{
+	PowerPC::watches.Add(address);
 }
 
 void PPCDebugInterface::ClearAllMemChecks()
@@ -203,11 +218,6 @@ unsigned int PPCDebugInterface::GetPC()
 void PPCDebugInterface::SetPC(unsigned int address)
 {
 	PowerPC::ppcState.pc = address;
-}
-
-void PPCDebugInterface::ShowJitResults(unsigned int address)
-{
-	Host_ShowJitResults(address);
 }
 
 void PPCDebugInterface::RunToBreakpoint()

@@ -4,7 +4,7 @@
 
 #include <string>
 
-#include "DolphinWX/GLInterface/GLInterface.h"
+#include "Common/CommonTypes.h"
 
 #include "VideoBackends/OGL/GLExtensions/ARB_blend_func_extended.h"
 #include "VideoBackends/OGL/GLExtensions/ARB_buffer_storage.h"

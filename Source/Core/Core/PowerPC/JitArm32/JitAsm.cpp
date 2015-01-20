@@ -95,8 +95,8 @@ void JitArmAsmRoutineManager::Generate()
 	// consumed by CALL.
 	SUB(_SP, _SP, 4);
 
-	MOVI2R(R0, (u32)&CoreTiming::downcount);
 	MOVI2R(R9, (u32)&PowerPC::ppcState.spr[0]);
+	MOVI2R(R8, (u32)Memory::base);
 
 	FixupBranch skipToRealDispatcher = B();
 	dispatcher = GetCodePtr();
@@ -106,6 +106,18 @@ void JitArmAsmRoutineManager::Generate()
 		// The result of slice decrementation should be in flags if somebody jumped here
 		// IMPORTANT - We jump on negative, not carry!!!
 		FixupBranch bail = B_CC(CC_MI);
+
+		FixupBranch dbg_exit;
+		if (SConfig::GetInstance().m_LocalCoreStartupParameter.bEnableDebugging)
+		{
+			MOVI2R(R0, (u32)PowerPC::GetStatePtr());
+			LDR(R0, R0);
+			TST(R0, PowerPC::CPU_STEPPING);
+			FixupBranch not_stepping = B_CC(CC_EQ);
+			// XXX: Check for breakpoints
+			dbg_exit = B();
+			SetJumpTarget(not_stepping);
+		}
 
 		SetJumpTarget(skipToRealDispatcher);
 		dispatcherNoCheck = GetCodePtr();
@@ -117,13 +129,13 @@ void JitArmAsmRoutineManager::Generate()
 			Operand2 iCacheMask = Operand2(0xE, 2); // JIT_ICACHE_MASK
 			BIC(R12, R12, iCacheMask); // R12 contains PC & JIT_ICACHE_MASK here.
 
-			MOVI2R(R14, (u32)jit->GetBlockCache()->iCache);
+			MOVI2R(R14, (u32)jit->GetBlockCache()->iCache.data());
 
 			LDR(R12, R14, R12); // R12 contains iCache[PC & JIT_ICACHE_MASK] here
 			// R12 Confirmed this is the correct iCache Location loaded.
 			TST(R12, 0x80); // Test  to see if it is a JIT block.
 
-			SetCC(CC_EQ);
+			FixupBranch no_block = B_CC(CC_NEQ);
 				// Success, it is our Jitblock.
 				MOVI2R(R14, (u32)jit->GetBlockCache()->GetCodePointers());
 				// LDR R14 right here to get CodePointers()[0] pointer.
@@ -132,7 +144,7 @@ void JitArmAsmRoutineManager::Generate()
 
 				B(R14);
 				// No need to jump anywhere after here, the block will go back to dispatcher start
-			SetCC();
+			SetJumpTarget(no_block);
 
 		// If we get to this point, that means that we don't have the block cached to execute
 		// So call ArmJit to compile the block and then execute it.
@@ -164,6 +176,8 @@ void JitArmAsmRoutineManager::Generate()
 	B(dispatcher);
 
 	SetJumpTarget(Exit);
+	if (SConfig::GetInstance().m_LocalCoreStartupParameter.bEnableDebugging)
+		SetJumpTarget(dbg_exit);
 
 	ADD(_SP, _SP, 4);
 
@@ -190,8 +204,7 @@ void JitArmAsmRoutineManager::GenerateCommon()
 	const u8* loadPairedFloatTwo = GetCodePtr();
 	{
 		BIC(R10, R10, mask);
-		MOVI2R(R12, (u32)Memory::base);
-		ADD(R10, R10, R12);
+		ADD(R10, R10, R8);
 
 		nemit.VLD1(I_32, D0, R10);
 		nemit.VREV32(I_8, D0, D0);
@@ -201,8 +214,7 @@ void JitArmAsmRoutineManager::GenerateCommon()
 	const u8* loadPairedFloatOne = GetCodePtr();
 	{
 		BIC(R10, R10, mask);
-		MOVI2R(R12, (u32)Memory::base);
-		ADD(R10, R10, R12);
+		ADD(R10, R10, R8);
 
 		nemit.VLD1(I_32, D0, R10);
 		nemit.VREV32(I_8, D0, D0);
@@ -212,15 +224,12 @@ void JitArmAsmRoutineManager::GenerateCommon()
 	const u8* loadPairedU8Two = GetCodePtr();
 	{
 		BIC(R10, R10, mask);
-		MOVI2R(R12, (u32)Memory::base);
-		ADD(R10, R10, R12);
+		ADD(R10, R10, R8);
 
-		LDRH(R12, R10);
-		SXTB(R12, R12);
+		LDRB(R12, R10);
 		VMOV(S0, R12);
 
-		LDRH(R12, R10, 2);
-		SXTB(R12, R12);
+		LDRB(R12, R10, 1);
 		VMOV(S1, R12);
 
 		MOVI2R(R10, (u32)&m_dequantizeTableS);
@@ -238,11 +247,9 @@ void JitArmAsmRoutineManager::GenerateCommon()
 	const u8* loadPairedU8One = GetCodePtr();
 	{
 		BIC(R10, R10, mask);
-		MOVI2R(R12, (u32)Memory::base);
-		ADD(R10, R10, R12);
+		ADD(R10, R10, R8);
 
 		LDRB(R12, R10);
-		SXTB(R12, R12);
 		VMOV(S0, R12);
 
 		MOVI2R(R10, (u32)&m_dequantizeTableS);
@@ -258,15 +265,12 @@ void JitArmAsmRoutineManager::GenerateCommon()
 	const u8* loadPairedS8Two = GetCodePtr();
 	{
 		BIC(R10, R10, mask);
-		MOVI2R(R12, (u32)Memory::base);
-		ADD(R10, R10, R12);
+		ADD(R10, R10, R8);
 
-		LDRH(R12, R10);
-		SXTB(R12, R12);
+		LDRSB(R12, R10);
 		VMOV(S0, R12);
 
-		LDRH(R12, R10, 2);
-		SXTB(R12, R12);
+		LDRSB(R12, R10, 1);
 		VMOV(S1, R12);
 
 		MOVI2R(R10, (u32)&m_dequantizeTableS);
@@ -284,11 +288,9 @@ void JitArmAsmRoutineManager::GenerateCommon()
 	const u8* loadPairedS8One = GetCodePtr();
 	{
 		BIC(R10, R10, mask);
-		MOVI2R(R12, (u32)Memory::base);
-		ADD(R10, R10, R12);
+		ADD(R10, R10, R8);
 
-		LDRB(R12, R10);
-		SXTB(R12, R12);
+		LDRSB(R12, R10);
 		VMOV(S0, R12);
 
 		MOVI2R(R10, (u32)&m_dequantizeTableS);
@@ -304,17 +306,14 @@ void JitArmAsmRoutineManager::GenerateCommon()
 	const u8* loadPairedU16Two = GetCodePtr();
 	{
 		BIC(R10, R10, mask);
-		MOVI2R(R12, (u32)Memory::base);
-		ADD(R10, R10, R12);
+		ADD(R10, R10, R8);
 
 		LDRH(R12, R10);
 		REV16(R12, R12);
-		SXTH(R12, R12);
 		VMOV(S0, R12);
 
 		LDRH(R12, R10, 2);
 		REV16(R12, R12);
-		SXTH(R12, R12);
 		VMOV(S1, R12);
 
 		MOVI2R(R10, (u32)&m_dequantizeTableS);
@@ -332,8 +331,7 @@ void JitArmAsmRoutineManager::GenerateCommon()
 	const u8* loadPairedU16One = GetCodePtr();
 	{
 		BIC(R10, R10, mask);
-		MOVI2R(R12, (u32)Memory::base);
-		ADD(R10, R10, R12);
+		ADD(R10, R10, R8);
 
 		LDRH(R12, R10);
 		REV16(R12, R12);
@@ -351,8 +349,7 @@ void JitArmAsmRoutineManager::GenerateCommon()
 	const u8* loadPairedS16Two = GetCodePtr();
 	{
 		BIC(R10, R10, mask);
-		MOVI2R(R12, (u32)Memory::base);
-		ADD(R10, R10, R12);
+		ADD(R10, R10, R8);
 
 		LDRH(R12, R10);
 		REV16(R12, R12);
@@ -379,8 +376,7 @@ void JitArmAsmRoutineManager::GenerateCommon()
 	const u8* loadPairedS16One = GetCodePtr();
 	{
 		BIC(R10, R10, mask);
-		MOVI2R(R12, (u32)Memory::base);
-		ADD(R10, R10, R12);
+		ADD(R10, R10, R8);
 
 		LDRH(R12, R10);
 
@@ -426,8 +422,7 @@ void JitArmAsmRoutineManager::GenerateCommon()
 		TST(R10, arghmask);
 		FixupBranch argh = B_CC(CC_NEQ);
 		BIC(R10, R10, mask);
-		MOVI2R(R12, (u32)Memory::base);
-		ADD(R10, R10, R12);
+		ADD(R10, R10, R8);
 
 		nemit.VREV32(I_8, D0, D0);
 		nemit.VST1(I_32, D0, R10);
@@ -498,8 +493,7 @@ void JitArmAsmRoutineManager::GenerateCommon()
 		TST(R10, arghmask);
 		FixupBranch argh = B_CC(CC_NEQ);
 		BIC(R10, R10, mask);
-		MOVI2R(R12, (u32)Memory::base);
-		ADD(R10, R10, R12);
+		ADD(R10, R10, R8);
 
 		VMOV(R12, S0);
 		REV(R12, R12);
@@ -527,8 +521,7 @@ void JitArmAsmRoutineManager::GenerateCommon()
 		TST(R10, arghmask);
 		FixupBranch argh = B_CC(CC_NEQ);
 		BIC(R10, R10, mask);
-		MOVI2R(R12, (u32)Memory::base);
-		ADD(R10, R10, R12);
+		ADD(R10, R10, R8);
 
 		VCVT(S0, S0, TO_INT | ROUND_TO_ZERO);
 		VMOV(R12, S0);
@@ -555,8 +548,7 @@ void JitArmAsmRoutineManager::GenerateCommon()
 		TST(R10, arghmask);
 		FixupBranch argh = B_CC(CC_NEQ);
 		BIC(R10, R10, mask);
-		MOVI2R(R12, (u32)Memory::base);
-		ADD(R10, R10, R12);
+		ADD(R10, R10, R8);
 
 		VCVT(S0, S0, TO_INT | ROUND_TO_ZERO);
 		VMOV(R12, S0);
@@ -596,4 +588,15 @@ void JitArmAsmRoutineManager::GenerateCommon()
 	pairedStoreQuantized[14] = storeSingleS8;
 	pairedStoreQuantized[15] = storeSingleS16;
 
+	m_increment_profile_counter = AlignCode16();
+
+	nemit.VLD1(I_64, D0, R0); // Start
+	ADD(R0, R0, 8);
+	nemit.VLD1(I_64, D1, R0); // End
+	ADD(R0, R0, 8);
+	nemit.VLD1(I_64, D2, R0); // Counter
+	nemit.VSUB(I_64, D1, D1, D0);
+	nemit.VADD(I_64, D2, D2, D1);
+	nemit.VST1(I_64, D2, R0);
+	MOV(_PC, _LR);
 }

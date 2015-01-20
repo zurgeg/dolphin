@@ -2,13 +2,14 @@
 // Licensed under GPLv2
 // Refer to the license.txt file included.
 
+#include "Common/CommonFuncs.h"
 #include "Core/VolumeHandler.h"
 #include "DiscIO/VolumeCreator.h"
 
 namespace VolumeHandler
 {
 
-DiscIO::IVolume* g_pVolume = nullptr;
+static DiscIO::IVolume* g_pVolume = nullptr;
 
 DiscIO::IVolume *GetVolume()
 {
@@ -52,34 +53,22 @@ void SetVolumeDirectory(const std::string& _rFullPath, bool _bIsWii, const std::
 	g_pVolume = DiscIO::CreateVolumeFromDirectory(_rFullPath, _bIsWii, _rApploader, _rDOL);
 }
 
-u32 Read32(u64 _Offset)
+u32 Read32(u64 _Offset, bool decrypt)
 {
 	if (g_pVolume != nullptr)
 	{
 		u32 Temp;
-		g_pVolume->Read(_Offset, 4, (u8*)&Temp);
+		g_pVolume->Read(_Offset, 4, (u8*)&Temp, decrypt);
 		return Common::swap32(Temp);
 	}
 	return 0;
 }
 
-bool ReadToPtr(u8* ptr, u64 _dwOffset, u64 _dwLength)
+bool ReadToPtr(u8* ptr, u64 _dwOffset, u64 _dwLength, bool decrypt)
 {
 	if (g_pVolume != nullptr && ptr)
-	{
-		g_pVolume->Read(_dwOffset, _dwLength, ptr);
-		return true;
-	}
-	return false;
-}
+		return g_pVolume->Read(_dwOffset, _dwLength, ptr, decrypt);
 
-bool RAWReadToPtr( u8* ptr, u64 _dwOffset, u64 _dwLength )
-{
-	if (g_pVolume != nullptr && ptr)
-	{
-		g_pVolume->RAWRead(_dwOffset, _dwLength, ptr);
-		return true;
-	}
 	return false;
 }
 

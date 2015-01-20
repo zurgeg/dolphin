@@ -13,9 +13,8 @@ class GCPad : public ControllerEmu
 public:
 
 	GCPad(const unsigned int index);
-	void GetInput(SPADStatus* const pad);
-	void SetOutput(const u8 on);
-	void SetMotor(const u8 on);
+	void GetInput(GCPadStatus* const pad);
+	void SetOutput(const ControlState strength);
 
 	bool GetMicButton() const;
 
@@ -35,4 +34,8 @@ private:
 
 	const unsigned int m_index;
 
+	// TODO: Make constexpr when VS supports it.
+	//
+	// Default analog stick radius for GameCube controllers.
+	static const ControlState DEFAULT_PAD_STICK_RADIUS;
 };

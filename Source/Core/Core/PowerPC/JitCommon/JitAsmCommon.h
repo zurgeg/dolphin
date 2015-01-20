@@ -6,6 +6,10 @@
 
 #include "Core/PowerPC/JitCommon/Jit_Util.h"
 
+extern const u8 GC_ALIGNED16(pbswapShuffle1x4[16]);
+extern const u8 GC_ALIGNED16(pbswapShuffle2x4[16]);
+extern const float GC_ALIGNED16(m_one[]);
+
 class CommonAsmRoutinesBase
 {
 public:
@@ -13,34 +17,32 @@ public:
 	const u8 *fifoDirectWrite8;
 	const u8 *fifoDirectWrite16;
 	const u8 *fifoDirectWrite32;
-	const u8 *fifoDirectWriteFloat;
-	const u8 *fifoDirectWriteXmm64;
+	const u8 *fifoDirectWrite64;
 
 	const u8 *enterCode;
 
-	const u8 *outerLoop;
+	const u8 *dispatcherMispredictedBLR;
 	const u8 *dispatcher;
 	const u8 *dispatcherNoCheck;
-	const u8 *dispatcherPcInEAX;
 
-	const u8 *testExternalExceptions;
-	const u8 *dispatchPcInEAX;
 	const u8 *doTiming;
 
-	const u8 *breakpointBailout;
+	const u8 *frsqrte;
+	const u8 *fres;
+	const u8 *mfcr;
 
 	// In: array index: GQR to use.
 	// In: ECX: Address to read from.
 	// Out: XMM0: Bottom two 32-bit slots hold the read value,
 	//            converted to a pair of floats.
-	// Trashes: EAX ECX EDX
+	// Trashes: all three RSCRATCH
 	const u8 **pairedLoadQuantized;
 
 	// In: array index: GQR to use.
 	// In: ECX: Address to write to.
 	// In: XMM0: Bottom two 32-bit slots hold the pair of floats to be written.
 	// Out: Nothing.
-	// Trashes: EAX ECX EDX
+	// Trashes: all three RSCRATCH
 	const u8 **pairedStoreQuantized;
 
 	// In: array index: GQR to use.
@@ -59,7 +61,7 @@ protected:
 
 public:
 	void GenFifoWrite(int size);
-	void GenFifoXmm64Write();
-	void GenFifoFloatWrite();
-
+	void GenFrsqrte();
+	void GenFres();
+	void GenMfcr();
 };

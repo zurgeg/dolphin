@@ -1,7 +1,7 @@
-
-#include "Common/Atomic.h"
+#include "Common/Event.h"
 #include "Core/ConfigManager.h"
 
+#include "VideoCommon/BoundingBox.h"
 #include "VideoCommon/BPStructs.h"
 #include "VideoCommon/CommandProcessor.h"
 #include "VideoCommon/Fifo.h"
@@ -18,18 +18,24 @@
 
 bool s_BackendInitialized = false;
 
-volatile u32 s_swapRequested = false;
-u32 s_efbAccessRequested = false;
-volatile u32 s_FifoShuttingDown = false;
+Common::Flag s_swapRequested;
+static Common::Flag s_FifoShuttingDown;
+static Common::Flag s_efbAccessRequested;
+static Common::Event s_efbAccessReadyEvent;
 
-std::condition_variable s_perf_query_cond;
-std::mutex s_perf_query_lock;
-static volatile bool s_perf_query_requested;
+static Common::Flag s_perfQueryRequested;
+static Common::Event s_perfQueryReadyEvent;
+
+static Common::Flag s_BBoxRequested;
+static Common::Event s_BBoxReadyEvent;
+static int s_BBoxIndex;
+static u16 s_BBoxResult;
 
 static volatile struct
 {
 	u32 xfbAddr;
 	u32 fbWidth;
+	u32 fbStride;
 	u32 fbHeight;
 } s_beginFieldArgs;
 
@@ -57,7 +63,9 @@ void VideoBackendHardware::Video_EnterLoop()
 void VideoBackendHardware::Video_ExitLoop()
 {
 	ExitGpuLoop();
-	s_FifoShuttingDown = true;
+	s_FifoShuttingDown.Set();
+	s_efbAccessReadyEvent.Set();
+	s_perfQueryReadyEvent.Set();
 }
 
 void VideoBackendHardware::Video_SetRendering(bool bEnabled)
@@ -66,15 +74,15 @@ void VideoBackendHardware::Video_SetRendering(bool bEnabled)
 }
 
 // Run from the graphics thread (from Fifo.cpp)
-void VideoFifo_CheckSwapRequest()
+static void VideoFifo_CheckSwapRequest()
 {
 	if (g_ActiveConfig.bUseXFB)
 	{
-		if (Common::AtomicLoadAcquire(s_swapRequested))
+		if (s_swapRequested.IsSet())
 		{
 			EFBRectangle rc;
-			Renderer::Swap(s_beginFieldArgs.xfbAddr, s_beginFieldArgs.fbWidth, s_beginFieldArgs.fbHeight,rc);
-			Common::AtomicStoreRelease(s_swapRequested, false);
+			Renderer::Swap(s_beginFieldArgs.xfbAddr, s_beginFieldArgs.fbWidth, s_beginFieldArgs.fbStride, s_beginFieldArgs.fbHeight, rc);
+			s_swapRequested.Clear();
 		}
 	}
 }
@@ -84,21 +92,21 @@ void VideoFifo_CheckSwapRequestAt(u32 xfbAddr, u32 fbWidth, u32 fbHeight)
 {
 	if (g_ActiveConfig.bUseXFB)
 	{
-		if (Common::AtomicLoadAcquire(s_swapRequested))
+		if (s_swapRequested.IsSet())
 		{
 			u32 aLower = xfbAddr;
 			u32 aUpper = xfbAddr + 2 * fbWidth * fbHeight;
 			u32 bLower = s_beginFieldArgs.xfbAddr;
-			u32 bUpper = s_beginFieldArgs.xfbAddr + 2 * s_beginFieldArgs.fbWidth * s_beginFieldArgs.fbHeight;
+			u32 bUpper = s_beginFieldArgs.xfbAddr + 2 * s_beginFieldArgs.fbStride * s_beginFieldArgs.fbHeight;
 
-			if (addrRangesOverlap(aLower, aUpper, bLower, bUpper))
+			if (AddressRangesOverlap(aLower, aUpper, bLower, bUpper))
 				VideoFifo_CheckSwapRequest();
 		}
 	}
 }
 
 // Run from the CPU thread (from VideoInterface.cpp)
-void VideoBackendHardware::Video_BeginField(u32 xfbAddr, u32 fbWidth, u32 fbHeight)
+void VideoBackendHardware::Video_BeginField(u32 xfbAddr, u32 fbWidth, u32 fbStride, u32 fbHeight)
 {
 	if (s_BackendInitialized && g_ActiveConfig.bUseXFB)
 	{
@@ -106,6 +114,7 @@ void VideoBackendHardware::Video_BeginField(u32 xfbAddr, u32 fbWidth, u32 fbHeig
 			VideoFifo_CheckSwapRequest();
 		s_beginFieldArgs.xfbAddr = xfbAddr;
 		s_beginFieldArgs.fbWidth = fbWidth;
+		s_beginFieldArgs.fbStride = fbStride;
 		s_beginFieldArgs.fbHeight = fbHeight;
 	}
 }
@@ -115,7 +124,14 @@ void VideoBackendHardware::Video_EndField()
 {
 	if (s_BackendInitialized)
 	{
-		Common::AtomicStoreRelease(s_swapRequested, true);
+		SyncGPU(SYNC_GPU_SWAP);
+
+		// Wait until the GPU thread has swapped. Prevents FIFO overflows.
+		while (g_ActiveConfig.bUseXFB && SConfig::GetInstance().m_LocalCoreStartupParameter.bCPUThread && s_swapRequested.IsSet())
+		{
+			Common::YieldCPU();
+		}
+		s_swapRequested.Set();
 	}
 }
 
@@ -138,11 +154,11 @@ bool VideoBackendHardware::Video_Screenshot(const std::string& filename)
 
 void VideoFifo_CheckEFBAccess()
 {
-	if (Common::AtomicLoadAcquire(s_efbAccessRequested))
+	if (s_efbAccessRequested.IsSet())
 	{
 		s_AccessEFBResult = g_renderer->AccessEFB(s_accessEFBArgs.type, s_accessEFBArgs.x, s_accessEFBArgs.y, s_accessEFBArgs.Data);
-
-		Common::AtomicStoreRelease(s_efbAccessRequested, false);
+		s_efbAccessRequested.Clear();
+		s_efbAccessReadyEvent.Set();
 	}
 }
 
@@ -150,18 +166,22 @@ u32 VideoBackendHardware::Video_AccessEFB(EFBAccessType type, u32 x, u32 y, u32 
 {
 	if (s_BackendInitialized && g_ActiveConfig.bEFBAccessEnable)
 	{
+		SyncGPU(SYNC_GPU_EFB_POKE);
+
 		s_accessEFBArgs.type = type;
 		s_accessEFBArgs.x = x;
 		s_accessEFBArgs.y = y;
 		s_accessEFBArgs.Data = InputData;
 
-		Common::AtomicStoreRelease(s_efbAccessRequested, true);
+		s_efbAccessRequested.Set();
 
 		if (SConfig::GetInstance().m_LocalCoreStartupParameter.bCPUThread)
 		{
-			while (Common::AtomicLoadAcquire(s_efbAccessRequested) && !s_FifoShuttingDown)
-				//Common::SleepCurrentThread(1);
-				Common::YieldCPU();
+			s_efbAccessReadyEvent.Reset();
+			if (s_FifoShuttingDown.IsSet())
+				return 0;
+			s_efbAccessRequested.Set();
+			s_efbAccessReadyEvent.Wait();
 		}
 		else
 			VideoFifo_CheckEFBAccess();
@@ -172,23 +192,13 @@ u32 VideoBackendHardware::Video_AccessEFB(EFBAccessType type, u32 x, u32 y, u32 
 	return 0;
 }
 
-static bool QueryResultIsReady()
+static void VideoFifo_CheckPerfQueryRequest()
 {
-	return !s_perf_query_requested || s_FifoShuttingDown;
-}
-
-void VideoFifo_CheckPerfQueryRequest()
-{
-	if (s_perf_query_requested)
+	if (s_perfQueryRequested.IsSet())
 	{
 		g_perf_query->FlushResults();
-
-		{
-		std::lock_guard<std::mutex> lk(s_perf_query_lock);
-		s_perf_query_requested = false;
-		}
-
-		s_perf_query_cond.notify_one();
+		s_perfQueryRequested.Clear();
+		s_perfQueryReadyEvent.Set();
 	}
 }
 
@@ -199,14 +209,18 @@ u32 VideoBackendHardware::Video_GetQueryResult(PerfQueryType type)
 		return 0;
 	}
 
+	SyncGPU(SYNC_GPU_PERFQUERY);
+
 	// TODO: Is this check sane?
 	if (!g_perf_query->IsFlushed())
 	{
 		if (SConfig::GetInstance().m_LocalCoreStartupParameter.bCPUThread)
 		{
-			s_perf_query_requested = true;
-			std::unique_lock<std::mutex> lk(s_perf_query_lock);
-			s_perf_query_cond.wait(lk, QueryResultIsReady);
+			s_perfQueryReadyEvent.Reset();
+			if (s_FifoShuttingDown.IsSet())
+				return 0;
+			s_perfQueryRequested.Set();
+			s_perfQueryReadyEvent.Wait();
 		}
 		else
 			g_perf_query->FlushResults();
@@ -215,14 +229,47 @@ u32 VideoBackendHardware::Video_GetQueryResult(PerfQueryType type)
 	return g_perf_query->GetQueryResult(type);
 }
 
+u16 VideoBackendHardware::Video_GetBoundingBox(int index)
+{
+	if (!g_ActiveConfig.backend_info.bSupportsBBox)
+		return BoundingBox::coords[index];
+
+	SyncGPU(SYNC_GPU_BBOX);
+
+	if (SConfig::GetInstance().m_LocalCoreStartupParameter.bCPUThread)
+	{
+		s_BBoxReadyEvent.Reset();
+		if (s_FifoShuttingDown.IsSet())
+			return 0;
+		s_BBoxIndex = index;
+		s_BBoxRequested.Set();
+		s_BBoxReadyEvent.Wait();
+		return s_BBoxResult;
+	}
+	else
+	{
+		return g_renderer->BBoxRead(index);
+	}
+}
+
+static void VideoFifo_CheckBBoxRequest()
+{
+	if (s_BBoxRequested.IsSet())
+	{
+		s_BBoxResult = g_renderer->BBoxRead(s_BBoxIndex);
+		s_BBoxRequested.Clear();
+		s_BBoxReadyEvent.Set();
+	}
+}
+
 void VideoBackendHardware::InitializeShared()
 {
 	VideoCommon_Init();
 
-	s_swapRequested = 0;
-	s_efbAccessRequested = 0;
-	s_perf_query_requested = false;
-	s_FifoShuttingDown = 0;
+	s_swapRequested.Clear();
+	s_efbAccessRequested.Clear();
+	s_perfQueryRequested.Clear();
+	s_FifoShuttingDown.Clear();
 	memset((void*)&s_beginFieldArgs, 0, sizeof(s_beginFieldArgs));
 	memset(&s_accessEFBArgs, 0, sizeof(s_accessEFBArgs));
 	s_AccessEFBResult = 0;
@@ -290,6 +337,7 @@ void VideoFifo_CheckAsyncRequest()
 	VideoFifo_CheckSwapRequest();
 	VideoFifo_CheckEFBAccess();
 	VideoFifo_CheckPerfQueryRequest();
+	VideoFifo_CheckBBoxRequest();
 }
 
 void VideoBackendHardware::Video_GatherPipeBursted()
@@ -302,18 +350,13 @@ bool VideoBackendHardware::Video_IsPossibleWaitingSetDrawDone()
 	return CommandProcessor::isPossibleWaitingSetDrawDone;
 }
 
-bool VideoBackendHardware::Video_IsHiWatermarkActive()
-{
-	return CommandProcessor::isHiWatermarkActive;
-}
-
-void VideoBackendHardware::Video_AbortFrame()
-{
-	CommandProcessor::AbortFrame();
-}
-
 void VideoBackendHardware::RegisterCPMMIO(MMIO::Mapping* mmio, u32 base)
 {
 	CommandProcessor::RegisterMMIO(mmio, base);
+}
+
+void VideoBackendHardware::UpdateWantDeterminism(bool want)
+{
+	Fifo_UpdateWantDeterminism(want);
 }
 

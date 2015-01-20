@@ -4,7 +4,10 @@
 
 #pragma once
 
+#include <functional> // for hash
+
 #include "Common/Common.h"
+#include "Common/Hash.h"
 
 // m_components
 enum
@@ -41,14 +44,6 @@ enum
 	VB_HAS_UVTEXMTXSHIFT=13,
 };
 
-#ifdef WIN32
-#define LOADERDECL __cdecl
-#else
-#define LOADERDECL
-#endif
-
-typedef void (LOADERDECL *TPipelineFunction)();
-
 enum VarType
 {
 	VAR_UNSIGNED_BYTE,  // GX_U8  = 0
@@ -76,7 +71,30 @@ struct PortableVertexDeclaration
 	AttributeFormat colors[2];
 	AttributeFormat texcoords[8];
 	AttributeFormat posmtx;
+
+	inline bool operator<(const PortableVertexDeclaration& b) const
+	{
+		return memcmp(this, &b, sizeof(PortableVertexDeclaration)) < 0;
+	}
+	inline bool operator==(const PortableVertexDeclaration& b) const
+	{
+		return memcmp(this, &b, sizeof(PortableVertexDeclaration)) == 0;
+	}
 };
+
+namespace std
+{
+
+template <>
+struct hash<PortableVertexDeclaration>
+{
+	size_t operator()(const PortableVertexDeclaration& decl) const
+	{
+		return HashFletcher((u8 *) &decl, sizeof(decl));
+	}
+};
+
+}
 
 // The implementation of this class is specific for GL/DX, so NativeVertexFormat.cpp
 // is in the respective backend, not here in VideoCommon.

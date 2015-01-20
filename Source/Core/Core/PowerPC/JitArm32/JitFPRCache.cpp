@@ -5,9 +5,11 @@
 #include "Core/PowerPC/JitArm32/Jit.h"
 #include "Core/PowerPC/JitArm32/JitFPRCache.h"
 
+using namespace ArmGen;
+
 ArmFPRCache::ArmFPRCache()
 {
-	emit = 0;
+	emit = nullptr;
 }
 
 void ArmFPRCache::Init(ARMXEmitter *emitter)
@@ -32,6 +34,27 @@ void ArmFPRCache::Init(ARMXEmitter *emitter)
 
 void ArmFPRCache::Start(PPCAnalyst::BlockRegStats &stats)
 {
+	// Make sure the state is wiped on Start
+	// There is a potential for the state remaining dirty from the previous block
+	// This is due to conditional branches not clearing the register cache state
+
+	for (u8 a = 0; a < 32; ++a)
+	{
+		if (_regs[a][0].GetType() != REG_NOTLOADED)
+		{
+			u32 regindex = _regs[a][0].GetRegIndex();
+			ArmCRegs[regindex].PPCReg = 33;
+			ArmCRegs[regindex].LastLoad = 0;
+			_regs[a][0].Flush();
+		}
+		if (_regs[a][1].GetType() != REG_NOTLOADED)
+		{
+			u32 regindex = _regs[a][1].GetRegIndex();
+			ArmCRegs[regindex].PPCReg = 33;
+			ArmCRegs[regindex].LastLoad = 0;
+			_regs[a][1].Flush();
+		}
+	}
 }
 
 ARMReg *ArmFPRCache::GetPPCAllocationOrder(int &count)
@@ -62,6 +85,7 @@ ARMReg *ArmFPRCache::GetAllocationOrder(int &count)
 ARMReg ArmFPRCache::GetReg(bool AutoLock)
 {
 	for (u8 a = 0; a < NUMARMREG; ++a)
+	{
 		if (ArmRegs[a].free)
 		{
 			// Alright, this one is free
@@ -69,6 +93,8 @@ ARMReg ArmFPRCache::GetReg(bool AutoLock)
 				ArmRegs[a].free = false;
 			return ArmRegs[a].Reg;
 		}
+	}
+
 	// Uh Oh, we have all them locked....
 	_assert_msg_(_DYNA_REC_, false, "All available registers are locked dumb dumb");
 	return D31;
@@ -88,9 +114,11 @@ u32 ArmFPRCache::GetLeastUsedRegister(bool increment)
 {
 	u32 HighestUsed = 0;
 	u8 lastRegIndex = 0;
-	for (u8 a = 0; a < NUMPPCREG; ++a){
+	for (u8 a = 0; a < NUMPPCREG; ++a)
+	{
 		if (increment)
 			++ArmCRegs[a].LastLoad;
+
 		if (ArmCRegs[a].LastLoad > HighestUsed)
 		{
 			HighestUsed = ArmCRegs[a].LastLoad;
@@ -102,11 +130,13 @@ u32 ArmFPRCache::GetLeastUsedRegister(bool increment)
 bool ArmFPRCache::FindFreeRegister(u32 &regindex)
 {
 	for (u8 a = 0; a < NUMPPCREG; ++a)
+	{
 		if (ArmCRegs[a].PPCReg == 33)
 		{
 			regindex = a;
 			return true;
 		}
+	}
 	return false;
 }
 
@@ -131,7 +161,8 @@ ARMReg ArmFPRCache::GetPPCReg(u32 preg, bool PS1, bool preLoad)
 		ArmCRegs[regindex].PS1 = PS1;
 
 		_regs[preg][PS1].LoadToReg(regindex);
-		emit->VLDR(ArmCRegs[regindex].Reg, R9, offset);
+		if (preLoad)
+			emit->VLDR(ArmCRegs[regindex].Reg, R9, offset);
 		return ArmCRegs[regindex].Reg;
 	}
 
@@ -148,7 +179,8 @@ ARMReg ArmFPRCache::GetPPCReg(u32 preg, bool PS1, bool preLoad)
 	ArmCRegs[lastRegIndex].PS1 = PS1;
 
 	_regs[preg][PS1].LoadToReg(lastRegIndex);
-	emit->VLDR(ArmCRegs[lastRegIndex].Reg, R9, offsetNew);
+	if (preLoad)
+		emit->VLDR(ArmCRegs[lastRegIndex].Reg, R9, offsetNew);
 	return ArmCRegs[lastRegIndex].Reg;
 }
 
@@ -162,7 +194,7 @@ ARMReg ArmFPRCache::R1(u32 preg, bool preLoad)
 	return GetPPCReg(preg, true, preLoad);
 }
 
-void ArmFPRCache::Flush()
+void ArmFPRCache::Flush(FlushMode mode)
 {
 	for (u8 a = 0; a < 32; ++a)
 	{
@@ -172,9 +204,12 @@ void ArmFPRCache::Flush()
 			u32 regindex = _regs[a][0].GetRegIndex();
 			emit->VSTR(ArmCRegs[regindex].Reg, R9, offset);
 
-			ArmCRegs[regindex].PPCReg = 33;
-			ArmCRegs[regindex].LastLoad = 0;
-			_regs[a][0].Flush();
+			if (mode == FLUSH_ALL)
+			{
+				ArmCRegs[regindex].PPCReg = 33;
+				ArmCRegs[regindex].LastLoad = 0;
+				_regs[a][0].Flush();
+			}
 		}
 		if (_regs[a][1].GetType() != REG_NOTLOADED)
 		{
@@ -182,10 +217,36 @@ void ArmFPRCache::Flush()
 			u32 regindex = _regs[a][1].GetRegIndex();
 			emit->VSTR(ArmCRegs[regindex].Reg, R9, offset);
 
-			ArmCRegs[regindex].PPCReg = 33;
-			ArmCRegs[regindex].LastLoad = 0;
-			_regs[a][1].Flush();
+			if (mode == FLUSH_ALL)
+			{
+				ArmCRegs[regindex].PPCReg = 33;
+				ArmCRegs[regindex].LastLoad = 0;
+				_regs[a][1].Flush();
+			}
 		}
 	}
 }
 
+void ArmFPRCache::StoreFromRegister(u32 preg)
+{
+	if (_regs[preg][0].GetType() != REG_NOTLOADED)
+	{
+		s16 offset =  PPCSTATE_OFF(ps) + (preg * 16);
+		u32 regindex = _regs[preg][0].GetRegIndex();
+		emit->VSTR(ArmCRegs[regindex].Reg, R9, offset);
+
+		ArmCRegs[regindex].PPCReg = 33;
+		ArmCRegs[regindex].LastLoad = 0;
+		_regs[preg][0].Flush();
+	}
+	if (_regs[preg][1].GetType() != REG_NOTLOADED)
+	{
+		s16 offset =  PPCSTATE_OFF(ps) + (preg * 16) + 8;
+		u32 regindex = _regs[preg][1].GetRegIndex();
+		emit->VSTR(ArmCRegs[regindex].Reg, R9, offset);
+
+		ArmCRegs[regindex].PPCReg = 33;
+		ArmCRegs[regindex].LastLoad = 0;
+		_regs[preg][1].Flush();
+	}
+}

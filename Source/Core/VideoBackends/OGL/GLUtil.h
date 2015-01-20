@@ -5,7 +5,6 @@
 #pragma once
 
 #include "Common/MathUtil.h"
-#include "DolphinWX/GLInterface/GLInterface.h"
 #include "VideoBackends/OGL/GLExtensions/GLExtensions.h"
 #include "VideoCommon/VideoConfig.h"
 
@@ -19,19 +18,13 @@ void InitInterface();
 // Helpers
 GLuint OpenGL_CompileProgram(const char *vertexShader, const char *fragmentShader);
 
-// Error reporting - use the convenient macros.
-GLuint OpenGL_ReportGLError(const char *function, const char *file, int line);
-bool OpenGL_ReportFBOError(const char *function, const char *file, int line);
+// Creates and deletes a VAO and VBO suitable for attributeless rendering.
+// Called by the Renderer.
+void OpenGL_CreateAttributelessVAO();
+void OpenGL_DeleteAttributelessVAO();
 
-#if defined(_DEBUG) || defined(DEBUGFAST)
-#define GL_REPORT_ERROR()         OpenGL_ReportGLError(__FUNCTION__, __FILE__, __LINE__)
-#define GL_REPORT_ERRORD()        OpenGL_ReportGLError(__FUNCTION__, __FILE__, __LINE__)
-#define GL_REPORT_FBO_ERROR()     OpenGL_ReportFBOError(__FUNCTION__, __FILE__, __LINE__)
-#else
-__forceinline GLenum GL_REPORT_ERROR() { return GL_NO_ERROR; }
-#define GL_REPORT_ERRORD() (void)GL_NO_ERROR
-#define GL_REPORT_FBO_ERROR() (void)true
-#endif
+// Binds the VAO suitable for attributeless rendering.
+void OpenGL_BindAttributelessVAO();
 
 // this should be removed in future, but as long as glsl is unstable, we should really read this messages
 #if defined(_DEBUG) || defined(DEBUGFAST)

@@ -5,44 +5,41 @@
 
 #pragma once
 
+#include <cstddef>
 #include <string>
 
-#ifdef _WIN32
+#include "Common/CommonTypes.h"
 
-#if _M_X86_32
-#define PROFILER_QUERY_PERFORMANCE_COUNTER(pt)      \
-                    LEA(32, EAX, M(pt)); PUSH(EAX); \
-                    CALL(QueryPerformanceCounter)
-// TODO: r64 way
-// asm write : (u64) dt += t1-t0
-#define PROFILER_ADD_DIFF_LARGE_INTEGER(pdt, pt1, pt0)  \
-                    MOV(32, R(EAX), M(pt1));            \
-                    SUB(32, R(EAX), M(pt0));            \
-                    MOV(32, R(ECX), M(((u8*)pt1) + 4)); \
-                    SBB(32, R(ECX), M(((u8*)pt0) + 4)); \
-                    ADD(32, R(EAX), M(pdt));            \
-                    MOV(32, R(EDX), M(((u8*)pdt) + 4)); \
-                    ADC(32, R(EDX), R(ECX));            \
-                    MOV(32, M(pdt), R(EAX));            \
-                    MOV(32, M(((u8*)pdt) + 4), R(EDX))
+#include "Common/PerformanceCounter.h"
 
-#define PROFILER_VPUSH  PUSH(EAX);PUSH(ECX);PUSH(EDX)
-#define PROFILER_VPOP   POP(EDX);POP(ECX);POP(EAX)
+#if defined(_M_X86_64)
+
+#define PROFILER_QUERY_PERFORMANCE_COUNTER(pt) \
+	MOV(64, R(ABI_PARAM1), Imm64((u64) pt)); \
+	ABI_CallFunction((const void*) QueryPerformanceCounter)
+
+// block->ticCounter += block->ticStop - block->ticStart
+#define PROFILER_UPDATE_TIME(block) \
+	MOV(64, R(RSCRATCH2), Imm64((u64) block)); \
+	MOV(64, R(RSCRATCH), MDisp(RSCRATCH2, offsetof(struct JitBlock, ticStop))); \
+	SUB(64, R(RSCRATCH), MDisp(RSCRATCH2, offsetof(struct JitBlock, ticStart))); \
+	ADD(64, R(RSCRATCH), MDisp(RSCRATCH2, offsetof(struct JitBlock, ticCounter))); \
+	MOV(64, MDisp(RSCRATCH2, offsetof(struct JitBlock, ticCounter)), R(RSCRATCH));
+
+#define PROFILER_VPUSH \
+	BitSet32 registersInUse = CallerSavedRegistersInUse(); \
+	ABI_PushRegistersAndAdjustStack(registersInUse, 0);
+
+#define PROFILER_VPOP \
+	ABI_PopRegistersAndAdjustStack(registersInUse, 0);
 
 #else
 
 #define PROFILER_QUERY_PERFORMANCE_COUNTER(pt)
-#define PROFILER_ADD_DIFF_LARGE_INTEGER(pdt, pt1, pt0)
+#define PROFILER_UPDATE_TIME(b)
 #define PROFILER_VPUSH
 #define PROFILER_VPOP
-#endif
 
-#else
-// TODO
-#define PROFILER_QUERY_PERFORMANCE_COUNTER(pt)
-#define PROFILER_ADD_DIFF_LARGE_INTEGER(pdt, pt1, pt0)
-#define PROFILER_VPUSH
-#define PROFILER_VPOP
 #endif
 
 struct BlockStat
@@ -58,7 +55,6 @@ struct BlockStat
 namespace Profiler
 {
 extern bool g_ProfileBlocks;
-extern bool g_ProfileInstructions;
 
 void WriteProfileResults(const std::string& filename);
 }

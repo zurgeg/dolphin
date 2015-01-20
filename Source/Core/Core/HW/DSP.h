@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 
 class PointerWrap;
 class DSPEmulator;
@@ -15,9 +15,9 @@ namespace DSP
 
 enum DSPInterruptType
 {
-	INT_DSP  = 0,
-	INT_ARAM = 1,
-	INT_AID  = 2
+	INT_DSP  = 0x80,
+	INT_ARAM = 0x20,
+	INT_AID  = 0x08,
 };
 
 // aram size and mask
@@ -61,12 +61,11 @@ void Shutdown();
 
 void RegisterMMIO(MMIO::Mapping* mmio, u32 base);
 
-DSPEmulator *GetDSPEmulator();
+DSPEmulator* GetDSPEmulator();
 
 void DoState(PointerWrap &p);
 
-void GenerateDSPInterrupt(DSPInterruptType _DSPInterruptType, bool _bSet = true);
-void GenerateDSPInterruptFromDSPEmu(DSPInterruptType _DSPInterruptType, bool _bSet = true);
+void GenerateDSPInterruptFromDSPEmu(DSPInterruptType _DSPInterruptType);
 
 // Audio/DSP Helper
 u8 ReadARAM(const u32 _uAddress);
@@ -77,5 +76,7 @@ u8* GetARAMPtr();
 
 void UpdateAudioDMA();
 void UpdateDSPSlice(int cycles);
+u64 DMAInProgress();
+void EnableInstantDMA();
 
 }// end of namespace DSP

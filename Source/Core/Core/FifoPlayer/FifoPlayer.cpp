@@ -4,7 +4,7 @@
 
 #include <algorithm>
 
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 #include "Core/ConfigManager.h"
 #include "Core/Core.h"
 #include "Core/CoreTiming.h"
@@ -74,7 +74,7 @@ bool FifoPlayer::Play()
 				{
 					m_CurrentFrame = m_FrameRangeStart;
 
-					CoreTiming::downcount = 0;
+					PowerPC::ppcState.downcount = 0;
 					CoreTiming::Advance();
 				}
 				else
@@ -259,7 +259,7 @@ void FifoPlayer::WriteAllMemoryUpdates()
 {
 	_assert_(m_File);
 
-	for (size_t frameNum = 0; frameNum < m_File->GetFrameCount(); ++frameNum)
+	for (u32 frameNum = 0; frameNum < m_File->GetFrameCount(); ++frameNum)
 	{
 		const FifoFrameInfo &frame = m_File->GetFrame(frameNum);
 		for (auto& update : frame.memoryUpdates)
@@ -301,7 +301,7 @@ void FifoPlayer::WriteFifo(u8 *data, u32 start, u32 end)
 		u32 cyclesUsed = elapsedCycles - m_ElapsedCycles;
 		m_ElapsedCycles = elapsedCycles;
 
-		CoreTiming::downcount -= cyclesUsed;
+		PowerPC::ppcState.downcount -= cyclesUsed;
 		CoreTiming::Advance();
 	}
 }
@@ -453,7 +453,7 @@ bool FifoPlayer::ShouldLoadBP(u8 address)
 	case BPMEM_LOADTLUT1:
 	case BPMEM_PERF1:
 		return false;
+	default:
+		return true;
 	}
-
-	return true;
 }

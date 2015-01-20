@@ -15,18 +15,21 @@ import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
-import android.util.DisplayMetrics;
-import android.view.*;
+import android.view.InputDevice;
+import android.view.KeyEvent;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
+import android.view.MotionEvent;
+import android.view.View;
+import android.view.Window;
 import android.view.WindowManager.LayoutParams;
 
 import org.dolphinemu.dolphinemu.NativeLibrary;
 import org.dolphinemu.dolphinemu.R;
 import org.dolphinemu.dolphinemu.settings.input.InputConfigFragment;
-import org.dolphinemu.dolphinemu.utils.EGLHelper;
 
 import java.util.List;
-
-import javax.microedition.khronos.opengles.GL10;
 
 /**
  * This is the activity where all of the emulation handling happens.
@@ -36,8 +39,6 @@ public final class EmulationActivity extends Activity
 {
 	private boolean Running;
 	private boolean IsActionBarHidden = false;
-	private float screenWidth;
-	private float screenHeight;
 	private SharedPreferences sharedPrefs;
 
 	@Override
@@ -45,10 +46,7 @@ public final class EmulationActivity extends Activity
 	{
 		super.onCreate(savedInstanceState);
 
-		// Retrieve screen dimensions.
-		DisplayMetrics dm = getResources().getDisplayMetrics();
-		this.screenHeight = dm.heightPixels;
-		this.screenWidth = dm.widthPixels;
+		sharedPrefs = PreferenceManager.getDefaultSharedPreferences(this);
 
 		// Request window features for the emulation view.
 		getWindow().addFlags(LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -59,18 +57,6 @@ public final class EmulationActivity extends Activity
 		ColorDrawable actionBarBackground = new ColorDrawable(Color.parseColor("#303030"));
 		actionBarBackground.setAlpha(175);
 		getActionBar().setBackgroundDrawable(actionBarBackground);
-
-		// Set the native rendering screen width/height.
-		//
-		// Due to a bug in Adreno, it renders the screen rotated 90 degrees when using OpenGL
-		// Flip the width and height when on Adreno to work around this.
-		// This bug is fixed in Qualcomm driver v53
-		// Mali isn't affected by this bug.
-		sharedPrefs = PreferenceManager.getDefaultSharedPreferences(this);
-		if (hasBuggedDriverDimensions())
-			NativeLibrary.SetDimensions((int)screenHeight, (int)screenWidth);
-		else
-			NativeLibrary.SetDimensions((int)screenWidth, (int)screenHeight);
 
 		// Get the intent passed from the GameList when the game
 		// was selected. This is so the path of the game can be retrieved
@@ -190,13 +176,13 @@ public final class EmulationActivity extends Activity
 				{
 					overlay.setVisibility(View.VISIBLE);
 					item.setTitle(R.string.disable_input_overlay);
-					sharedPrefs.edit().putBoolean("showInputOverlay", true).commit();
+					sharedPrefs.edit().putBoolean("showInputOverlay", true).apply();
 				}
 				else // Hide the overlay
 				{
 					overlay.setVisibility(View.INVISIBLE);
 					item.setTitle(R.string.enable_input_overlay);
-					sharedPrefs.edit().putBoolean("showInputOverlay", false).commit();
+					sharedPrefs.edit().putBoolean("showInputOverlay", false).apply();
 				}
 
 				return true;
@@ -253,13 +239,13 @@ public final class EmulationActivity extends Activity
 			{
 				// Create a confirmation method for quitting the current emulation instance.
 				AlertDialog.Builder builder = new AlertDialog.Builder(this);
-				builder.setTitle(getString(R.string.overlay_exit_emulation));
+				builder.setTitle(R.string.overlay_exit_emulation);
 				builder.setMessage(R.string.overlay_exit_emulation_confirm);
 				builder.setNegativeButton(R.string.no, null);
 				builder.setPositiveButton(R.string.yes, new DialogInterface.OnClickListener() {
 					public void onClick(DialogInterface dialog, int which)
 					{
-						finish();
+						onDestroy();
 					}
 				});
 				builder.show();
@@ -313,6 +299,10 @@ public final class EmulationActivity extends Activity
 			return super.dispatchGenericMotionEvent(event);
 		}
 
+		// Don't attempt to do anything if we are disconnecting a device.
+		if (event.getActionMasked() == MotionEvent.ACTION_CANCEL)
+			return true;
+
 		InputDevice input = event.getDevice();
 		List<InputDevice.MotionRange> motions = input.getMotionRanges();
 
@@ -322,40 +312,5 @@ public final class EmulationActivity extends Activity
 		}
 
 		return true;
-	}
-
-	// For handling bugged driver dimensions (applies mainly to Qualcomm devices)
-	private boolean hasBuggedDriverDimensions()
-	{
-		final EGLHelper eglHelper = new EGLHelper(EGLHelper.EGL_OPENGL_ES2_BIT);
-		final String vendor = eglHelper.getGL().glGetString(GL10.GL_VENDOR);
-		final String version = eglHelper.getGL().glGetString(GL10.GL_VERSION);
-		final String renderer = eglHelper.getGL().glGetString(GL10.GL_RENDERER);
-
-		if (sharedPrefs.getString("gpuPref", "Software Rendering").equals("OGL")
-				&& eglHelper.supportsGLES3()
-				&& vendor.equals("Qualcomm")
-				&& renderer.equals("Adreno (TM) 3"))
-		{
-			final int start = version.indexOf("V@") + 2;
-			final StringBuilder versionBuilder = new StringBuilder();
-			
-			for (int i = start; i < version.length(); i++)
-			{
-				char c = version.charAt(i);
-
-				// End of numeric portion of version string.
-				if (c == ' ')
-					break;
-
-				versionBuilder.append(c);
-			}
-
-			if (Float.parseFloat(versionBuilder.toString()) < 53.0f)
-				return true;
-		}
-		
-
-		return false;
 	}
 }

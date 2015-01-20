@@ -41,6 +41,8 @@
 #include <wx/panel.h>
 #include <wx/progdlg.h>
 #include <wx/sizer.h>
+#include <wx/slider.h>
+#include <wx/spinctrl.h>
 #include <wx/statbmp.h>
 #include <wx/stattext.h>
 #include <wx/string.h>
@@ -53,8 +55,8 @@
 #include <wx/validate.h>
 #include <wx/windowid.h>
 
-#include "Common/Common.h"
 #include "Common/CommonPaths.h"
+#include "Common/CommonTypes.h"
 #include "Common/FileUtil.h"
 #include "Common/IniFile.h"
 #include "Common/StringUtil.h"
@@ -69,17 +71,14 @@
 #include "DiscIO/Volume.h"
 #include "DiscIO/VolumeCreator.h"
 #include "DolphinWX/ARCodeAddEdit.h"
-#include "DolphinWX/GeckoCodeDiag.h"
 #include "DolphinWX/ISOFile.h"
 #include "DolphinWX/ISOProperties.h"
 #include "DolphinWX/PatchAddEdit.h"
-#include "DolphinWX/PHackSettings.h"
 #include "DolphinWX/WxUtils.h"
+#include "DolphinWX/Cheats/GeckoCodeDiag.h"
 #include "DolphinWX/resources/isoprop_disc.xpm"
 #include "DolphinWX/resources/isoprop_file.xpm"
 #include "DolphinWX/resources/isoprop_folder.xpm"
-
-class wxWindow;
 
 struct WiiPartition
 {
@@ -87,10 +86,10 @@ struct WiiPartition
 	DiscIO::IFileSystem *FileSystem;
 	std::vector<const DiscIO::SFileInfo *> Files;
 };
-std::vector<WiiPartition> WiiDisc;
+static std::vector<WiiPartition> WiiDisc;
 
-DiscIO::IVolume *OpenISO = nullptr;
-DiscIO::IFileSystem *pFileSystem = nullptr;
+static DiscIO::IVolume *OpenISO = nullptr;
+static DiscIO::IFileSystem *pFileSystem = nullptr;
 
 std::vector<PatchEngine::Patch> onFrame;
 std::vector<ActionReplay::ARCode> arCodes;
@@ -105,7 +104,6 @@ BEGIN_EVENT_TABLE(CISOProperties, wxDialog)
 	EVT_BUTTON(ID_SHOWDEFAULTCONFIG, CISOProperties::OnShowDefaultConfig)
 	EVT_CHOICE(ID_EMUSTATE, CISOProperties::SetRefresh)
 	EVT_CHOICE(ID_EMU_ISSUES, CISOProperties::SetRefresh)
-	EVT_BUTTON(ID_PHSETTINGS, CISOProperties::PHackButtonClicked)
 	EVT_LISTBOX(ID_PATCHES_LIST, CISOProperties::ListSelectionChanged)
 	EVT_BUTTON(ID_EDITPATCH, CISOProperties::PatchButtonClicked)
 	EVT_BUTTON(ID_ADDPATCH, CISOProperties::PatchButtonClicked)
@@ -136,20 +134,23 @@ CISOProperties::CISOProperties(const std::string fileName, wxWindow* parent, wxW
 
 	if (IsWiiDisc || IsWiiUDisc)
 	{
-		for (u32 i = 0; i < 0xFFFFFFFF; i++) // yes, technically there can be OVER NINE THOUSAND partitions...
+		for (int group = 0; group < 4; group++)
 		{
-			WiiPartition temp;
-			if ((temp.Partition = DiscIO::CreateVolumeFromFilename(fileName, 0, i)) != nullptr)
+			for (u32 i = 0; i < 0xFFFFFFFF; i++) // yes, technically there can be OVER NINE THOUSAND partitions...
 			{
-				if ((temp.FileSystem = DiscIO::CreateFileSystem(temp.Partition)) != nullptr)
+				WiiPartition temp;
+				if ((temp.Partition = DiscIO::CreateVolumeFromFilename(fileName, group, i)) != nullptr)
 				{
-					temp.FileSystem->GetFileList(temp.Files);
-					WiiDisc.push_back(temp);
+					if ((temp.FileSystem = DiscIO::CreateFileSystem(temp.Partition)) != nullptr)
+					{
+						temp.FileSystem->GetFileList(temp.Files);
+						WiiDisc.push_back(temp);
+					}
 				}
-			}
-			else
-			{
-				break;
+				else
+				{
+					break;
+				}
 			}
 		}
 	}
@@ -171,12 +172,10 @@ CISOProperties::CISOProperties(const std::string fileName, wxWindow* parent, wxW
 
 	if (!_iniFilename.length())
 	{
-		char tmp[17];
-		u8 _tTitleID[8];
-		if (OpenISO->GetTitleID(_tTitleID))
+		u8 title_id[8];
+		if (OpenISO->GetTitleID(title_id))
 		{
-			snprintf(tmp, 17, "%016" PRIx64, Common::swap64(_tTitleID));
-			_iniFilename = tmp;
+			_iniFilename = StringFromFormat("%016" PRIx64, Common::swap64(title_id));
 		}
 	}
 
@@ -204,17 +203,32 @@ CISOProperties::CISOProperties(const std::string fileName, wxWindow* parent, wxW
 	m_GameID->SetValue(StrToWxStr(OpenISO->GetUniqueID()));
 	switch (OpenISO->GetCountry())
 	{
+	case DiscIO::IVolume::COUNTRY_AUSTRALIA:
+		m_Country->SetValue(_("AUSTRALIA"));
+		break;
 	case DiscIO::IVolume::COUNTRY_EUROPE:
 		m_Country->SetValue(_("EUROPE"));
 		break;
 	case DiscIO::IVolume::COUNTRY_FRANCE:
 		m_Country->SetValue(_("FRANCE"));
 		break;
+	case DiscIO::IVolume::COUNTRY_INTERNATIONAL:
+		m_Country->SetValue(_("INTERNATIONAL"));
+		break;
 	case DiscIO::IVolume::COUNTRY_ITALY:
 		m_Country->SetValue(_("ITALY"));
 		break;
+	case DiscIO::IVolume::COUNTRY_GERMANY:
+		m_Country->SetValue(_("GERMANY"));
+		break;
+	case DiscIO::IVolume::COUNTRY_NETHERLANDS:
+		m_Country->SetValue(_("NETHERLANDS"));
+		break;
 	case DiscIO::IVolume::COUNTRY_RUSSIA:
 		m_Country->SetValue(_("RUSSIA"));
+		break;
+	case DiscIO::IVolume::COUNTRY_SPAIN:
+		m_Country->SetValue(_("SPAIN"));
 		break;
 	case DiscIO::IVolume::COUNTRY_USA:
 		m_Country->SetValue(_("USA"));
@@ -246,15 +260,13 @@ CISOProperties::CISOProperties(const std::string fileName, wxWindow* parent, wxW
 			m_Lang->Disable();
 		}
 		break;
-	case DiscIO::IVolume::COUNTRY_SDK:
-		m_Country->SetValue(_("No Country (SDK)"));
-		break;
+	case DiscIO::IVolume::COUNTRY_UNKNOWN:
 	default:
 		m_Country->SetValue(_("UNKNOWN"));
 		break;
 	}
 
-	if (IsWiiDisc || IsWiiUDisc) // Only one language with wii banners
+	if (IsWiiDisc || IsWiiUDisc) // Only one language with Wii banners
 	{
 		m_Lang->SetSelection(0);
 		m_Lang->Disable();
@@ -269,7 +281,7 @@ CISOProperties::CISOProperties(const std::string fileName, wxWindow* parent, wxW
 	// Here we set all the info to be shown (be it SJIS or Ascii) + we set the window title
 	if (!IsWad)
 	{
-		ChangeBannerDetails((int)SConfig::GetInstance().m_LocalCoreStartupParameter.SelectedLanguage);
+		ChangeBannerDetails(SConfig::GetInstance().m_LocalCoreStartupParameter.SelectedLanguage);
 	}
 	else
 	{
@@ -370,7 +382,7 @@ long CISOProperties::GetElementStyle(const char* section, const char* key)
 void CISOProperties::CreateGUIControls(bool IsWad)
 {
 	wxButton* const EditConfig = new wxButton(this, ID_EDITCONFIG, _("Edit Config"));
-	EditConfig->SetToolTip(_("This will let you Manually Edit the INI config file"));
+	EditConfig->SetToolTip(_("This will let you manually edit the INI config file."));
 
 	wxButton* const EditConfigDefault = new wxButton(this, ID_SHOWDEFAULTCONFIG, _("Show Defaults"));
 	EditConfigDefault->SetToolTip(_("Opens the default (read-only) configuration for this game in an external text editor."));
@@ -396,32 +408,52 @@ void CISOProperties::CreateGUIControls(bool IsWad)
 	SkipIdle = new wxCheckBox(m_GameConfig, ID_IDLESKIP, _("Enable Idle Skipping"), wxDefaultPosition, wxDefaultSize, GetElementStyle("Core", "SkipIdle"));
 	MMU = new wxCheckBox(m_GameConfig, ID_MMU, _("Enable MMU"), wxDefaultPosition, wxDefaultSize, GetElementStyle("Core", "MMU"));
 	MMU->SetToolTip(_("Enables the Memory Management Unit, needed for some games. (ON = Compatible, OFF = Fast)"));
-	TLBHack = new wxCheckBox(m_GameConfig, ID_TLBHACK, _("MMU Speed Hack"), wxDefaultPosition, wxDefaultSize, GetElementStyle("Core", "TLBHack"));
-	TLBHack->SetToolTip(_("Fast version of the MMU.  Does not work for every game."));
+	BAT = new wxCheckBox(m_GameConfig, ID_MMU, _("Enable BAT"), wxDefaultPosition, wxDefaultSize, GetElementStyle("Core", "BAT"));
+	BAT->SetToolTip(_("Enables Block Address Translation, needed for a few games. Requires MMU. (ON = Compatible, OFF = Fast)"));
 	DCBZOFF = new wxCheckBox(m_GameConfig, ID_DCBZOFF, _("Skip DCBZ clearing"), wxDefaultPosition, wxDefaultSize, GetElementStyle("Core", "DCBZ"));
 	DCBZOFF->SetToolTip(_("Bypass the clearing of the data cache by the DCBZ instruction. Usually leave this option disabled."));
+	FPRF = new wxCheckBox(m_GameConfig, ID_MMU, _("Enable FPRF"), wxDefaultPosition, wxDefaultSize, GetElementStyle("Core", "FPRF"));
+	FPRF->SetToolTip(_("Enables Floating Point Result Flag calculation, needed for a few games. (ON = Compatible, OFF = Fast)"));
 	VBeam = new wxCheckBox(m_GameConfig, ID_VBEAM, _("VBeam Speed Hack"), wxDefaultPosition, wxDefaultSize, GetElementStyle("Core", "VBeam"));
 	VBeam->SetToolTip(_("Doubles the emulated GPU clock rate. May speed up some games (ON = Fast, OFF = Compatible)"));
 	SyncGPU = new wxCheckBox(m_GameConfig, ID_SYNCGPU, _("Synchronize GPU thread"), wxDefaultPosition, wxDefaultSize, GetElementStyle("Core", "SyncGPU"));
 	SyncGPU->SetToolTip(_("Synchronizes the GPU and CPU threads to help prevent random freezes in Dual Core mode. (ON = Compatible, OFF = Fast)"));
 	FastDiscSpeed = new wxCheckBox(m_GameConfig, ID_DISCSPEED, _("Speed up Disc Transfer Rate"), wxDefaultPosition, wxDefaultSize, GetElementStyle("Core", "FastDiscSpeed"));
-	FastDiscSpeed->SetToolTip(_("Enable fast disc access.  Needed for a few games. (ON = Fast, OFF = Compatible)"));
+	FastDiscSpeed->SetToolTip(_("Enable fast disc access. Needed for a few games. (ON = Fast, OFF = Compatible)"));
 	BlockMerging = new wxCheckBox(m_GameConfig, ID_MERGEBLOCKS, _("Enable Block Merging"), wxDefaultPosition, wxDefaultSize, GetElementStyle("Core", "BlockMerging"));
 	DSPHLE = new wxCheckBox(m_GameConfig, ID_AUDIO_DSP_HLE, _("DSP HLE emulation (fast)"), wxDefaultPosition, wxDefaultSize, GetElementStyle("Core", "DSPHLE"));
+
+	wxBoxSizer* const sGPUDeterminism = new wxBoxSizer(wxHORIZONTAL);
+	wxStaticText* const GPUDeterminismText = new wxStaticText(m_GameConfig, wxID_ANY, _("Deterministic dual core: "));
+	arrayStringFor_GPUDeterminism.Add(_("Not Set"));
+	arrayStringFor_GPUDeterminism.Add(_("auto"));
+	arrayStringFor_GPUDeterminism.Add(_("none"));
+	arrayStringFor_GPUDeterminism.Add(_("fake-completion"));
+	GPUDeterminism = new wxChoice(m_GameConfig, ID_GPUDETERMINISM, wxDefaultPosition, wxDefaultSize, arrayStringFor_GPUDeterminism);
+	sGPUDeterminism->Add(GPUDeterminismText);
+	sGPUDeterminism->Add(GPUDeterminism);
 
 	// Wii Console
 	EnableWideScreen = new wxCheckBox(m_GameConfig, ID_ENABLEWIDESCREEN, _("Enable WideScreen"), wxDefaultPosition, wxDefaultSize, GetElementStyle("Wii", "Widescreen"));
 
-	// Video
-	UseBBox = new wxCheckBox(m_GameConfig, ID_USE_BBOX, _("Enable Bounding Box Calculation"), wxDefaultPosition, wxDefaultSize, GetElementStyle("Video", "UseBBox"));
-	UseBBox->SetToolTip(_("If checked, the bounding box registers will be updated. Used by the Paper Mario games."));
+	// Stereoscopy
+	wxBoxSizer* const sDepthPercentage = new wxBoxSizer(wxHORIZONTAL);
+	wxStaticText* const DepthPercentageText = new wxStaticText(m_GameConfig, wxID_ANY, _("Depth Percentage: "));
+	DepthPercentage = new wxSlider(m_GameConfig, ID_DEPTHPERCENTAGE, 100, 0, 200);
+	DepthPercentage->SetToolTip(_("This value is multiplied with the depth set in the graphics configuration."));
+	sDepthPercentage->Add(DepthPercentageText);
+	sDepthPercentage->Add(DepthPercentage);
 
-	// Hack
-	wxFlexGridSizer* const szrPHackSettings = new wxFlexGridSizer(0);
-	PHackEnable = new wxCheckBox(m_GameConfig, ID_PHACKENABLE, _("Custom Projection Hack"), wxDefaultPosition, wxDefaultSize, wxCHK_2STATE);
-	PHackEnable->SetToolTip(_("Enables Custom Projection Hack"));
-	PHSettings = new wxButton(m_GameConfig, ID_PHSETTINGS, _("Settings..."));
-	PHSettings->SetToolTip(_("Customize some Orthographic Projection parameters."));
+	wxBoxSizer* const sConvergenceMinimum = new wxBoxSizer(wxHORIZONTAL);
+	wxStaticText* const ConvergenceMinimumText = new wxStaticText(m_GameConfig, wxID_ANY, _("Convergence Minimum: "));
+	ConvergenceMinimum = new wxSpinCtrl(m_GameConfig, ID_CONVERGENCEMINIMUM);
+	ConvergenceMinimum->SetRange(0, INT32_MAX);
+	ConvergenceMinimum->SetToolTip(_("This value is added to the convergence value set in the graphics configuration."));
+	sConvergenceMinimum->Add(ConvergenceMinimumText);
+	sConvergenceMinimum->Add(ConvergenceMinimum);
+
+	MonoDepth = new wxCheckBox(m_GameConfig, ID_MONODEPTH, _("Monoscopic Shadows"), wxDefaultPosition, wxDefaultSize, GetElementStyle("Video_Stereoscopy", "StereoEFBMonoDepth"));
+	MonoDepth->SetToolTip(_("Use a single depth buffer for both eyes. Needed for a few games."));
 
 	wxBoxSizer* const sEmuState = new wxBoxSizer(wxHORIZONTAL);
 	wxStaticText* const EmuStateText = new wxStaticText(m_GameConfig, wxID_ANY, _("Emulation State: "));
@@ -439,14 +471,16 @@ void CISOProperties::CreateGUIControls(bool IsWad)
 		new wxStaticBoxSizer(wxVERTICAL, m_GameConfig, _("Core"));
 	sbCoreOverrides->Add(CPUThread, 0, wxLEFT, 5);
 	sbCoreOverrides->Add(SkipIdle, 0, wxLEFT, 5);
+	sbCoreOverrides->Add(BAT, 0, wxLEFT, 5);
 	sbCoreOverrides->Add(MMU, 0, wxLEFT, 5);
-	sbCoreOverrides->Add(TLBHack, 0, wxLEFT, 5);
 	sbCoreOverrides->Add(DCBZOFF, 0, wxLEFT, 5);
+	sbCoreOverrides->Add(FPRF, 0, wxLEFT, 5);
 	sbCoreOverrides->Add(VBeam, 0, wxLEFT, 5);
 	sbCoreOverrides->Add(SyncGPU, 0, wxLEFT, 5);
 	sbCoreOverrides->Add(FastDiscSpeed, 0, wxLEFT, 5);
 	sbCoreOverrides->Add(BlockMerging, 0, wxLEFT, 5);
 	sbCoreOverrides->Add(DSPHLE, 0, wxLEFT, 5);
+	sbCoreOverrides->Add(sGPUDeterminism, 0, wxEXPAND|wxALL, 5);
 
 	wxStaticBoxSizer * const sbWiiOverrides = new wxStaticBoxSizer(wxVERTICAL, m_GameConfig, _("Wii Console"));
 	if (!DiscIO::IsVolumeWiiUDisc(OpenISO) && !DiscIO::IsVolumeWiiDisc(OpenISO) && !DiscIO::IsVolumeWadFile(OpenISO))
@@ -456,17 +490,17 @@ void CISOProperties::CreateGUIControls(bool IsWad)
 	}
 	sbWiiOverrides->Add(EnableWideScreen, 0, wxLEFT, 5);
 
-	wxStaticBoxSizer * const sbVideoOverrides = new wxStaticBoxSizer(wxVERTICAL, m_GameConfig, _("Video"));
-	sbVideoOverrides->Add(UseBBox, 0, wxLEFT, 5);
-	szrPHackSettings->Add(PHackEnable, 0, wxALIGN_CENTER_VERTICAL|wxLEFT, 5);
-	szrPHackSettings->Add(PHSettings, 0, wxLEFT, 5);
+	wxStaticBoxSizer* const sbStereoOverrides =
+		new wxStaticBoxSizer(wxVERTICAL, m_GameConfig, _("Stereoscopy"));
+	sbStereoOverrides->Add(sDepthPercentage);
+	sbStereoOverrides->Add(sConvergenceMinimum);
+	sbStereoOverrides->Add(MonoDepth);
 
-	sbVideoOverrides->Add(szrPHackSettings, 0, wxEXPAND);
 	wxStaticBoxSizer * const sbGameConfig = new wxStaticBoxSizer(wxVERTICAL, m_GameConfig, _("Game-Specific Settings"));
 	sbGameConfig->Add(OverrideText, 0, wxEXPAND|wxALL, 5);
 	sbGameConfig->Add(sbCoreOverrides, 0, wxEXPAND);
 	sbGameConfig->Add(sbWiiOverrides, 0, wxEXPAND);
-	sbGameConfig->Add(sbVideoOverrides, 0, wxEXPAND);
+	sbGameConfig->Add(sbStereoOverrides, 0, wxEXPAND);
 	sConfigPage->Add(sbGameConfig, 0, wxEXPAND|wxALL, 5);
 	sEmuState->Add(EmuStateText, 0, wxALIGN_CENTER_VERTICAL);
 	sEmuState->Add(EmuState, 0, wxEXPAND);
@@ -527,7 +561,7 @@ void CISOProperties::CreateGUIControls(bool IsWad)
 	m_MakerID = new wxTextCtrl(m_Information, ID_MAKERID, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_READONLY);
 	wxStaticText* const m_RevisionText = new wxStaticText(m_Information, wxID_ANY, _("Revision:"));
 	m_Revision = new wxTextCtrl(m_Information, ID_REVISION, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_READONLY);
-	wxStaticText* const m_DateText = new wxStaticText(m_Information, wxID_ANY, _("Date:"));
+	wxStaticText* const m_DateText = new wxStaticText(m_Information, wxID_ANY, _("Apploader Date:"));
 	m_Date = new wxTextCtrl(m_Information, ID_DATE, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_READONLY);
 	wxStaticText* const m_FSTText = new wxStaticText(m_Information, wxID_ANY, _("FST Size:"));
 	m_FST = new wxTextCtrl(m_Information, ID_FST, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_READONLY);
@@ -542,7 +576,7 @@ void CISOProperties::CreateGUIControls(bool IsWad)
 	arrayStringFor_Lang.Add(_("Spanish"));
 	arrayStringFor_Lang.Add(_("Italian"));
 	arrayStringFor_Lang.Add(_("Dutch"));
-	int language = (int)SConfig::GetInstance().m_LocalCoreStartupParameter.SelectedLanguage;
+	int language = SConfig::GetInstance().m_LocalCoreStartupParameter.SelectedLanguage;
 	if (IsWad)
 	{
 		arrayStringFor_Lang.Insert(_("Japanese"), 0);
@@ -657,7 +691,7 @@ void CISOProperties::CreateGUIControls(bool IsWad)
 void CISOProperties::OnClose(wxCloseEvent& WXUNUSED (event))
 {
 	if (!SaveGameConfig())
-		PanicAlertT("Could not save %s", GameIniFileLocal.c_str());
+		WxUtils::ShowErrorDialog(wxString::Format(_("Could not save %s."), GameIniFileLocal.c_str()));
 
 	EndModal(bRefreshList ? wxID_OK : wxID_CANCEL);
 }
@@ -669,9 +703,9 @@ void CISOProperties::OnCloseClick(wxCommandEvent& WXUNUSED (event))
 
 void CISOProperties::RightClickOnBanner(wxMouseEvent& event)
 {
-	wxMenu* popupMenu = new wxMenu;
-	popupMenu->Append(IDM_BNRSAVEAS, _("Save as..."));
-	PopupMenu(popupMenu);
+	wxMenu popupMenu;
+	popupMenu.Append(IDM_BNRSAVEAS, _("Save as..."));
+	PopupMenu(&popupMenu);
 
 	event.Skip();
 }
@@ -680,7 +714,7 @@ void CISOProperties::OnBannerImageSave(wxCommandEvent& WXUNUSED (event))
 {
 	wxString dirHome;
 
-	wxFileDialog dialog(this, _("Save as..."), wxGetHomeDir(&dirHome), wxString::Format("%s.png", m_GameID->GetLabel().c_str()),
+	wxFileDialog dialog(this, _("Save as..."), wxGetHomeDir(&dirHome), wxString::Format("%s.png", m_GameID->GetValue().c_str()),
 		wxALL_FILES_PATTERN, wxFD_SAVE|wxFD_OVERWRITE_PROMPT);
 	if (dialog.ShowModal() == wxID_OK)
 	{
@@ -692,41 +726,41 @@ void CISOProperties::OnRightClickOnTree(wxTreeEvent& event)
 {
 	m_Treectrl->SelectItem(event.GetItem());
 
-	wxMenu* popupMenu = new wxMenu;
+	wxMenu popupMenu;
 
 	if (m_Treectrl->GetItemImage(m_Treectrl->GetSelection()) == 0 &&
 	    m_Treectrl->GetFirstVisibleItem() != m_Treectrl->GetSelection())
 	{
-		popupMenu->Append(IDM_EXTRACTDIR, _("Extract Partition..."));
+		popupMenu.Append(IDM_EXTRACTDIR, _("Extract Partition..."));
 	}
 	else if (m_Treectrl->GetItemImage(m_Treectrl->GetSelection()) == 1)
 	{
-		popupMenu->Append(IDM_EXTRACTDIR, _("Extract Directory..."));
+		popupMenu.Append(IDM_EXTRACTDIR, _("Extract Directory..."));
 	}
 	else if (m_Treectrl->GetItemImage(m_Treectrl->GetSelection()) == 2)
 	{
-		popupMenu->Append(IDM_EXTRACTFILE, _("Extract File..."));
+		popupMenu.Append(IDM_EXTRACTFILE, _("Extract File..."));
 	}
 
-	popupMenu->Append(IDM_EXTRACTALL, _("Extract All Files..."));
+	popupMenu.Append(IDM_EXTRACTALL, _("Extract All Files..."));
 
 	if (!(DiscIO::IsVolumeWiiUDisc(OpenISO) || DiscIO::IsVolumeWiiDisc(OpenISO)) ||
 		(m_Treectrl->GetItemImage(m_Treectrl->GetSelection()) == 0 &&
 		m_Treectrl->GetFirstVisibleItem() != m_Treectrl->GetSelection()))
 	{
-		popupMenu->AppendSeparator();
-		popupMenu->Append(IDM_EXTRACTAPPLOADER, _("Extract Apploader..."));
-		popupMenu->Append(IDM_EXTRACTDOL, _("Extract DOL..."));
+		popupMenu.AppendSeparator();
+		popupMenu.Append(IDM_EXTRACTAPPLOADER, _("Extract Apploader..."));
+		popupMenu.Append(IDM_EXTRACTDOL, _("Extract DOL..."));
 	}
 
 	if (m_Treectrl->GetItemImage(m_Treectrl->GetSelection()) == 0 &&
 		m_Treectrl->GetFirstVisibleItem() != m_Treectrl->GetSelection())
 	{
-		popupMenu->AppendSeparator();
-		popupMenu->Append(IDM_CHECKINTEGRITY, _("Check Partition Integrity"));
+		popupMenu.AppendSeparator();
+		popupMenu.Append(IDM_CHECKINTEGRITY, _("Check Partition Integrity"));
 	}
 
-	PopupMenu(popupMenu);
+	PopupMenu(&popupMenu);
 
 	event.Skip();
 }
@@ -756,7 +790,7 @@ void CISOProperties::OnExtractFile(wxCommandEvent& WXUNUSED (event))
 	if (DiscIO::IsVolumeWiiUDisc(OpenISO) || DiscIO::IsVolumeWiiDisc(OpenISO))
 	{
 		int partitionNum = wxAtoi(File.Mid(File.find_first_of("/") - 1, 1));
-		File.Remove(0, File.find_first_of("/") + 1); // Remove "Partition x/"
+		File.erase(0, File.find_first_of("/") + 1); // Remove "Partition x/"
 		WiiDisc.at(partitionNum).FileSystem->ExportFile(WxStrToStr(File), WxStrToStr(Path));
 	}
 	else
@@ -765,54 +799,48 @@ void CISOProperties::OnExtractFile(wxCommandEvent& WXUNUSED (event))
 	}
 }
 
-void CISOProperties::ExportDir(const char* _rFullPath, const char* _rExportFolder, const int partitionNum)
+void CISOProperties::ExportDir(const std::string& _rFullPath, const std::string& _rExportFolder, const int partitionNum)
 {
-	std::string exportName;
-	u32 index[2] = {0, 0};
-	std::vector<const DiscIO::SFileInfo *> fst;
-	DiscIO::IFileSystem *FS = nullptr;
+	DiscIO::IFileSystem* const fs = (DiscIO::IsVolumeWiiDisc(OpenISO) || DiscIO::IsVolumeWiiUDisc(OpenISO)) ? WiiDisc[partitionNum].FileSystem : pFileSystem;
 
-	if (DiscIO::IsVolumeWiiUDisc(OpenISO) || DiscIO::IsVolumeWiiDisc(OpenISO))
+	std::vector<const DiscIO::SFileInfo*> fst;
+	fs->GetFileList(fst);
+
+	u32 index = 0;
+	u32 size = 0;
+
+	// Extract all
+	if (_rFullPath.empty())
 	{
-		FS = WiiDisc.at(partitionNum).FileSystem;
+		index = 0;
+		size = (u32)fst.size();
+
+		if (!DiscIO::IsVolumeWiiUDisc(OpenISO))
+			fs->ExportApploader(_rExportFolder);
+		if (!DiscIO::IsVolumeWiiUDisc(OpenISO) && !DiscIO::IsVolumeWiiDisc(OpenISO))
+			fs->ExportDOL(_rExportFolder);
 	}
 	else
 	{
-		FS = pFileSystem;
-	}
-
-	FS->GetFileList(fst);
-
-	if (!_rFullPath) // Extract all
-	{
-		index[0] = 0;
-		index[1] = (u32)fst.size();
-
-		if (!DiscIO::IsVolumeWiiUDisc(OpenISO))
-			FS->ExportApploader(_rExportFolder);
-		if (!DiscIO::IsVolumeWiiUDisc(OpenISO) && !DiscIO::IsVolumeWiiDisc(OpenISO))
-			FS->ExportDOL(_rExportFolder);
-	}
-	else // Look for the dir we are going to extract
-	{
-		for (index[0] = 0; index[0] < fst.size(); index[0]++)
+		// Look for the dir we are going to extract
+		for (index = 0; index != fst.size(); ++index)
 		{
-			if (fst.at(index[0])->m_FullPath == _rFullPath)
+			if (fst[index]->m_FullPath == _rFullPath)
 			{
-				DEBUG_LOG(DISCIO, "Found the directory at %u", index[0]);
-				index[1] = (u32)fst.at(index[0])->m_FileSize;
+				DEBUG_LOG(DISCIO, "Found the directory at %u", index);
+				size = (u32)fst[index]->m_FileSize;
 				break;
 			}
 		}
 
-		DEBUG_LOG(DISCIO,"Directory found from %u to %u\nextracting to:\n%s",index[0],index[1],_rExportFolder);
+		DEBUG_LOG(DISCIO,"Directory found from %u to %u\nextracting to:\n%s", index , size, _rExportFolder.c_str());
 	}
 
-	wxString dialogTitle = index[0] ? _("Extracting Directory") : _("Extracting All Files");
+	wxString dialogTitle = (index != 0) ? _("Extracting Directory") : _("Extracting All Files");
 	wxProgressDialog dialog(
 		dialogTitle,
 		_("Extracting..."),
-		index[1] - 1,
+		size - 1,
 		this,
 		wxPD_APP_MODAL | wxPD_AUTO_HIDE | wxPD_CAN_ABORT |
 		wxPD_ELAPSED_TIME | wxPD_ESTIMATED_TIME | wxPD_REMAINING_TIME |
@@ -820,10 +848,10 @@ void CISOProperties::ExportDir(const char* _rFullPath, const char* _rExportFolde
 		);
 
 	// Extraction
-	for (u32 i = index[0]; i < index[1]; i++)
+	for (u32 i = index; i < size; i++)
 	{
 		dialog.SetTitle(wxString::Format("%s : %d%%", dialogTitle.c_str(),
-			(u32)(((float)(i - index[0]) / (float)(index[1] - index[0])) * 100)));
+			(u32)(((float)(i - index) / (float)(size - index)) * 100)));
 
 		dialog.Update(i, wxString::Format(_("Extracting %s"), StrToWxStr(fst[i]->m_FullPath)));
 
@@ -832,7 +860,7 @@ void CISOProperties::ExportDir(const char* _rFullPath, const char* _rExportFolde
 
 		if (fst[i]->IsDirectory())
 		{
-			exportName = StringFromFormat("%s/%s/", _rExportFolder, fst[i]->m_FullPath.c_str());
+			const std::string exportName = StringFromFormat("%s/%s/", _rExportFolder.c_str(), fst[i]->m_FullPath.c_str());
 			DEBUG_LOG(DISCIO, "%s", exportName.c_str());
 
 			if (!File::Exists(exportName) && !File::CreateFullPath(exportName))
@@ -849,10 +877,10 @@ void CISOProperties::ExportDir(const char* _rFullPath, const char* _rExportFolde
 		}
 		else
 		{
-			exportName = StringFromFormat("%s/%s", _rExportFolder, fst[i]->m_FullPath.c_str());
+			const std::string exportName = StringFromFormat("%s/%s", _rExportFolder.c_str(), fst[i]->m_FullPath.c_str());
 			DEBUG_LOG(DISCIO, "%s", exportName.c_str());
 
-			if (!File::Exists(exportName) && !FS->ExportFile(fst[i]->m_FullPath, exportName))
+			if (!File::Exists(exportName) && !fs->ExportFile(fst[i]->m_FullPath, exportName))
 			{
 				ERROR_LOG(DISCIO, "Could not export %s", exportName.c_str());
 			}
@@ -876,9 +904,9 @@ void CISOProperties::OnExtractDir(wxCommandEvent& event)
 	{
 		if (DiscIO::IsVolumeWiiUDisc(OpenISO) || DiscIO::IsVolumeWiiDisc(OpenISO))
 			for (u32 i = 0; i < WiiDisc.size(); i++)
-				ExportDir(nullptr, WxStrToStr(Path).c_str(), i);
+				ExportDir("", WxStrToStr(Path), i);
 		else
-			ExportDir(nullptr, WxStrToStr(Path).c_str());
+			ExportDir("", WxStrToStr(Path));
 
 		return;
 	}
@@ -891,15 +919,17 @@ void CISOProperties::OnExtractDir(wxCommandEvent& event)
 		m_Treectrl->SelectItem(m_Treectrl->GetItemParent(m_Treectrl->GetSelection()));
 	}
 
+	Directory += DIR_SEP_CHR;
+
 	if (DiscIO::IsVolumeWiiUDisc(OpenISO) || DiscIO::IsVolumeWiiDisc(OpenISO))
 	{
 		int partitionNum = wxAtoi(Directory.Mid(Directory.find_first_of("/") - 1, 1));
-		Directory.Remove(0, Directory.find_first_of("/") + 1); // Remove "Partition x/"
-		ExportDir(WxStrToStr(Directory).c_str(), WxStrToStr(Path).c_str(), partitionNum);
+		Directory.erase(0, Directory.find_first_of("/") + 1); // Remove "Partition x/"
+		ExportDir(WxStrToStr(Directory), WxStrToStr(Path), partitionNum);
 	}
 	else
 	{
-		ExportDir(WxStrToStr(Directory).c_str(), WxStrToStr(Path).c_str());
+		ExportDir(WxStrToStr(Directory), WxStrToStr(Path));
 	}
 }
 
@@ -923,7 +953,7 @@ void CISOProperties::OnExtractDataFromHeader(wxCommandEvent& event)
 		}
 		else
 		{
-			PanicAlertT("Partition doesn't exist: %d", partitionNum);
+			WxUtils::ShowErrorDialog(wxString::Format(_("Partition doesn't exist: %d"), partitionNum));
 			return;
 		}
 	}
@@ -943,7 +973,7 @@ void CISOProperties::OnExtractDataFromHeader(wxCommandEvent& event)
 	}
 
 	if (!ret)
-		PanicAlertT("Failed to extract to %s!", WxStrToStr(Path).c_str());
+		WxUtils::ShowErrorDialog(wxString::Format(_("Failed to extract to %s!"), WxStrToStr(Path).c_str()));
 }
 
 class IntegrityCheckThread : public wxThread
@@ -979,8 +1009,7 @@ void CISOProperties::CheckPartitionIntegrity(wxCommandEvent& event)
 	int PartitionNum = wxAtoi(PartitionName.Mid(PartitionName.find_first_of("0123456789"), 1));
 	const WiiPartition& Partition = WiiDisc[PartitionNum];
 
-	wxProgressDialog* dialog = new wxProgressDialog(
-		_("Checking integrity..."), _("Working..."), 1000, this,
+	wxProgressDialog dialog(_("Checking integrity..."), _("Working..."), 1000, this,
 		wxPD_APP_MODAL | wxPD_ELAPSED_TIME | wxPD_SMOOTH
 	);
 
@@ -989,11 +1018,11 @@ void CISOProperties::CheckPartitionIntegrity(wxCommandEvent& event)
 
 	while (thread.IsAlive())
 	{
-		dialog->Pulse();
+		dialog.Pulse();
 		wxThread::Sleep(50);
 	}
 
-	delete dialog;
+	dialog.Destroy();
 
 	if (!thread.Wait())
 	{
@@ -1023,9 +1052,9 @@ void CISOProperties::SetCheckboxValueFromGameini(const char* section, const char
 {
 	// Prefer local gameini value over default gameini value.
 	bool value;
-	if (GameIniLocal.Get(section, key, &value))
+	if (GameIniLocal.GetOrCreateSection(section)->Get(key, &value))
 		checkbox->Set3StateValue((wxCheckBoxState)value);
-	else if (GameIniDefault.Get(section, key, &value))
+	else if (GameIniDefault.GetOrCreateSection(section)->Get(key, &value))
 		checkbox->Set3StateValue((wxCheckBoxState)value);
 	else
 		checkbox->Set3StateValue(wxCHK_UNDETERMINED);
@@ -1036,50 +1065,70 @@ void CISOProperties::LoadGameConfig()
 	SetCheckboxValueFromGameini("Core", "CPUThread", CPUThread);
 	SetCheckboxValueFromGameini("Core", "SkipIdle", SkipIdle);
 	SetCheckboxValueFromGameini("Core", "MMU", MMU);
-	SetCheckboxValueFromGameini("Core", "TLBHack", TLBHack);
+	SetCheckboxValueFromGameini("Core", "BAT", BAT);
 	SetCheckboxValueFromGameini("Core", "DCBZ", DCBZOFF);
+	SetCheckboxValueFromGameini("Core", "FPRF", FPRF);
 	SetCheckboxValueFromGameini("Core", "VBeam", VBeam);
 	SetCheckboxValueFromGameini("Core", "SyncGPU", SyncGPU);
 	SetCheckboxValueFromGameini("Core", "FastDiscSpeed", FastDiscSpeed);
 	SetCheckboxValueFromGameini("Core", "BlockMerging", BlockMerging);
 	SetCheckboxValueFromGameini("Core", "DSPHLE", DSPHLE);
 	SetCheckboxValueFromGameini("Wii", "Widescreen", EnableWideScreen);
-	SetCheckboxValueFromGameini("Video", "UseBBox", UseBBox);
+	SetCheckboxValueFromGameini("Video_Stereoscopy", "StereoEFBMonoDepth", MonoDepth);
 
-	// First set values from default gameini, then apply values from local gameini
+	IniFile::Section* default_video = GameIniDefault.GetOrCreateSection("Video");
+
 	int iTemp;
-	GameIniDefault.Get("Video", "ProjectionHack", &iTemp);
-	PHackEnable->SetValue(!!iTemp);
-	if (GameIniLocal.Get("Video", "ProjectionHack", &iTemp))
-		PHackEnable->SetValue(!!iTemp);
-
-	GameIniDefault.Get("Video", "PH_SZNear", &PHack_Data.PHackSZNear);
+	default_video->Get("ProjectionHack", &iTemp);
+	default_video->Get("PH_SZNear", &PHack_Data.PHackSZNear);
 	if (GameIniLocal.GetIfExists("Video", "PH_SZNear", &iTemp))
 		PHack_Data.PHackSZNear = !!iTemp;
-	GameIniDefault.Get("Video", "PH_SZFar", &PHack_Data.PHackSZFar);
+	default_video->Get("PH_SZFar", &PHack_Data.PHackSZFar);
 	if (GameIniLocal.GetIfExists("Video", "PH_SZFar", &iTemp))
 		PHack_Data.PHackSZFar = !!iTemp;
 
 	std::string sTemp;
-	GameIniDefault.Get("Video", "PH_ZNear", &PHack_Data.PHZNear);
+	default_video->Get("PH_ZNear", &PHack_Data.PHZNear);
 	if (GameIniLocal.GetIfExists("Video", "PH_ZNear", &sTemp))
 		PHack_Data.PHZNear = sTemp;
-	GameIniDefault.Get("Video", "PH_ZFar", &PHack_Data.PHZFar);
+	default_video->Get("PH_ZFar", &PHack_Data.PHZFar);
 	if (GameIniLocal.GetIfExists("Video", "PH_ZFar", &sTemp))
 		PHack_Data.PHZFar = sTemp;
 
-	GameIniDefault.Get("EmuState", "EmulationStateId", &iTemp, 0/*Not Set*/);
+	IniFile::Section* default_emustate = GameIniDefault.GetOrCreateSection("EmuState");
+	default_emustate->Get("EmulationStateId", &iTemp, 0/*Not Set*/);
 	EmuState->SetSelection(iTemp);
 	if (GameIniLocal.GetIfExists("EmuState", "EmulationStateId", &iTemp))
 		EmuState->SetSelection(iTemp);
 
-	GameIniDefault.Get("EmuState", "EmulationIssues", &sTemp);
+	default_emustate->Get("EmulationIssues", &sTemp);
 	if (!sTemp.empty())
 		EmuIssues->SetValue(StrToWxStr(sTemp));
 	if (GameIniLocal.GetIfExists("EmuState", "EmulationIssues", &sTemp))
 		EmuIssues->SetValue(StrToWxStr(sTemp));
 
 	EmuIssues->Enable(EmuState->GetSelection() != 0);
+
+	sTemp = "";
+	if (!GameIniLocal.GetIfExists("Core", "GPUDeterminismMode", &sTemp))
+		GameIniDefault.GetIfExists("Core", "GPUDeterminismMode", &sTemp);
+
+	if (sTemp == "")
+		GPUDeterminism->SetSelection(0);
+	else if (sTemp == "auto")
+		GPUDeterminism->SetSelection(1);
+	else if (sTemp == "none")
+		GPUDeterminism->SetSelection(2);
+	else if (sTemp == "fake-completion")
+		GPUDeterminism->SetSelection(3);
+
+	IniFile::Section* default_stereoscopy = GameIniDefault.GetOrCreateSection("Video_Stereoscopy");
+	default_stereoscopy->Get("StereoDepthPercentage", &iTemp, 100);
+	GameIniLocal.GetIfExists("Video_Stereoscopy", "StereoDepthPercentage", &iTemp);
+	DepthPercentage->SetValue(iTemp);
+	default_stereoscopy->Get("StereoConvergenceMinimum", &iTemp, 0);
+	GameIniLocal.GetIfExists("Video_Stereoscopy", "StereoConvergenceMinimum", &iTemp);
+	ConvergenceMinimum->SetValue(iTemp);
 
 	PatchList_Load();
 	ActionReplayList_Load();
@@ -1096,13 +1145,13 @@ void CISOProperties::SaveGameIniValueFrom3StateCheckbox(const char* section, con
 	if (checkbox->Get3StateValue() == wxCHK_UNDETERMINED)
 		GameIniLocal.DeleteKey(section, key);
 	else if (!GameIniDefault.Exists(section, key))
-		GameIniLocal.Set(section, key, checkbox_val);
+		GameIniLocal.GetOrCreateSection(section)->Set(key, checkbox_val);
 	else
 	{
 		bool default_value;
-		GameIniDefault.Get(section, key, &default_value);
+		GameIniDefault.GetOrCreateSection(section)->Get(key, &default_value);
 		if (default_value != checkbox_val)
-			GameIniLocal.Set(section, key, checkbox_val);
+			GameIniLocal.GetOrCreateSection(section)->Set(key, checkbox_val);
 		else
 			GameIniLocal.DeleteKey(section, key);
 	}
@@ -1113,31 +1162,31 @@ bool CISOProperties::SaveGameConfig()
 	SaveGameIniValueFrom3StateCheckbox("Core", "CPUThread", CPUThread);
 	SaveGameIniValueFrom3StateCheckbox("Core", "SkipIdle", SkipIdle);
 	SaveGameIniValueFrom3StateCheckbox("Core", "MMU", MMU);
-	SaveGameIniValueFrom3StateCheckbox("Core", "TLBHack", TLBHack);
+	SaveGameIniValueFrom3StateCheckbox("Core", "BAT", BAT);
 	SaveGameIniValueFrom3StateCheckbox("Core", "DCBZ", DCBZOFF);
+	SaveGameIniValueFrom3StateCheckbox("Core", "FPRF", FPRF);
 	SaveGameIniValueFrom3StateCheckbox("Core", "VBeam", VBeam);
 	SaveGameIniValueFrom3StateCheckbox("Core", "SyncGPU", SyncGPU);
 	SaveGameIniValueFrom3StateCheckbox("Core", "FastDiscSpeed", FastDiscSpeed);
 	SaveGameIniValueFrom3StateCheckbox("Core", "BlockMerging", BlockMerging);
 	SaveGameIniValueFrom3StateCheckbox("Core", "DSPHLE", DSPHLE);
 	SaveGameIniValueFrom3StateCheckbox("Wii", "Widescreen", EnableWideScreen);
-	SaveGameIniValueFrom3StateCheckbox("Video", "UseBBox", UseBBox);
+	SaveGameIniValueFrom3StateCheckbox("Video_Stereoscopy", "StereoEFBMonoDepth", MonoDepth);
 
 	#define SAVE_IF_NOT_DEFAULT(section, key, val, def) do { \
 		if (GameIniDefault.Exists((section), (key))) { \
 			std::remove_reference<decltype((val))>::type tmp__; \
-			GameIniDefault.Get((section), (key), &tmp__); \
+			GameIniDefault.GetOrCreateSection((section))->Get((key), &tmp__); \
 			if ((val) != tmp__) \
-				GameIniLocal.Set((section), (key), (val)); \
+				GameIniLocal.GetOrCreateSection((section))->Set((key), (val)); \
 			else \
 				GameIniLocal.DeleteKey((section), (key)); \
 		} else if ((val) != (def)) \
-			GameIniLocal.Set((section), (key), (val)); \
+			GameIniLocal.GetOrCreateSection((section))->Set((key), (val)); \
 		else \
 			GameIniLocal.DeleteKey((section), (key)); \
 	} while (0)
 
-	SAVE_IF_NOT_DEFAULT("Video", "ProjectionHack", (int)PHackEnable->GetValue(), 0);
 	SAVE_IF_NOT_DEFAULT("Video", "PH_SZNear", (PHack_Data.PHackSZNear ? 1 : 0), 0);
 	SAVE_IF_NOT_DEFAULT("Video", "PH_SZFar", (PHack_Data.PHackSZFar ? 1 : 0), 0);
 	SAVE_IF_NOT_DEFAULT("Video", "PH_ZNear", PHack_Data.PHZNear, "");
@@ -1146,6 +1195,22 @@ bool CISOProperties::SaveGameConfig()
 
 	std::string emu_issues = EmuIssues->GetValue().ToStdString();
 	SAVE_IF_NOT_DEFAULT("EmuState", "EmulationIssues", emu_issues, "");
+
+	std::string tmp;
+	if (GPUDeterminism->GetSelection() == 0)
+		tmp = "Not Set";
+	else if (GPUDeterminism->GetSelection() == 1)
+		tmp = "auto";
+	else if (GPUDeterminism->GetSelection() == 2)
+		tmp = "none";
+	else if (GPUDeterminism->GetSelection() == 3)
+		tmp = "fake-completion";
+
+	SAVE_IF_NOT_DEFAULT("Core", "GPUDeterminismMode", tmp, "Not Set");
+
+	int depth = DepthPercentage->GetValue() > 0 ? DepthPercentage->GetValue() : 100;
+	SAVE_IF_NOT_DEFAULT("Video_Stereoscopy", "StereoDepthPercentage", depth, 100);
+	SAVE_IF_NOT_DEFAULT("Video_Stereoscopy", "StereoConvergenceMinimum", ConvergenceMinimum->GetValue(), 0);
 
 	PatchList_Save();
 	ActionReplayList_Save();
@@ -1174,17 +1239,21 @@ void CISOProperties::LaunchExternalEditor(const std::string& filename)
 		filetype = wxTheMimeTypesManager->GetFileTypeFromMimeType("text/plain");
 		if (filetype == nullptr) // MIME type failed, aborting mission
 		{
-			PanicAlertT("Filetype 'ini' is unknown! Will not open!");
+			WxUtils::ShowErrorDialog(_("Filetype 'ini' is unknown! Will not open!"));
 			return;
 		}
 	}
-	wxString OpenCommand;
-	OpenCommand = filetype->GetOpenCommand(StrToWxStr(filename));
+
+	wxString OpenCommand = filetype->GetOpenCommand(StrToWxStr(filename));
 	if (OpenCommand.IsEmpty())
-		PanicAlertT("Couldn't find open command for extension 'ini'!");
+	{
+		WxUtils::ShowErrorDialog(_("Couldn't find open command for extension 'ini'!"));
+	}
 	else
+	{
 		if (wxExecute(OpenCommand, wxEXEC_SYNC) == -1)
-			PanicAlertT("wxExecute returned -1 on application run!");
+			WxUtils::ShowErrorDialog(_("wxExecute returned -1 on application run!"));
+	}
 #endif
 
 	bRefreshList = true; // Just in case
@@ -1333,17 +1402,6 @@ void CISOProperties::PatchList_Save()
 	GameIniLocal.SetLines("OnFrame", lines);
 }
 
-void CISOProperties::PHackButtonClicked(wxCommandEvent& event)
-{
-	if (event.GetId() == ID_PHSETTINGS)
-	{
-		::PHack_Data = PHack_Data;
-		CPHackSettings dlg(this, 1);
-		if (dlg.ShowModal() == wxID_OK)
-			PHack_Data = ::PHack_Data;
-	}
-}
-
 void CISOProperties::PatchButtonClicked(wxCommandEvent& event)
 {
 	int selection = Patches->GetSelection();
@@ -1368,7 +1426,7 @@ void CISOProperties::PatchButtonClicked(wxCommandEvent& event)
 		break;
 	case ID_REMOVEPATCH:
 		onFrame.erase(onFrame.begin() + Patches->GetSelection());
-		Patches->Delete(Cheats->GetSelection());
+		Patches->Delete(Patches->GetSelection());
 		break;
 	}
 
@@ -1402,9 +1460,11 @@ void CISOProperties::ActionReplayList_Save()
 	std::vector<std::string> lines;
 	std::vector<std::string> enabledLines;
 	u32 index = 0;
+	u32 cheats_chkbox_count = Cheats->GetCount();
 	for (const ActionReplay::ARCode& code : arCodes)
 	{
-		if (Cheats->IsChecked(index))
+		// Check the index against the count because of the hacky way codes are added from the "Cheat Search" dialog
+		if ((index < cheats_chkbox_count) && Cheats->IsChecked(index))
 			enabledLines.push_back("$" + code.name);
 
 		// Do not save default cheats.

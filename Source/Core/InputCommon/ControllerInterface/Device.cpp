@@ -5,6 +5,12 @@
 #include <sstream>
 #include <string>
 
+// For InputGateOn()
+// This is a really bad layering violation, but it's the cleanest
+// place I could find to put it.
+#include "Core/ConfigManager.h"
+#include "Core/Host.h"
+
 #include "InputCommon/ControllerInterface/Device.h"
 
 namespace ciface
@@ -60,18 +66,14 @@ Device::Output* Device::FindOutput(const std::string &name) const
 	return nullptr;
 }
 
-//
-// Device :: ClearInputState
-//
-// Device classes should override this function
-// ControllerInterface will call this when the device returns failure during UpdateInput
-// used to try to set all buttons and axes to their default state when user unplugs a gamepad during play
-// buttons/axes that were held down at the time of unplugging should be seen as not pressed after unplugging
-//
-void Device::ClearInputState()
+bool Device::Control::InputGateOn()
 {
-	// this is going to be called for every UpdateInput call that fails
-	// kinda slow but, w/e, should only happen when user unplugs a device while playing
+	if (SConfig::GetInstance().m_BackgroundInput)
+		return true;
+	else if (Host_RendererHasFocus() || Host_UIHasFocus())
+		return true;
+	else
+		return false;
 }
 
 //

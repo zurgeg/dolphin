@@ -5,16 +5,18 @@
 #include <string>
 
 #include "Common/Atomic.h"
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 #include "Common/FileUtil.h"
-#include "Common/LogManager.h"
 #include "Common/StringUtil.h"
+#include "Common/Logging/LogManager.h"
 
 #include "Core/ConfigManager.h"
 #include "Core/Core.h"
+#include "Core/Host.h"
 #include "Core/HW/Memmap.h"
 #include "Core/HW/VideoInterface.h"
 
+#include "VideoBackends/OGL/GLInterfaceBase.h"
 #include "VideoBackends/OGL/GLExtensions/GLExtensions.h"
 #include "VideoBackends/Software/BPMemLoader.h"
 #include "VideoBackends/Software/Clipper.h"
@@ -31,10 +33,8 @@
 #include "VideoBackends/Software/VideoBackend.h"
 #include "VideoBackends/Software/XFMemLoader.h"
 
-#if defined(HAVE_WX) && HAVE_WX
-#include "VideoBackends/Software/VideoConfigDialog.h"
-#endif // HAVE_WX
-
+#include "VideoCommon/BoundingBox.h"
+#include "VideoCommon/Fifo.h"
 #include "VideoCommon/OnScreenDisplay.h"
 #include "VideoCommon/PixelEngine.h"
 #include "VideoCommon/XFMemory.h"
@@ -59,23 +59,20 @@ static std::mutex m_csSWVidOccupied;
 
 std::string VideoSoftware::GetName() const
 {
-	return _trans("Software Renderer");
+	return "Software Renderer";
 }
 
-void *DllDebugger(void *_hParent, bool Show)
+std::string VideoSoftware::GetDisplayName() const
 {
-	return nullptr;
+	return "Software Renderer";
 }
 
-void VideoSoftware::ShowConfig(void *_hParent)
+void VideoSoftware::ShowConfig(void *hParent)
 {
-#if defined(HAVE_WX) && HAVE_WX
-	VideoConfigDialog diag((wxWindow*)_hParent, "Software", "gfx_software");
-	diag.ShowModal();
-#endif
+	Host_ShowVideoConfig(hParent, GetDisplayName(), "gfx_software");
 }
 
-bool VideoSoftware::Initialize(void *&window_handle)
+bool VideoSoftware::Initialize(void *window_handle)
 {
 	g_SWVideoConfig.Load((File::GetUserPath(D_CONFIG_IDX) + "gfx_software.ini").c_str());
 
@@ -83,7 +80,7 @@ bool VideoSoftware::Initialize(void *&window_handle)
 	GLInterface->SetMode(GLInterfaceMode::MODE_DETECT);
 	if (!GLInterface->Create(window_handle))
 	{
-		INFO_LOG(VIDEO, "%s", "SWRenderer::Create failed\n");
+		INFO_LOG(VIDEO, "GLInterface::Create failed.");
 		return false;
 	}
 
@@ -120,14 +117,7 @@ void VideoSoftware::DoState(PointerWrap& p)
 	p.DoPOD(swstats);
 
 	// CP Memory
-	p.DoArray(arraybases, 16);
-	p.DoArray(arraystrides, 16);
-	p.Do(MatrixIndexA);
-	p.Do(MatrixIndexB);
-	p.Do(g_VtxDesc.Hex);
-	p.DoArray(g_VtxAttr, 8);
-	p.DoMarker("CP Memory");
-
+	DoCPState(p);
 }
 
 void VideoSoftware::CheckInvalidState()
@@ -205,8 +195,11 @@ void VideoSoftware::Video_Prepare()
 }
 
 // Run from the CPU thread (from VideoInterface.cpp)
-void VideoSoftware::Video_BeginField(u32 xfbAddr, u32 fbWidth, u32 fbHeight)
+void VideoSoftware::Video_BeginField(u32 xfbAddr, u32 fbWidth, u32 fbStride, u32 fbHeight)
 {
+	// XXX: fbStride should be implemented properly here
+	// If stride isn't implemented then there are problems with XFB
+	// Animal Crossing is a good example for this.
 	s_beginFieldArgs.xfbAddr = xfbAddr;
 	s_beginFieldArgs.fbWidth = fbWidth;
 	s_beginFieldArgs.fbHeight = fbHeight;
@@ -243,6 +236,9 @@ void VideoSoftware::Video_EndField()
 	// If BypassXFB has already done a swap (cf. EfbCopy::CopyToXfb), skip this.
 	if (!g_SWVideoConfig.bBypassXFB)
 	{
+		// Dump frame if needed
+		DebugUtil::OnFrameEnd(s_beginFieldArgs.fbWidth, s_beginFieldArgs.fbHeight);
+
 		// If we are in dual core mode, notify the GPU thread about the new color texture.
 		if (SConfig::GetInstance().m_LocalCoreStartupParameter.bCPUThread)
 			Common::AtomicStoreRelease(s_swapRequested, true);
@@ -286,6 +282,11 @@ u32 VideoSoftware::Video_AccessEFB(EFBAccessType type, u32 x, u32 y, u32 InputDa
 u32 VideoSoftware::Video_GetQueryResult(PerfQueryType type)
 {
 	return EfbInterface::perf_values[type];
+}
+
+u16 VideoSoftware::Video_GetBoundingBox(int index)
+{
+	return BoundingBox::coords[index];
 }
 
 bool VideoSoftware::Video_Screenshot(const std::string& filename)
@@ -357,19 +358,9 @@ void VideoSoftware::Video_GatherPipeBursted()
 	SWCommandProcessor::GatherPipeBursted();
 }
 
-bool VideoSoftware::Video_IsPossibleWaitingSetDrawDone(void)
+bool VideoSoftware::Video_IsPossibleWaitingSetDrawDone()
 {
 	return false;
-}
-
-bool VideoSoftware::Video_IsHiWatermarkActive(void)
-{
-	return false;
-}
-
-
-void VideoSoftware::Video_AbortFrame(void)
-{
 }
 
 void VideoSoftware::RegisterCPMMIO(MMIO::Mapping* mmio, u32 base)
@@ -381,12 +372,6 @@ void VideoSoftware::RegisterCPMMIO(MMIO::Mapping* mmio, u32 base)
 unsigned int VideoSoftware::PeekMessages()
 {
 	return GLInterface->PeekMessages();
-}
-
-// Show the current FPS
-void VideoSoftware::UpdateFPSDisplay(const std::string& text)
-{
-	GLInterface->UpdateFPSDisplay(StringFromFormat("%s | Software | %s", scm_rev_str, text.c_str()));
 }
 
 }

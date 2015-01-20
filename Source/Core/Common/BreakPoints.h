@@ -20,11 +20,13 @@ struct TBreakPoint
 
 struct TMemCheck
 {
-	TMemCheck() {
+	TMemCheck()
+	{
 		numHits = 0;
 		StartAddress = EndAddress = 0;
 		bRange = OnRead = OnWrite = Log = Break = false;
 	}
+
 	u32 StartAddress;
 	u32 EndAddress;
 
@@ -40,6 +42,13 @@ struct TMemCheck
 
 	void Action(DebugInterface *dbg_interface, u32 _iValue, u32 addr,
 	            bool write, int size, u32 pc);
+};
+
+struct TWatch
+{
+	std::string name = "";
+	u32  iAddress;
+	bool bOn;
 };
 
 // Code breakpoints.
@@ -65,6 +74,7 @@ public:
 	// Remove Breakpoint
 	void Remove(u32 _iAddress);
 	void Clear();
+	void ClearAllTemporary();
 
 	void DeleteByAddress(u32 _Address);
 
@@ -94,5 +104,35 @@ public:
 	TMemCheck *GetMemCheck(u32 address);
 	void Remove(u32 _Address);
 
-	void Clear() { m_MemChecks.clear(); };
+	void Clear() { m_MemChecks.clear(); }
+};
+
+class Watches
+{
+public:
+	typedef std::vector<TWatch> TWatches;
+	typedef std::vector<std::string> TWatchesStr;
+
+	const TWatches& GetWatches() { return m_Watches; }
+
+	TWatchesStr GetStrings() const;
+	void AddFromStrings(const TWatchesStr& bps);
+
+	bool IsAddressWatch(u32 _iAddress) const;
+
+	// Add BreakPoint
+	void Add(u32 em_address);
+	void Add(const TWatch& bp);
+
+	void Update(int count, u32 em_address);
+	void UpdateName(int count, const std::string name);
+
+	// Remove Breakpoint
+	void Remove(u32 _iAddress);
+	void Clear();
+
+	void DeleteByAddress(u32 _Address);
+
+private:
+	TWatches m_Watches;
 };

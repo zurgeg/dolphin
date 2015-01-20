@@ -5,17 +5,20 @@
 #include <cinttypes>
 #include <cstdio>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <vector>
+#include <wx/app.h>
 #include <wx/bitmap.h>
 #include <wx/filefn.h>
 #include <wx/gdicmn.h>
 #include <wx/image.h>
 #include <wx/string.h>
+#include <wx/window.h>
 
 #include "Common/ChunkFile.h"
-#include "Common/Common.h"
 #include "Common/CommonPaths.h"
+#include "Common/CommonTypes.h"
 #include "Common/FileUtil.h"
 #include "Common/Hash.h"
 #include "Common/IniFile.h"
@@ -34,7 +37,7 @@
 #include "DolphinWX/ISOFile.h"
 #include "DolphinWX/WxUtils.h"
 
-static const u32 CACHE_REVISION = 0x115;
+static const u32 CACHE_REVISION = 0x118;
 
 #define DVD_BANNER_WIDTH 96
 #define DVD_BANNER_HEIGHT 32
@@ -60,9 +63,7 @@ GameListItem::GameListItem(const std::string& _rFileName)
 		if (pVolume != nullptr)
 		{
 			if (DiscIO::IsVolumeWadFile(pVolume))
-			{
 				m_Platform = WII_WAD;
-			}
 			else if (DiscIO::IsVolumeWiiUDisc(pVolume))
 			{
 				m_Platform = WIIU_DISC;
@@ -88,30 +89,26 @@ GameListItem::GameListItem(const std::string& _rFileName)
 
 			if (pFileSystem != nullptr || m_Platform == WII_WAD)
 			{
-				DiscIO::IBannerLoader* pBannerLoader = DiscIO::CreateBannerLoader(*pFileSystem, pVolume);
+				std::unique_ptr<DiscIO::IBannerLoader> pBannerLoader(DiscIO::CreateBannerLoader(*pFileSystem, pVolume));
 
-				if (pBannerLoader != nullptr)
+				if (pBannerLoader != nullptr && pBannerLoader->IsValid())
 				{
-					if (pBannerLoader->IsValid())
+					if (m_Platform != WII_WAD)
+						m_banner_names = pBannerLoader->GetNames();
+					m_company = pBannerLoader->GetCompany();
+					m_descriptions = pBannerLoader->GetDescriptions();
+
+					std::vector<u32> Buffer = pBannerLoader->GetBanner(&m_ImageWidth, &m_ImageHeight);
+					u32* pData = &Buffer[0];
+					// resize vector to image size
+					m_pImage.resize(m_ImageWidth * m_ImageHeight * 3);
+
+					for (int i = 0; i < m_ImageWidth * m_ImageHeight; i++)
 					{
-						if (m_Platform != WII_WAD)
-							m_names = pBannerLoader->GetNames();
-						m_company = pBannerLoader->GetCompany();
-						m_descriptions = pBannerLoader->GetDescriptions();
-
-						std::vector<u32> Buffer = pBannerLoader->GetBanner(&m_ImageWidth, &m_ImageHeight);
-						u32* pData = &Buffer[0];
-						// resize vector to image size
-						m_pImage.resize(m_ImageWidth * m_ImageHeight * 3);
-
-						for (int i = 0; i < m_ImageWidth * m_ImageHeight; i++)
-						{
-							m_pImage[i * 3 + 0] = (pData[i] & 0xFF0000) >> 16;
-							m_pImage[i * 3 + 1] = (pData[i] & 0x00FF00) >>  8;
-							m_pImage[i * 3 + 2] = (pData[i] & 0x0000FF) >>  0;
-						}
+						m_pImage[i * 3 + 0] = (pData[i] & 0xFF0000) >> 16;
+						m_pImage[i * 3 + 1] = (pData[i] & 0x00FF00) >>  8;
+						m_pImage[i * 3 + 2] = (pData[i] & 0x0000FF) >>  0;
 					}
-					delete pBannerLoader;
 				}
 
 				delete pFileSystem;
@@ -122,7 +119,7 @@ GameListItem::GameListItem(const std::string& _rFileName)
 			m_Valid = true;
 
 			// Create a cache file only if we have an image.
-			// Wii isos create their images after you have generated the first savegame
+			// Wii ISOs create their images after you have generated the first savegame
 			if (!m_pImage.empty())
 				SaveToCache();
 		}
@@ -133,14 +130,16 @@ GameListItem::GameListItem(const std::string& _rFileName)
 		IniFile ini;
 		ini.Load(File::GetSysDirectory() + GAMESETTINGS_DIR DIR_SEP + m_UniqueID + ".ini");
 		ini.Load(File::GetUserPath(D_GAMESETTINGS_IDX) + m_UniqueID + ".ini", true);
-		ini.Get("EmuState", "EmulationStateId", &m_emu_state);
-		ini.Get("EmuState", "EmulationIssues", &m_issues);
+
+		IniFile::Section* emu_state = ini.GetOrCreateSection("EmuState");
+		emu_state->Get("EmulationStateId", &m_emu_state);
+		emu_state->Get("EmulationIssues", &m_issues);
 	}
 
 	if (!m_pImage.empty())
 	{
 		wxImage Image(m_ImageWidth, m_ImageHeight, &m_pImage[0], true);
-		double Scale = WxUtils::GetCurrentBitmapLogicalScale();
+		double Scale = wxTheApp->GetTopWindow()->GetContentScaleFactor();
 		// Note: This uses nearest neighbor, which subjectively looks a lot
 		// better for GC banners than smooths caling.
 		Image.Rescale(DVD_BANNER_WIDTH * Scale, DVD_BANNER_HEIGHT * Scale);
@@ -169,9 +168,7 @@ bool GameListItem::LoadFromCache()
 void GameListItem::SaveToCache()
 {
 	if (!File::IsDirectory(File::GetUserPath(D_CACHE_IDX)))
-	{
 		File::CreateDir(File::GetUserPath(D_CACHE_IDX));
-	}
 
 	CChunkFileReader::Save<GameListItem>(CreateCacheFilename(), CACHE_REVISION, *this);
 }
@@ -180,7 +177,7 @@ void GameListItem::DoState(PointerWrap &p)
 {
 	p.Do(m_volume_names);
 	p.Do(m_company);
-	p.Do(m_names);
+	p.Do(m_banner_names);
 	p.Do(m_descriptions);
 	p.Do(m_UniqueID);
 	p.Do(m_FileSize);
@@ -254,11 +251,11 @@ std::string GameListItem::GetBannerName(int _index) const
 {
 	u32 const index = _index;
 
-	if (index < m_names.size() && !m_names[index].empty())
-		return m_names[index];
+	if (index < m_banner_names.size() && !m_banner_names[index].empty())
+		return m_banner_names[index];
 
-	if (!m_names.empty())
-		return m_names[0];
+	if (!m_banner_names.empty())
+		return m_banner_names[0];
 
 	return "";
 }
@@ -292,7 +289,7 @@ const std::string GameListItem::GetWiiFSPath() const
 
 	if (DiscIO::IsVolumeWiiDisc(iso) || DiscIO::IsVolumeWadFile(iso))
 	{
-		u64 title;
+		u64 title = 0;
 
 		iso->GetTitleID((u8*)&title);
 		title = Common::swap64(title);

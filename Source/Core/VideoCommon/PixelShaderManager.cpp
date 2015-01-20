@@ -4,7 +4,7 @@
 
 #include <cmath>
 
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 
 #include "VideoCommon/PixelShaderManager.h"
 #include "VideoCommon/RenderBase.h"
@@ -12,9 +12,11 @@
 #include "VideoCommon/VideoCommon.h"
 #include "VideoCommon/VideoConfig.h"
 
-static bool s_bFogRangeAdjustChanged;
-static bool s_bViewPortChanged;
-static int nLightsChanged[2]; // min,max
+bool PixelShaderManager::s_bFogRangeAdjustChanged;
+bool PixelShaderManager::s_bViewPortChanged;
+
+std::array<int4,4> PixelShaderManager::s_tev_color;
+std::array<int4,4> PixelShaderManager::s_tev_konst_color;
 
 PixelShaderConstants PixelShaderManager::constants;
 bool PixelShaderManager::dirty;
@@ -22,6 +24,9 @@ bool PixelShaderManager::dirty;
 void PixelShaderManager::Init()
 {
 	memset(&constants, 0, sizeof(constants));
+	memset(s_tev_color.data(), 0, sizeof(s_tev_color));
+	memset(s_tev_konst_color.data(), 0, sizeof(s_tev_konst_color));
+
 	Dirty();
 }
 
@@ -29,16 +34,16 @@ void PixelShaderManager::Dirty()
 {
 	s_bFogRangeAdjustChanged = true;
 	s_bViewPortChanged = true;
-	nLightsChanged[0] = 0; nLightsChanged[1] = 0x80;
 
-	SetColorChanged(0, 0);
-	SetColorChanged(0, 1);
-	SetColorChanged(0, 2);
-	SetColorChanged(0, 3);
-	SetColorChanged(1, 0);
-	SetColorChanged(1, 1);
-	SetColorChanged(1, 2);
-	SetColorChanged(1, 3);
+	for (unsigned index = 0; index < s_tev_color.size(); ++index)
+	{
+		for (int comp = 0; comp < 4; ++comp)
+		{
+			SetTevColor(index, comp, s_tev_color[index][comp]);
+			SetTevKonstColor(index, comp, s_tev_konst_color[index][comp]);
+		}
+	}
+
 	SetAlpha();
 	SetDestAlpha();
 	SetZTextureBias();
@@ -100,64 +105,31 @@ void PixelShaderManager::SetConstants()
 		s_bFogRangeAdjustChanged = false;
 	}
 
-	if (g_ActiveConfig.bEnablePixelLighting)  // config check added because the code in here was crashing for me inside SetPSConstant4f
-	{
-		if (nLightsChanged[0] >= 0)
-		{
-			// TODO: Outdated comment
-			// lights don't have a 1 to 1 mapping, the color component needs to be converted to 4 floats
-			int istart = nLightsChanged[0] / 0x10;
-			int iend = (nLightsChanged[1] + 15) / 0x10;
-			const float* xfmemptr = (const float*)&xfmem.lights[0x10 * istart];
-
-			for (int i = istart; i < iend; ++i)
-			{
-				u32 color = *(const u32*)(xfmemptr + 3);
-				constants.plight_colors[i][0] = (color >> 24) & 0xFF;
-				constants.plight_colors[i][1] = (color >> 16) & 0xFF;
-				constants.plight_colors[i][2] = (color >> 8)  & 0xFF;
-				constants.plight_colors[i][3] = (color)       & 0xFF;
-				xfmemptr += 4;
-
-				for (int j = 0; j < 4; ++j, xfmemptr += 3)
-				{
-					if (j == 1 &&
-						fabs(xfmemptr[0]) < 0.00001f &&
-						fabs(xfmemptr[1]) < 0.00001f &&
-						fabs(xfmemptr[2]) < 0.00001f)
-						// dist attenuation, make sure not equal to 0!!!
-						constants.plights[4*i+j][0] = 0.00001f;
-					else
-						constants.plights[4*i+j][0] = xfmemptr[0];
-					constants.plights[4*i+j][1] = xfmemptr[1];
-					constants.plights[4*i+j][2] = xfmemptr[2];
-				}
-			}
-			dirty = true;
-
-			nLightsChanged[0] = nLightsChanged[1] = -1;
-		}
-	}
-
 	if (s_bViewPortChanged)
 	{
-		constants.zbias[1][0] = xfmem.viewport.farZ;
-		constants.zbias[1][1] = xfmem.viewport.zRange;
+		constants.zbias[1][0] = static_cast<u32>(xfmem.viewport.farZ);
+		constants.zbias[1][1] = static_cast<u32>(xfmem.viewport.zRange);
 		dirty = true;
 		s_bViewPortChanged = false;
 	}
 }
 
-void PixelShaderManager::SetColorChanged(int type, int num)
+void PixelShaderManager::SetTevColor(int index, int component, s32 value)
 {
-	int4* c = type ? constants.kcolors : constants.colors;
-	c[num][0] = bpmem.tevregs[num].red;
-	c[num][3] = bpmem.tevregs[num].alpha;
-	c[num][2] = bpmem.tevregs[num].blue;
-	c[num][1] = bpmem.tevregs[num].green;
+	auto& c = constants.colors[index];
+	c[component] = s_tev_color[index][component] = value;
 	dirty = true;
 
-	PRIM_LOG("pixel %scolor%d: %d %d %d %d\n", type?"k":"", num, c[num][0], c[num][1], c[num][2], c[num][3]);
+	PRIM_LOG("tev color%d: %d %d %d %d\n", index, c[0], c[1], c[2], c[3]);
+}
+
+void PixelShaderManager::SetTevKonstColor(int index, int component, s32 value)
+{
+	auto& c = constants.kcolors[index];
+	c[component] = s_tev_konst_color[index][component] = value;
+	dirty = true;
+
+	PRIM_LOG("tev konst color%d: %d %d %d %d\n", index, c[0], c[1], c[2], c[3]);
 }
 
 void PixelShaderManager::SetAlpha()
@@ -254,8 +226,8 @@ void PixelShaderManager::SetZTextureTypeChanged()
 			break;
 		default:
 			break;
-        }
-        dirty = true;
+	}
+	dirty = true;
 }
 
 void PixelShaderManager::SetTexCoordChanged(u8 texmapid)
@@ -304,45 +276,15 @@ void PixelShaderManager::SetFogRangeAdjustChanged()
 	s_bFogRangeAdjustChanged = true;
 }
 
-void PixelShaderManager::InvalidateXFRange(int start, int end)
-{
-	if (start < XFMEM_LIGHTS_END && end > XFMEM_LIGHTS)
-	{
-		int _start = start < XFMEM_LIGHTS ? XFMEM_LIGHTS : start-XFMEM_LIGHTS;
-		int _end = end < XFMEM_LIGHTS_END ? end-XFMEM_LIGHTS : XFMEM_LIGHTS_END-XFMEM_LIGHTS;
-
-		if (nLightsChanged[0] == -1 )
-		{
-			nLightsChanged[0] = _start;
-			nLightsChanged[1] = _end;
-		}
-		else
-		{
-			if (nLightsChanged[0] > _start) nLightsChanged[0] = _start;
-			if (nLightsChanged[1] < _end)   nLightsChanged[1] = _end;
-		}
-	}
-}
-
-void PixelShaderManager::SetMaterialColorChanged(int index, u32 color)
-{
-	if (g_ActiveConfig.bEnablePixelLighting)
-	{
-		constants.pmaterials[index][0] = (color >> 24) & 0xFF;
-		constants.pmaterials[index][1] = (color >> 16) & 0xFF;
-		constants.pmaterials[index][2] = (color >>  8) & 0xFF;
-		constants.pmaterials[index][3] = (color)       & 0xFF;
-		dirty = true;
-	}
-}
-
 void PixelShaderManager::DoState(PointerWrap &p)
 {
-	p.Do(constants);
-	p.Do(dirty);
+	p.DoArray(s_tev_color);
+	p.DoArray(s_tev_konst_color);
 
 	if (p.GetMode() == PointerWrap::MODE_READ)
 	{
+		// Reload current state from global GPU state
+		// NOTE: This requires that all GPU memory has been loaded already.
 		Dirty();
 	}
 }

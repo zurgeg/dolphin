@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Base">
@@ -30,9 +30,6 @@
     <ClCompile Include="VideoBackendBase.cpp" />
     <ClCompile Include="VideoConfig.cpp" />
     <ClCompile Include="Debugger.cpp">
-      <Filter>Base</Filter>
-    </ClCompile>
-    <ClCompile Include="EmuWindow.cpp">
       <Filter>Base</Filter>
     </ClCompile>
     <ClCompile Include="FramebufferManagerBase.cpp">
@@ -83,9 +80,6 @@
     <ClCompile Include="TextureConversionShader.cpp">
       <Filter>Shader Generators</Filter>
     </ClCompile>
-    <ClCompile Include="TextureDecoder_x64.cpp">
-      <Filter>Shader Generators</Filter>
-    </ClCompile>
     <ClCompile Include="VertexShaderGen.cpp">
       <Filter>Shader Generators</Filter>
     </ClCompile>
@@ -113,6 +107,9 @@
     <ClCompile Include="OnScreenDisplay.cpp">
       <Filter>Util</Filter>
     </ClCompile>
+    <ClCompile Include="PostProcessing.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
     <ClCompile Include="Statistics.cpp">
       <Filter>Util</Filter>
     </ClCompile>
@@ -120,6 +117,12 @@
       <Filter>Util</Filter>
     </ClCompile>
     <ClCompile Include="VertexLoader.cpp">
+      <Filter>Vertex Loading</Filter>
+    </ClCompile>
+    <ClCompile Include="VertexLoaderBase.cpp">
+      <Filter>Vertex Loading</Filter>
+    </ClCompile>
+    <ClCompile Include="VertexLoaderX64.cpp">
       <Filter>Vertex Loading</Filter>
     </ClCompile>
     <ClCompile Include="VertexLoader_Color.cpp">
@@ -137,7 +140,21 @@
     <ClCompile Include="VertexLoaderManager.cpp">
       <Filter>Vertex Loading</Filter>
     </ClCompile>
-    <ClCompile Include="stdafx.cpp" />
+    <ClCompile Include="TextureDecoder_Common.cpp">
+      <Filter>Decoding</Filter>
+    </ClCompile>
+    <ClCompile Include="TextureDecoder_x64.cpp">
+      <Filter>Decoding</Filter>
+    </ClCompile>
+    <ClCompile Include="BoundingBox.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="GeometryShaderGen.cpp">
+      <Filter>Shader Generators</Filter>
+    </ClCompile>
+    <ClCompile Include="GeometryShaderManager.cpp">
+      <Filter>Shader Managers</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CommandProcessor.h" />
@@ -148,9 +165,6 @@
     <ClInclude Include="VideoCommon.h" />
     <ClInclude Include="VideoConfig.h" />
     <ClInclude Include="Debugger.h">
-      <Filter>Base</Filter>
-    </ClInclude>
-    <ClInclude Include="EmuWindow.h">
       <Filter>Base</Filter>
     </ClInclude>
     <ClInclude Include="FramebufferManagerBase.h">
@@ -240,6 +254,9 @@
     <ClInclude Include="OnScreenDisplay.h">
       <Filter>Util</Filter>
     </ClInclude>
+    <ClInclude Include="PostProcessing.h">
+      <Filter>Util</Filter>
+    </ClInclude>
     <ClInclude Include="Statistics.h">
       <Filter>Util</Filter>
     </ClInclude>
@@ -250,6 +267,9 @@
       <Filter>Vertex Loading</Filter>
     </ClInclude>
     <ClInclude Include="VertexLoader.h">
+      <Filter>Vertex Loading</Filter>
+    </ClInclude>
+    <ClInclude Include="VertexLoaderBase.h">
       <Filter>Vertex Loading</Filter>
     </ClInclude>
     <ClInclude Include="VertexLoader_Color.h">
@@ -267,7 +287,18 @@
     <ClInclude Include="VertexLoaderManager.h">
       <Filter>Vertex Loading</Filter>
     </ClInclude>
-    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="VertexLoaderUtils.h">
+      <Filter>Vertex Loading</Filter>
+    </ClInclude>
+    <ClInclude Include="BoundingBox.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="GeometryShaderGen.h">
+      <Filter>Shader Generators</Filter>
+    </ClInclude>
+    <ClInclude Include="GeometryShaderManager.h">
+      <Filter>Shader Managers</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />

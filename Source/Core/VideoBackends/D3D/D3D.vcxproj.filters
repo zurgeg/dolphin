@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="D3D">
@@ -24,13 +24,13 @@
     <ClCompile Include="D3DUtil.cpp">
       <Filter>D3D</Filter>
     </ClCompile>
-    <ClCompile Include="GfxState.cpp">
+    <ClCompile Include="D3DState.cpp">
       <Filter>D3D</Filter>
     </ClCompile>
     <ClCompile Include="FramebufferManager.cpp">
       <Filter>Render</Filter>
     </ClCompile>
-    <ClCompile Include="LineGeometryShader.cpp">
+    <ClCompile Include="GeometryShaderCache.cpp">
       <Filter>Render</Filter>
     </ClCompile>
     <ClCompile Include="NativeVertexFormat.cpp">
@@ -40,9 +40,6 @@
       <Filter>Render</Filter>
     </ClCompile>
     <ClCompile Include="PixelShaderCache.cpp">
-      <Filter>Render</Filter>
-    </ClCompile>
-    <ClCompile Include="PointGeometryShader.cpp">
       <Filter>Render</Filter>
     </ClCompile>
     <ClCompile Include="PSTextureEncoder.cpp">
@@ -67,7 +64,9 @@
       <Filter>Render</Filter>
     </ClCompile>
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="stdafx.cpp" />
+    <ClCompile Include="BoundingBox.cpp">
+      <Filter>Render</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="D3DBase.h">
@@ -85,22 +84,19 @@
     <ClInclude Include="D3DUtil.h">
       <Filter>D3D</Filter>
     </ClInclude>
-    <ClInclude Include="GfxState.h">
+    <ClInclude Include="D3DState.h">
       <Filter>D3D</Filter>
     </ClInclude>
     <ClInclude Include="FramebufferManager.h">
       <Filter>Render</Filter>
     </ClInclude>
-    <ClInclude Include="LineGeometryShader.h">
+    <ClInclude Include="GeometryShaderCache.h">
       <Filter>Render</Filter>
     </ClInclude>
     <ClInclude Include="PerfQuery.h">
       <Filter>Render</Filter>
     </ClInclude>
     <ClInclude Include="PixelShaderCache.h">
-      <Filter>Render</Filter>
-    </ClInclude>
-    <ClInclude Include="PointGeometryShader.h">
       <Filter>Render</Filter>
     </ClInclude>
     <ClInclude Include="PSTextureEncoder.h">
@@ -130,6 +126,8 @@
     <ClInclude Include="Globals.h" />
     <ClInclude Include="main.h" />
     <ClInclude Include="VideoBackend.h" />
-    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="BoundingBox.h">
+      <Filter>Render</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

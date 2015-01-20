@@ -14,13 +14,17 @@ private:
 	void GenerateCommon();
 
 public:
-	void Init() {
+	const u8* m_increment_profile_counter;
+
+	void Init()
+	{
 		AllocCodeSpace(8192);
 		Generate();
 		WriteProtect();
 	}
 
-	void Shutdown() {
+	void Shutdown()
+	{
 		FreeCodeSpace();
 	}
 };

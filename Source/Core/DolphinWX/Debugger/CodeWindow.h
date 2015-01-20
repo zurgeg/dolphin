@@ -19,6 +19,7 @@
 
 class CFrame;
 class CRegisterWindow;
+class CWatchWindow;
 class CBreakPointWindow;
 class CMemoryWindow;
 class CJitWindow;
@@ -27,122 +28,109 @@ class DSPDebuggerLLE;
 class GFXDebuggerPanel;
 struct SCoreStartupParameter;
 
-class wxAuiToolBar;
+class wxToolBar;
 class wxListBox;
 class wxMenu;
 class wxMenuBar;
 
-class CCodeWindow
-	: public wxPanel
+class CCodeWindow : public wxPanel
 {
-	public:
+public:
+	CCodeWindow(const SCoreStartupParameter& _LocalCoreStartupParameter,
+	            CFrame * parent,
+	            wxWindowID id = wxID_ANY,
+	            const wxPoint& pos = wxDefaultPosition,
+	            const wxSize& size = wxDefaultSize,
+	            long style = wxTAB_TRAVERSAL | wxBORDER_NONE,
+	            const wxString& name = _("Code"));
 
-		CCodeWindow(const SCoreStartupParameter& _LocalCoreStartupParameter,
-			CFrame * parent,
-			wxWindowID id = wxID_ANY,
-			const wxPoint& pos = wxDefaultPosition,
-			const wxSize& size = wxDefaultSize,
-			long style = wxTAB_TRAVERSAL | wxBORDER_NONE,
-			const wxString& name = _("Code")
-			);
+	void Load();
+	void Save();
 
-		void Load();
-		void Save();
+	// Parent interaction
+	CFrame *Parent;
+	wxMenuBar * GetMenuBar();
+	wxToolBar * GetToolBar();
+	wxBitmap m_Bitmaps[Toolbar_Debug_Bitmap_Max];
 
-		// Parent interaction
-		CFrame *Parent;
-		wxMenuBar * GetMenuBar();
-		wxAuiToolBar * GetToolBar();
-		wxBitmap m_Bitmaps[ToolbarDebugBitmapMax];
+	bool UseInterpreter();
+	bool BootToPause();
+	bool AutomaticStart();
+	bool JITNoBlockCache();
+	bool JITNoBlockLinking();
+	bool JumpToAddress(u32 address);
 
-		bool UseInterpreter();
-		bool BootToPause();
-		bool AutomaticStart();
-		bool JITNoBlockCache();
-		bool JITBlockLinking();
-		void JumpToAddress(u32 _Address);
+	void Update() override;
+	void NotifyMapLoaded();
+	void CreateMenu(const SCoreStartupParameter& _LocalCoreStartupParameter, wxMenuBar *pMenuBar);
+	void CreateMenuOptions(wxMenu *pMenu);
+	void CreateMenuSymbols(wxMenuBar *pMenuBar);
+	void RecreateToolbar(wxToolBar*);
+	void PopulateToolbar(wxToolBar* toolBar);
+	void UpdateButtonStates();
+	void OpenPages();
+	void UpdateManager();
 
-		void Update() override;
-		void NotifyMapLoaded();
-		void CreateMenu(const SCoreStartupParameter& _LocalCoreStartupParameter, wxMenuBar *pMenuBar);
-		void CreateMenuOptions(wxMenu *pMenu);
-		void CreateMenuSymbols(wxMenuBar *pMenuBar);
-		void RecreateToolbar(wxAuiToolBar*);
-		void PopulateToolbar(wxAuiToolBar* toolBar);
-		void UpdateButtonStates();
-		void OpenPages();
-		void UpdateManager();
+	// Menu bar
+	// -------------------
+	void OnCPUMode(wxCommandEvent& event); // CPU Mode menu
+	void OnJITOff(wxCommandEvent& event);
 
-		// Menu bar
-		// -------------------
-		void OnCPUMode(wxCommandEvent& event); // CPU Mode menu
-		void OnJITOff(wxCommandEvent& event);
+	void ToggleCodeWindow(bool bShow);
+	void ToggleRegisterWindow(bool bShow);
+	void ToggleWatchWindow(bool bShow);
+	void ToggleBreakPointWindow(bool bShow);
+	void ToggleMemoryWindow(bool bShow);
+	void ToggleJitWindow(bool bShow);
+	void ToggleSoundWindow(bool bShow);
+	void ToggleVideoWindow(bool bShow);
 
-		void ToggleCodeWindow(bool bShow);
-		void ToggleRegisterWindow(bool bShow);
-		void ToggleBreakPointWindow(bool bShow);
-		void ToggleMemoryWindow(bool bShow);
-		void ToggleJitWindow(bool bShow);
-		void ToggleSoundWindow(bool bShow);
-		void ToggleVideoWindow(bool bShow);
+	void OnChangeFont(wxCommandEvent& event);
 
-		void OnChangeFont(wxCommandEvent& event);
+	void OnCodeStep(wxCommandEvent& event);
+	void OnAddrBoxChange(wxCommandEvent& event);
+	void OnSymbolsMenu(wxCommandEvent& event);
+	void OnJitMenu(wxCommandEvent& event);
+	void OnProfilerMenu(wxCommandEvent& event);
 
-		void OnCodeStep(wxCommandEvent& event);
-		void OnAddrBoxChange(wxCommandEvent& event);
-		void OnSymbolsMenu(wxCommandEvent& event);
-		void OnJitMenu(wxCommandEvent& event);
-		void OnProfilerMenu(wxCommandEvent& event);
+	// Sub dialogs
+	CRegisterWindow* m_RegisterWindow;
+	CWatchWindow* m_WatchWindow;
+	CBreakPointWindow* m_BreakpointWindow;
+	CMemoryWindow* m_MemoryWindow;
+	CJitWindow* m_JitWindow;
+	DSPDebuggerLLE* m_SoundWindow;
+	GFXDebuggerPanel* m_VideoWindow;
 
-		// Sub dialogs
-		CRegisterWindow* m_RegisterWindow;
-		CBreakPointWindow* m_BreakpointWindow;
-		CMemoryWindow* m_MemoryWindow;
-		CJitWindow* m_JitWindow;
-		DSPDebuggerLLE* m_SoundWindow;
-		GFXDebuggerPanel* m_VideoWindow;
+	// Settings
+	bool bAutomaticStart; bool bBootToPause;
+	bool bShowOnStart[IDM_VIDEO_WINDOW - IDM_LOG_WINDOW + 1];
+	int iNbAffiliation[IDM_CODE_WINDOW - IDM_LOG_WINDOW + 1];
 
-		// Settings
-		bool bAutomaticStart; bool bBootToPause;
-		bool bShowOnStart[IDM_VIDEOWINDOW - IDM_LOGWINDOW + 1];
-		int iNbAffiliation[IDM_CODEWINDOW - IDM_LOGWINDOW + 1];
+private:
+	void OnSymbolListChange(wxCommandEvent& event);
+	void OnSymbolListContextMenu(wxContextMenuEvent& event);
+	void OnCallstackListChange(wxCommandEvent& event);
+	void OnCallersListChange(wxCommandEvent& event);
+	void OnCallsListChange(wxCommandEvent& event);
+	void OnCodeViewChange(wxCommandEvent &event);
+	void OnHostMessage(wxCommandEvent& event);
 
-	private:
+	// Debugger functions
+	void SingleStep();
+	void StepOver();
+	void StepOut();
+	void ToggleBreakpoint();
 
-		enum
-		{
-			// Debugger GUI Objects
-			ID_CODEVIEW,
-			ID_CALLSTACKLIST,
-			ID_CALLERSLIST,
-			ID_CALLSLIST,
-			ID_SYMBOLLIST
-		};
+	void UpdateLists();
+	void UpdateCallstack();
 
-		void OnSymbolListChange(wxCommandEvent& event);
-		void OnSymbolListContextMenu(wxContextMenuEvent& event);
-		void OnCallstackListChange(wxCommandEvent& event);
-		void OnCallersListChange(wxCommandEvent& event);
-		void OnCallsListChange(wxCommandEvent& event);
-		void OnCodeViewChange(wxCommandEvent &event);
-		void OnHostMessage(wxCommandEvent& event);
+	void InitBitmaps();
 
-		// Debugger functions
-		void SingleStep();
-		void StepOver();
-		void ToggleBreakpoint();
-
-		void UpdateLists();
-		void UpdateCallstack();
-
-		void InitBitmaps();
-
-		CCodeView* codeview;
-		wxListBox* callstack;
-		wxListBox* symbols;
-		wxListBox* callers;
-		wxListBox* calls;
-		Common::Event sync_event;
-
-		DECLARE_EVENT_TABLE()
+	CCodeView* codeview;
+	wxListBox* callstack;
+	wxListBox* symbols;
+	wxListBox* callers;
+	wxListBox* calls;
+	Common::Event sync_event;
 };

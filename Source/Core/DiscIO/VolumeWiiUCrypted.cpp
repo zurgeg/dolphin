@@ -19,15 +19,17 @@ namespace DiscIO
 {
 
 CVolumeWiiUCrypted::CVolumeWiiUCrypted(IBlobReader* _pReader, u64 _VolumeOffset,
-									 const unsigned char* _pVolumeKey)
+									 const unsigned char* _pDiscKey, const unsigned char* _pCommonKey)
 	: m_pReader(_pReader),
 	m_pBuffer(nullptr),
 	m_VolumeOffset(_VolumeOffset),
 	dataOffset(0),
 	m_LastDecryptedBlockOffset(-1)
 {
+	memcpy(m_pDiscKey, _pDiscKey, 16);
+	memcpy(m_pCommonKey, _pCommonKey, 16);
 	m_AES_ctx = new aes_context;
-	aes_setkey_dec(m_AES_ctx, _pVolumeKey, 128);
+	aes_setkey_dec(m_AES_ctx, _pDiscKey, 128);
 	m_pBuffer = new u8[0x8000];
 }
 
@@ -44,9 +46,6 @@ CVolumeWiiUCrypted::~CVolumeWiiUCrypted()
 
 bool CVolumeWiiUCrypted::RAWRead( u64 _Offset, u64 _Length, u8* _pBuffer ) const
 {
-	// HyperIris: hack for DVDLowUnencryptedRead
-	// Medal Of Honor Heroes 2 read this DVD offset for PartitionsInfo
-	// and, PartitionsInfo is not encrypted, let's read it directly.
 	if (!m_pReader->Read(_Offset, _Length, _pBuffer))
 	{
 		return(false);
@@ -54,11 +53,15 @@ bool CVolumeWiiUCrypted::RAWRead( u64 _Offset, u64 _Length, u8* _pBuffer ) const
 	return true;
 }
 
-bool CVolumeWiiUCrypted::Read(u64 _ReadOffset, u64 _Length, u8* _pBuffer) const
+bool CVolumeWiiUCrypted::Read(u64 _ReadOffset, u64 _Length, u8* _pBuffer, bool decrypt) const
 {
 	if (m_pReader == nullptr)
 	{
 		return(false);
+	}
+	if (!decrypt && _ReadOffset == 0)
+	{
+		return RAWRead(_ReadOffset, _Length, _pBuffer);
 	}
 
 	// The first cluster of a partition is unencrypted
@@ -105,10 +108,6 @@ bool CVolumeWiiUCrypted::GetTitleID(u8* _pBuffer) const
 	// Tik is at m_VolumeOffset size 0x2A4
 	// TitleID offset in tik is 0x1DC
 	return false;
-}
-void CVolumeWiiUCrypted::GetTMD(u8* _pBuffer, u32 * _sz) const
-{
-	*_sz = 0;
 }
 
 std::string CVolumeWiiUCrypted::GetUniqueID() const

@@ -3,8 +3,8 @@
 // Refer to the license.txt file included.
 
 #include "Common/ChunkFile.h"
-#include "Common/Common.h"
 #include "Common/CommonPaths.h"
+#include "Common/CommonTypes.h"
 #include "Common/FileSearch.h"
 #include "Common/FileUtil.h"
 #include "Common/NandPaths.h"
@@ -15,10 +15,11 @@
 #include "Core/IPC_HLE/WII_IPC_HLE_Device_FileIO.h"
 #include "Core/IPC_HLE/WII_IPC_HLE_Device_fs.h"
 
-#define MAX_NAME  12
-
 static Common::replace_v replacements;
 
+// ~1/1000th of a second is too short and causes hangs in Wii Party
+// Play it safe at 1/500th
+static const IPCCommandResult IPC_FS_REPLY = { true, SystemTimers::GetTicksPerSecond() / 500 };
 
 CWII_IPC_HLE_Device_fs::CWII_IPC_HLE_Device_fs(u32 _DeviceID, const std::string& _rDeviceName)
 	: IWII_IPC_HLE_Device(_DeviceID, _rDeviceName)
@@ -29,7 +30,7 @@ CWII_IPC_HLE_Device_fs::CWII_IPC_HLE_Device_fs(u32 _DeviceID, const std::string&
 CWII_IPC_HLE_Device_fs::~CWII_IPC_HLE_Device_fs()
 {}
 
-bool CWII_IPC_HLE_Device_fs::Open(u32 _CommandAddress, u32 _Mode)
+IPCCommandResult CWII_IPC_HLE_Device_fs::Open(u32 _CommandAddress, u32 _Mode)
 {
 	// clear tmp folder
 	{
@@ -40,16 +41,16 @@ bool CWII_IPC_HLE_Device_fs::Open(u32 _CommandAddress, u32 _Mode)
 
 	Memory::Write_U32(GetDeviceID(), _CommandAddress+4);
 	m_Active = true;
-	return true;
+	return IPC_FS_REPLY;
 }
 
-bool CWII_IPC_HLE_Device_fs::Close(u32 _CommandAddress, bool _bForce)
+IPCCommandResult CWII_IPC_HLE_Device_fs::Close(u32 _CommandAddress, bool _bForce)
 {
 	INFO_LOG(WII_IPC_FILEIO, "Close");
 	if (!_bForce)
 		Memory::Write_U32(0, _CommandAddress + 4);
 	m_Active = false;
-	return true;
+	return IPC_FS_REPLY;
 }
 
 // Get total filesize of contents of a directory (recursive)
@@ -67,7 +68,7 @@ static u64 ComputeTotalFileSize(const File::FSTEntry& parentEntry)
 	return sizeOfFiles;
 }
 
-bool CWII_IPC_HLE_Device_fs::IOCtlV(u32 _CommandAddress)
+IPCCommandResult CWII_IPC_HLE_Device_fs::IOCtlV(u32 _CommandAddress)
 {
 	u32 ReturnValue = FS_RESULT_OK;
 	SIOCtlVBuffer CommandBuffer(_CommandAddress);
@@ -84,9 +85,9 @@ bool CWII_IPC_HLE_Device_fs::IOCtlV(u32 _CommandAddress)
 	{
 	case IOCTLV_READ_DIR:
 		{
-			// the wii uses this function to define the type (dir or file)
-			std::string DirName(HLE_IPC_BuildFilename((const char*)Memory::GetPointer(
-				CommandBuffer.InBuffer[0].m_Address), CommandBuffer.InBuffer[0].m_Size));
+			// the Wii uses this function to define the type (dir or file)
+			std::string DirName(HLE_IPC_BuildFilename(Memory::GetString(
+				CommandBuffer.InBuffer[0].m_Address, CommandBuffer.InBuffer[0].m_Size)));
 
 			INFO_LOG(WII_IPC_FILEIO, "FS: IOCTL_READ_DIR %s", DirName.c_str());
 
@@ -173,8 +174,8 @@ bool CWII_IPC_HLE_Device_fs::IOCtlV(u32 _CommandAddress)
 			// this command sucks because it asks of the number of used
 			// fsBlocks and inodes
 			// It should be correct, but don't count on it...
-			const char *relativepath = (const char*)Memory::GetPointer(CommandBuffer.InBuffer[0].m_Address);
-			std::string path(HLE_IPC_BuildFilename(relativepath, CommandBuffer.InBuffer[0].m_Size));
+			std::string relativepath = Memory::GetString(CommandBuffer.InBuffer[0].m_Address, CommandBuffer.InBuffer[0].m_Size);
+			std::string path(HLE_IPC_BuildFilename(relativepath));
 			u32 fsBlocks = 0;
 			u32 iNodes = 0;
 
@@ -184,8 +185,8 @@ bool CWII_IPC_HLE_Device_fs::IOCtlV(u32 _CommandAddress)
 				// LPFaint99: After I found that setting the number of inodes to the number of children + 1 for the directory itself
 				// I decided to compare with sneek which has the following 2 special cases which are
 				// Copyright (C) 2009-2011  crediar http://code.google.com/p/sneek/
-				if ((memcmp(relativepath, "/title/00010001", 16 ) == 0 ) ||
-					(memcmp(relativepath, "/title/00010005", 16) == 0 ))
+				if ((relativepath.compare(0, 16, "/title/00010001") == 0 ) ||
+				    (relativepath.compare(0, 16, "/title/00010005") == 0 ))
 				{
 					fsBlocks = 23; // size is size/0x4000
 					iNodes = 42; // empty folders return a FileCount of 1
@@ -226,10 +227,10 @@ bool CWII_IPC_HLE_Device_fs::IOCtlV(u32 _CommandAddress)
 
 	Memory::Write_U32(ReturnValue, _CommandAddress+4);
 
-	return true;
+	return IPC_FS_REPLY;
 }
 
-bool CWII_IPC_HLE_Device_fs::IOCtl(u32 _CommandAddress)
+IPCCommandResult CWII_IPC_HLE_Device_fs::IOCtl(u32 _CommandAddress)
 {
 	//u32 DeviceID = Memory::Read_U32(_CommandAddress + 8);
 	//LOG(WII_IPC_FILEIO, "FS: IOCtl (Device=%s, DeviceID=%08x)", GetDeviceName().c_str(), DeviceID);
@@ -248,7 +249,7 @@ bool CWII_IPC_HLE_Device_fs::IOCtl(u32 _CommandAddress)
 	u32 ReturnValue = ExecuteCommand(Parameter, BufferIn, BufferInSize, BufferOut, BufferOutSize);
 	Memory::Write_U32(ReturnValue, _CommandAddress + 4);
 
-	return true;
+	return IPC_FS_REPLY;
 }
 
 s32 CWII_IPC_HLE_Device_fs::ExecuteCommand(u32 _Parameter, u32 _BufferIn, u32 _BufferInSize, u32 _BufferOut, u32 _BufferOutSize)
@@ -286,7 +287,7 @@ s32 CWII_IPC_HLE_Device_fs::ExecuteCommand(u32 _Parameter, u32 _BufferIn, u32 _B
 
 			u32 OwnerID = Memory::Read_U32(Addr); Addr += 4;
 			u16 GroupID = Memory::Read_U16(Addr); Addr += 2;
-			std::string DirName(HLE_IPC_BuildFilename((const char*)Memory::GetPointer(Addr), 64)); Addr += 64;
+			std::string DirName(HLE_IPC_BuildFilename(Memory::GetString(Addr, 64))); Addr += 64;
 			Addr += 9; // owner attribs, permission
 			u8 Attribs = Memory::Read_U8(Addr);
 
@@ -306,7 +307,7 @@ s32 CWII_IPC_HLE_Device_fs::ExecuteCommand(u32 _Parameter, u32 _BufferIn, u32 _B
 
 			u32 OwnerID = Memory::Read_U32(Addr); Addr += 4;
 			u16 GroupID = Memory::Read_U16(Addr); Addr += 2;
-			std::string Filename = HLE_IPC_BuildFilename((const char*)Memory::GetPointer(_BufferIn), 64); Addr += 64;
+			std::string Filename = HLE_IPC_BuildFilename(Memory::GetString(_BufferIn, 64)); Addr += 64;
 			u8 OwnerPerm = Memory::Read_U8(Addr); Addr += 1;
 			u8 GroupPerm = Memory::Read_U8(Addr); Addr += 1;
 			u8 OtherPerm = Memory::Read_U8(Addr); Addr += 1;
@@ -332,7 +333,7 @@ s32 CWII_IPC_HLE_Device_fs::ExecuteCommand(u32 _Parameter, u32 _BufferIn, u32 _B
 
 			u32 OwnerID = 0;
 			u16 GroupID = 0x3031; // this is also known as makercd, 01 (0x3031) for nintendo and 08 (0x3038) for MH3 etc
-			std::string Filename = HLE_IPC_BuildFilename((const char*)Memory::GetPointer(_BufferIn), 64);
+			std::string Filename = HLE_IPC_BuildFilename(Memory::GetString(_BufferIn, 64));
 			u8 OwnerPerm = 0x3;   // read/write
 			u8 GroupPerm = 0x3;   // read/write
 			u8 OtherPerm = 0x3;   // read/write
@@ -377,7 +378,7 @@ s32 CWII_IPC_HLE_Device_fs::ExecuteCommand(u32 _Parameter, u32 _BufferIn, u32 _B
 			_dbg_assert_(WII_IPC_FILEIO, _BufferOutSize == 0);
 			int Offset = 0;
 
-			std::string Filename = HLE_IPC_BuildFilename((const char*)Memory::GetPointer(_BufferIn+Offset), 64);
+			std::string Filename = HLE_IPC_BuildFilename(Memory::GetString(_BufferIn+Offset, 64));
 			Offset += 64;
 			if (File::Delete(Filename))
 			{
@@ -401,10 +402,10 @@ s32 CWII_IPC_HLE_Device_fs::ExecuteCommand(u32 _Parameter, u32 _BufferIn, u32 _B
 			_dbg_assert_(WII_IPC_FILEIO, _BufferOutSize == 0);
 			int Offset = 0;
 
-			std::string Filename = HLE_IPC_BuildFilename((const char*)Memory::GetPointer(_BufferIn+Offset), 64);
+			std::string Filename = HLE_IPC_BuildFilename(Memory::GetString(_BufferIn+Offset, 64));
 			Offset += 64;
 
-			std::string FilenameRename = HLE_IPC_BuildFilename((const char*)Memory::GetPointer(_BufferIn+Offset), 64);
+			std::string FilenameRename = HLE_IPC_BuildFilename(Memory::GetString(_BufferIn+Offset, 64));
 			Offset += 64;
 
 			// try to make the basis directory
@@ -438,7 +439,7 @@ s32 CWII_IPC_HLE_Device_fs::ExecuteCommand(u32 _Parameter, u32 _BufferIn, u32 _B
 			u32 Addr = _BufferIn;
 			u32 OwnerID = Memory::Read_U32(Addr); Addr += 4;
 			u16 GroupID = Memory::Read_U16(Addr); Addr += 2;
-			std::string Filename(HLE_IPC_BuildFilename((const char*)Memory::GetPointer(Addr), 64)); Addr += 64;
+			std::string Filename(HLE_IPC_BuildFilename(Memory::GetString(Addr, 64))); Addr += 64;
 			u8 OwnerPerm = Memory::Read_U8(Addr); Addr++;
 			u8 GroupPerm = Memory::Read_U8(Addr); Addr++;
 			u8 OtherPerm = Memory::Read_U8(Addr); Addr++;
@@ -486,13 +487,6 @@ s32 CWII_IPC_HLE_Device_fs::ExecuteCommand(u32 _Parameter, u32 _BufferIn, u32 _B
 	}
 
 	return FS_RESULT_FATAL;
-}
-
-int CWII_IPC_HLE_Device_fs::GetCmdDelay(u32)
-{
-	// ~1/1000th of a second is too short and causes hangs in Wii Party
-	// Play it safe at 1/500th
-	return SystemTimers::GetTicksPerSecond() / 500;
 }
 
 void CWII_IPC_HLE_Device_fs::DoState(PointerWrap& p)
@@ -576,7 +570,8 @@ void CWII_IPC_HLE_Device_fs::DoState(PointerWrap& p)
 				File::IOFile handle(entry.physicalName, "rb");
 				char buf[65536];
 				u32 count = size;
-				while (count > 65536) {
+				while (count > 65536)
+				{
 					handle.ReadArray(&buf[0], 65536);
 					p.DoArray(&buf[0], 65536);
 					count -= 65536;

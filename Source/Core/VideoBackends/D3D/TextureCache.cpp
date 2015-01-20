@@ -4,8 +4,10 @@
 
 #include "Core/HW/Memmap.h"
 #include "VideoBackends/D3D/D3DBase.h"
+#include "VideoBackends/D3D/D3DState.h"
 #include "VideoBackends/D3D/D3DUtil.h"
 #include "VideoBackends/D3D/FramebufferManager.h"
+#include "VideoBackends/D3D/GeometryShaderCache.h"
 #include "VideoBackends/D3D/PixelShaderCache.h"
 #include "VideoBackends/D3D/PSTextureEncoder.h"
 #include "VideoBackends/D3D/TextureCache.h"
@@ -29,7 +31,7 @@ TextureCache::TCacheEntry::~TCacheEntry()
 
 void TextureCache::TCacheEntry::Bind(unsigned int stage)
 {
-	D3D::context->PSSetShaderResources(stage, 1, &texture->GetSRV());
+	D3D::stateman->SetTexture(stage, texture->GetSRV());
 }
 
 bool TextureCache::TCacheEntry::Save(const std::string& filename, unsigned int level)
@@ -79,45 +81,43 @@ void TextureCache::TCacheEntry::Load(unsigned int width, unsigned int height,
 	D3D::ReplaceRGBATexture2D(texture->GetTex(), TextureCache::temp, width, height, expanded_width, level, usage);
 }
 
-TextureCache::TCacheEntryBase* TextureCache::CreateTexture(unsigned int width,
-	unsigned int height, unsigned int expanded_width,
-	unsigned int tex_levels, PC_TexFormat pcfmt)
+TextureCache::TCacheEntryBase* TextureCache::CreateTexture(const TCacheEntryConfig& config)
 {
-	D3D11_USAGE usage = D3D11_USAGE_DEFAULT;
-	D3D11_CPU_ACCESS_FLAG cpu_access = (D3D11_CPU_ACCESS_FLAG)0;
-	D3D11_SUBRESOURCE_DATA srdata, *data = nullptr;
-
-	if (tex_levels == 1)
+	if (config.rendertarget)
 	{
-		usage = D3D11_USAGE_DYNAMIC;
-		cpu_access = D3D11_CPU_ACCESS_WRITE;
-
-		srdata.pSysMem = TextureCache::temp;
-		srdata.SysMemPitch = 4 * expanded_width;
-
-		data = &srdata;
+		return new TCacheEntry(config, D3DTexture2D::Create(config.width, config.height,
+			(D3D11_BIND_FLAG)((int)D3D11_BIND_RENDER_TARGET | (int)D3D11_BIND_SHADER_RESOURCE),
+			D3D11_USAGE_DEFAULT, DXGI_FORMAT_R8G8B8A8_UNORM, 1, config.layers));
 	}
+	else
+	{
+		D3D11_USAGE usage = D3D11_USAGE_DEFAULT;
+		D3D11_CPU_ACCESS_FLAG cpu_access = (D3D11_CPU_ACCESS_FLAG)0;
 
-	const D3D11_TEXTURE2D_DESC texdesc = CD3D11_TEXTURE2D_DESC(DXGI_FORMAT_R8G8B8A8_UNORM,
-		width, height, 1, tex_levels, D3D11_BIND_SHADER_RESOURCE, usage, cpu_access);
+		if (config.levels == 1)
+		{
+			usage = D3D11_USAGE_DYNAMIC;
+			cpu_access = D3D11_CPU_ACCESS_WRITE;
+		}
 
-	ID3D11Texture2D *pTexture;
-	const HRESULT hr = D3D::device->CreateTexture2D(&texdesc, data, &pTexture);
-	CHECK(SUCCEEDED(hr), "Create texture of the TextureCache");
+		const D3D11_TEXTURE2D_DESC texdesc = CD3D11_TEXTURE2D_DESC(DXGI_FORMAT_R8G8B8A8_UNORM,
+			config.width, config.height, 1, config.levels, D3D11_BIND_SHADER_RESOURCE, usage, cpu_access);
 
-	TCacheEntry* const entry = new TCacheEntry(new D3DTexture2D(pTexture, D3D11_BIND_SHADER_RESOURCE));
-	entry->usage = usage;
+		ID3D11Texture2D *pTexture;
+		const HRESULT hr = D3D::device->CreateTexture2D(&texdesc, nullptr, &pTexture);
+		CHECK(SUCCEEDED(hr), "Create texture of the TextureCache");
 
-	// TODO: better debug names
-	D3D::SetDebugObjectName((ID3D11DeviceChild*)entry->texture->GetTex(), "a texture of the TextureCache");
-	D3D::SetDebugObjectName((ID3D11DeviceChild*)entry->texture->GetSRV(), "shader resource view of a texture of the TextureCache");
+		TCacheEntry* const entry = new TCacheEntry(config, new D3DTexture2D(pTexture, D3D11_BIND_SHADER_RESOURCE));
+		entry->usage = usage;
 
-	SAFE_RELEASE(pTexture);
+		// TODO: better debug names
+		D3D::SetDebugObjectName((ID3D11DeviceChild*)entry->texture->GetTex(), "a texture of the TextureCache");
+		D3D::SetDebugObjectName((ID3D11DeviceChild*)entry->texture->GetSRV(), "shader resource view of a texture of the TextureCache");
 
-	if (tex_levels != 1)
-		entry->Load(width, height, expanded_width, 0);
+		SAFE_RELEASE(pTexture);
 
-	return entry;
+		return entry;
+	}
 }
 
 void TextureCache::TCacheEntry::FromRenderTarget(u32 dstAddr, unsigned int dstFormat,
@@ -130,7 +130,7 @@ void TextureCache::TCacheEntry::FromRenderTarget(u32 dstAddr, unsigned int dstFo
 		g_renderer->ResetAPIState();
 
 		// stretch picture with increased internal resolution
-		const D3D11_VIEWPORT vp = CD3D11_VIEWPORT(0.f, 0.f, (float)virtual_width, (float)virtual_height);
+		const D3D11_VIEWPORT vp = CD3D11_VIEWPORT(0.f, 0.f, (float)config.width, (float)config.height);
 		D3D::context->RSSetViewports(1, &vp);
 
 		// set transformation
@@ -143,7 +143,7 @@ void TextureCache::TCacheEntry::FromRenderTarget(u32 dstAddr, unsigned int dstFo
 			CHECK(SUCCEEDED(hr), "Create efb copy constant buffer %d", cbufid);
 			D3D::SetDebugObjectName((ID3D11DeviceChild*)efbcopycbuf[cbufid], "a constant buffer used in TextureCache::CopyRenderTargetToTexture");
 		}
-		D3D::context->PSSetConstantBuffers(0, 1, &efbcopycbuf[cbufid]);
+		D3D::stateman->SetPixelConstants(efbcopycbuf[cbufid]);
 
 		const TargetRectangle targetSource = g_renderer->ConvertEFBRectangle(srcRect);
 		// TODO: try targetSource.asRECT();
@@ -155,6 +155,10 @@ void TextureCache::TCacheEntry::FromRenderTarget(u32 dstAddr, unsigned int dstFo
 		else
 			D3D::SetPointCopySampler();
 
+		// if texture is currently in use, it needs to be temporarily unset
+		u32 textureSlotMask = D3D::stateman->UnsetTexture(texture->GetSRV());
+		D3D::stateman->Apply();
+
 		D3D::context->OMSetRenderTargets(1, &texture->GetRTV(), nullptr);
 
 		// Create texture copy
@@ -162,11 +166,14 @@ void TextureCache::TCacheEntry::FromRenderTarget(u32 dstAddr, unsigned int dstFo
 			(srcFormat == PEControl::Z24) ? FramebufferManager::GetEFBDepthTexture()->GetSRV() : FramebufferManager::GetEFBColorTexture()->GetSRV(),
 			&sourcerect, Renderer::GetTargetWidth(), Renderer::GetTargetHeight(),
 			(srcFormat == PEControl::Z24) ? PixelShaderCache::GetDepthMatrixProgram(true) : PixelShaderCache::GetColorMatrixProgram(true),
-			VertexShaderCache::GetSimpleVertexShader(), VertexShaderCache::GetSimpleInputLayout());
+			VertexShaderCache::GetSimpleVertexShader(), VertexShaderCache::GetSimpleInputLayout(), GeometryShaderCache::GetCopyGeometryShader());
 
 		D3D::context->OMSetRenderTargets(1, &FramebufferManager::GetEFBColorTexture()->GetRTV(), FramebufferManager::GetEFBDepthTexture()->GetDSV());
 
 		g_renderer->RestoreAPIState();
+
+		// Restore old texture in all previously used slots, if any
+		D3D::stateman->SetTextureByMask(textureSlotMask, texture->GetSRV());
 	}
 
 	if (!g_ActiveConfig.bCopyEFBToTexture)
@@ -176,6 +183,8 @@ void TextureCache::TCacheEntry::FromRenderTarget(u32 dstAddr, unsigned int dstFo
 
 		u64 hash = GetHash64(dst, (int)encoded_size, g_ActiveConfig.iSafeTextureCache_ColorSamples);
 
+		size_in_bytes = (u32)encoded_size;
+
 		// Mark texture entries in destination address range dynamic unless caching is enabled and the texture entry is up to date
 		if (!g_ActiveConfig.bEFBCopyCacheEnable)
 			TextureCache::MakeRangeDynamic(addr, (u32)encoded_size);
@@ -184,14 +193,6 @@ void TextureCache::TCacheEntry::FromRenderTarget(u32 dstAddr, unsigned int dstFo
 
 		this->hash = hash;
 	}
-}
-
-TextureCache::TCacheEntryBase* TextureCache::CreateRenderTargetTexture(
-	unsigned int scaled_tex_w, unsigned int scaled_tex_h)
-{
-	return new TCacheEntry(D3DTexture2D::Create(scaled_tex_w, scaled_tex_h,
-		(D3D11_BIND_FLAG)((int)D3D11_BIND_RENDER_TARGET | (int)D3D11_BIND_SHADER_RESOURCE),
-		D3D11_USAGE_DEFAULT, DXGI_FORMAT_R8G8B8A8_UNORM));
 }
 
 TextureCache::TextureCache()

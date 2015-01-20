@@ -5,6 +5,7 @@
 #pragma once
 
 #include <cstring>
+#include <list>
 #include <map>
 #include <string>
 #include <vector>
@@ -39,26 +40,41 @@ public:
 
 		bool Get(const std::string& key, std::string* value, const std::string& defaultValue = NULL_STRING);
 
-		void Set(const std::string& key, u32 newValue) {
+		void Set(const std::string& key, u32 newValue)
+		{
 			Set(key, StringFromFormat("0x%08x", newValue));
 		}
-		void Set(const std::string& key, float newValue) {
-			Set(key, StringFromFormat("%f", newValue));
-		}
-		void Set(const std::string& key, const float newValue, const float defaultValue);
-		void Set(const std::string& key, double newValue) {
+
+		void Set(const std::string& key, float newValue)
+		{
 			Set(key, StringFromFormat("%f", newValue));
 		}
 
-		void Set(const std::string& key, int newValue, int defaultValue);
-		void Set(const std::string& key, int newValue) {
+		void Set(const std::string& key, double newValue)
+		{
+			Set(key, StringFromFormat("%f", newValue));
+		}
+
+		void Set(const std::string& key, int newValue)
+		{
 			Set(key, StringFromInt(newValue));
 		}
 
-		void Set(const std::string& key, bool newValue, bool defaultValue);
-		void Set(const std::string& key, bool newValue) {
+		void Set(const std::string& key, bool newValue)
+		{
 			Set(key, StringFromBool(newValue));
+
 		}
+
+		template<typename T>
+		void Set(const std::string& key, T newValue, const T defaultValue)
+		{
+			if (newValue != defaultValue)
+				Set(key, newValue);
+			else
+				Delete(key);
+		}
+
 		void Set(const std::string& key, const std::vector<std::string>& newValues);
 
 		bool Get(const std::string& key, int* value, int defaultValue = 0);
@@ -68,7 +84,8 @@ public:
 		bool Get(const std::string& key, double* value, double defaultValue = false);
 		bool Get(const std::string& key, std::vector<std::string>* values);
 
-		bool operator < (const Section& other) const {
+		bool operator < (const Section& other) const
+		{
 			return name < other.name;
 		}
 
@@ -95,34 +112,11 @@ public:
 	// Returns true if key exists in section
 	bool Exists(const std::string& sectionName, const std::string& key) const;
 
-	// TODO: Get rid of these, in favor of the Section ones.
-	void Set(const std::string& sectionName, const std::string& key, const std::string& newValue) {
-		GetOrCreateSection(sectionName)->Set(key, newValue);
-	}
-	void Set(const std::string& sectionName, const std::string& key, int newValue) {
-		GetOrCreateSection(sectionName)->Set(key, newValue);
-	}
-	void Set(const std::string& sectionName, const std::string& key, u32 newValue) {
-		GetOrCreateSection(sectionName)->Set(key, newValue);
-	}
-	void Set(const std::string& sectionName, const std::string& key, bool newValue) {
-		GetOrCreateSection(sectionName)->Set(key, newValue);
-	}
-	void Set(const std::string& sectionName, const std::string& key, const std::vector<std::string>& newValues) {
-		GetOrCreateSection(sectionName)->Set(key, newValues);
-	}
-
-	// TODO: Get rid of these, in favor of the Section ones.
-	bool Get(const std::string& sectionName, const std::string& key, int* value, int defaultValue = 0);
-	bool Get(const std::string& sectionName, const std::string& key, u32* value, u32 defaultValue = 0);
-	bool Get(const std::string& sectionName, const std::string& key, bool* value, bool defaultValue = false);
-	bool Get(const std::string& sectionName, const std::string& key, std::vector<std::string>* values);
-	bool Get(const std::string& sectionName, const std::string& key, std::string* value, const std::string& defaultValue = NULL_STRING);
-
 	template<typename T> bool GetIfExists(const std::string& sectionName, const std::string& key, T value)
 	{
 		if (Exists(sectionName, key))
-			return Get(sectionName, key, value);
+			return GetOrCreateSection(sectionName)->Get(key, value);
+
 		return false;
 	}
 
@@ -138,8 +132,13 @@ public:
 
 	Section* GetOrCreateSection(const std::string& section);
 
+	// This function is related to parsing data from lines of INI files
+	// It's used outside of IniFile, which is why it is exposed publicly
+	// In particular it is used in PostProcessing for its configuration
+	static void ParseLine(const std::string& line, std::string* keyOut, std::string* valueOut);
+
 private:
-	std::vector<Section> sections;
+	std::list<Section> sections;
 
 	const Section* GetSection(const std::string& section) const;
 	Section* GetSection(const std::string& section);

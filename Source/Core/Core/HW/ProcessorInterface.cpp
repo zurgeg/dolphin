@@ -6,7 +6,7 @@
 
 #include "Common/Atomic.h"
 #include "Common/ChunkFile.h"
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 
 #include "Core/CoreTiming.h"
 #include "Core/HW/CPU.h"
@@ -43,10 +43,10 @@ u32 Fifo_CPUBase;
 u32 Fifo_CPUEnd;
 u32 Fifo_CPUWritePointer;
 
-u32 m_Fifo_Reset;
-u32 m_ResetCode;
-u32 m_FlipperRev;
-u32 m_Unknown;
+static u32 m_Fifo_Reset;
+static u32 m_ResetCode;
+static u32 m_FlipperRev;
+static u32 m_Unknown;
 
 
 // ID and callback for scheduling reset button presses/releases
@@ -146,11 +146,11 @@ void RegisterMMIO(MMIO::Mapping* mmio, u32 base)
 	for (int i = 0; i < 0x1000; i += 4)
 	{
 		mmio->Register(base | i,
-			MMIO::ReadToLarger<u16>(mmio, base | i, 0),
+			MMIO::ReadToLarger<u16>(mmio, base | i, 16),
 			MMIO::InvalidWrite<u16>()
 		);
 		mmio->Register(base | (i + 2),
-			MMIO::ReadToLarger<u16>(mmio, base | i, 16),
+			MMIO::ReadToLarger<u16>(mmio, base | i, 0),
 			MMIO::InvalidWrite<u16>()
 		);
 	}
@@ -190,7 +190,7 @@ static const char *Debug_GetInterruptName(u32 _causemask)
 
 void SetInterrupt(u32 _causemask, bool _bSet)
 {
-	// TODO(ector): add sanity check that current thread id is cpu thread
+	// TODO(ector): add sanity check that current thread id is CPU thread
 
 	if (_bSet && !(m_InterruptCause & _causemask))
 	{
@@ -211,7 +211,7 @@ void SetInterrupt(u32 _causemask, bool _bSet)
 	UpdateException();
 }
 
-void SetResetButton(bool _bSet)
+static void SetResetButton(bool _bSet)
 {
 	if (_bSet)
 		Common::AtomicAnd(m_InterruptCause, ~INT_CAUSE_RST_BUTTON);

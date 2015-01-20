@@ -3,6 +3,7 @@
 // Refer to the license.txt file included.
 
 #include <cmath>
+#include <cstring>
 #include <X11/XKBlib.h>
 
 #include "InputCommon/ControllerInterface/Xlib/XInput2.h"
@@ -167,15 +168,15 @@ KeyboardMouse::KeyboardMouse(Window window, int opcode, int pointer, int keyboar
 
 	// Mouse Buttons
 	for (int i = 0; i < 5; i++)
-		AddInput(new Button(i, m_state.buttons));
+		AddInput(new Button(i, &m_state.buttons));
 
 	// Mouse Cursor, X-/+ and Y-/+
 	for (int i = 0; i != 4; ++i)
-		AddInput(new Cursor(!!(i & 2), !!(i & 1), (&m_state.cursor.x)[!!(i & 2)]));
+		AddInput(new Cursor(!!(i & 2), !!(i & 1), (i & 2) ? &m_state.cursor.y : &m_state.cursor.x));
 
 	// Mouse Axis, X-/+ and Y-/+
 	for (int i = 0; i != 4; ++i)
-		AddInput(new Axis(!!(i & 2), !!(i & 1), (&m_state.axis.x)[!!(i & 2)]));
+		AddInput(new Axis(!!(i & 2), !!(i & 1), (i & 2) ? &m_state.axis.y : &m_state.axis.x));
 }
 
 KeyboardMouse::~KeyboardMouse()
@@ -207,7 +208,7 @@ void KeyboardMouse::UpdateCursor()
 	m_state.cursor.y = win_y / (float)win_attribs.height * 2 - 1;
 }
 
-bool KeyboardMouse::UpdateInput()
+void KeyboardMouse::UpdateInput()
 {
 	XFlush(m_display);
 
@@ -281,13 +282,6 @@ bool KeyboardMouse::UpdateInput()
 	m_state.axis.y *= MOUSE_AXIS_SMOOTHING;
 	m_state.axis.y += delta_y;
 	m_state.axis.y /= MOUSE_AXIS_SMOOTHING+1.0f;
-
-	return true;
-}
-
-bool KeyboardMouse::UpdateOutput()
-{
-	return true;
 }
 
 std::string KeyboardMouse::GetName() const
@@ -337,7 +331,7 @@ ControlState KeyboardMouse::Key::GetState() const
 	return (m_keyboard[m_keycode / 8] & (1 << (m_keycode % 8))) != 0;
 }
 
-KeyboardMouse::Button::Button(unsigned int index, unsigned int& buttons)
+KeyboardMouse::Button::Button(unsigned int index, unsigned int* buttons)
 	: m_buttons(buttons), m_index(index)
 {
 	// this will be a problem if we remove the hardcoded five-button limit
@@ -346,10 +340,10 @@ KeyboardMouse::Button::Button(unsigned int index, unsigned int& buttons)
 
 ControlState KeyboardMouse::Button::GetState() const
 {
-	return ((m_buttons & (1 << m_index)) != 0);
+	return ((*m_buttons & (1 << m_index)) != 0);
 }
 
-KeyboardMouse::Cursor::Cursor(u8 index, bool positive, const float& cursor)
+KeyboardMouse::Cursor::Cursor(u8 index, bool positive, const float* cursor)
 	: m_cursor(cursor), m_index(index), m_positive(positive)
 {
 	name = std::string("Cursor ") + (char)('X' + m_index) + (m_positive ? '+' : '-');
@@ -357,10 +351,10 @@ KeyboardMouse::Cursor::Cursor(u8 index, bool positive, const float& cursor)
 
 ControlState KeyboardMouse::Cursor::GetState() const
 {
-	return std::max(0.0f, m_cursor / (m_positive ? 1.0f : -1.0f));
+	return std::max(0.0f, *m_cursor / (m_positive ? 1.0f : -1.0f));
 }
 
-KeyboardMouse::Axis::Axis(u8 index, bool positive, const float& axis)
+KeyboardMouse::Axis::Axis(u8 index, bool positive, const float* axis)
 	: m_axis(axis), m_index(index), m_positive(positive)
 {
 	name = std::string("Axis ") + (char)('X' + m_index) + (m_positive ? '+' : '-');
@@ -368,7 +362,7 @@ KeyboardMouse::Axis::Axis(u8 index, bool positive, const float& axis)
 
 ControlState KeyboardMouse::Axis::GetState() const
 {
-	return std::max(0.0f, m_axis / (m_positive ? MOUSE_AXIS_SENSITIVITY : -MOUSE_AXIS_SENSITIVITY));
+	return std::max(0.0f, *m_axis / (m_positive ? MOUSE_AXIS_SENSITIVITY : -MOUSE_AXIS_SENSITIVITY));
 }
 
 }

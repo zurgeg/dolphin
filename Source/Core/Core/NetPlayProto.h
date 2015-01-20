@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 #include "Common/CommonTypes.h"
 
 #include "Core/HW/EXI_Device.h"
@@ -16,6 +16,8 @@ struct NetSettings
 	bool m_DSPHLE;
 	bool m_DSPEnableJIT;
 	bool m_WriteToMemcard;
+	bool m_OCEnable;
+	float m_OCFactor;
 	TEXIDevices m_EXIDevice[2];
 };
 
@@ -76,4 +78,4 @@ enum
 namespace NetPlay
 {
 	bool IsNetPlayRunning();
-};
+}

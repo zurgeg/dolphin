@@ -18,6 +18,7 @@
 #include <wx/frame.h>
 #include <wx/gdicmn.h>
 #include <wx/listbox.h>
+#include <wx/msgdlg.h>
 #include <wx/notebook.h>
 #include <wx/panel.h>
 #include <wx/sizer.h>
@@ -27,7 +28,7 @@
 #include <wx/textctrl.h>
 #include <wx/translation.h>
 
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 #include "Common/FifoQueue.h"
 #include "Common/FileUtil.h"
 #include "Common/IniFile.h"
@@ -42,31 +43,22 @@
 #include "DolphinWX/Frame.h"
 #include "DolphinWX/GameListCtrl.h"
 #include "DolphinWX/ISOFile.h"
+#include "DolphinWX/Main.h"
 #include "DolphinWX/NetWindow.h"
 #include "DolphinWX/WxUtils.h"
 
-class wxWindow;
-
-#define NETPLAY_TITLEBAR  "Dolphin NetPlay"
-#define INITIAL_PAD_BUFFER_SIZE 20
-
-BEGIN_EVENT_TABLE(NetPlayDiag, wxFrame)
-	EVT_COMMAND(wxID_ANY, wxEVT_THREAD, NetPlayDiag::OnThread)
-END_EVENT_TABLE()
+#define INITIAL_PAD_BUFFER_SIZE 5
 
 static NetPlayServer* netplay_server = nullptr;
 static NetPlayClient* netplay_client = nullptr;
-extern CFrame* main_frame;
 NetPlayDiag *NetPlayDiag::npd = nullptr;
 
-std::string BuildGameName(const GameListItem& game)
+static std::string BuildGameName(const GameListItem& game)
 {
 	// Lang needs to be consistent
 	auto const lang = 0;
 
-	std::string name(game.GetBannerName(lang));
-	if (name.empty())
-		name = game.GetVolumeName(lang);
+	std::string name(game.GetName(lang));
 
 	if (game.GetRevision() != 0)
 		return name + " (" + game.GetUniqueID() + ", Revision " + std::to_string((long long)game.GetRevision()) + ")";
@@ -74,14 +66,14 @@ std::string BuildGameName(const GameListItem& game)
 		return name + " (" + game.GetUniqueID() + ")";
 }
 
-void FillWithGameNames(wxListBox* game_lbox, const CGameListCtrl& game_list)
+static void FillWithGameNames(wxListBox* game_lbox, const CGameListCtrl& game_list)
 {
 	for (u32 i = 0 ; auto game = game_list.GetISO(i); ++i)
 		game_lbox->Append(StrToWxStr(BuildGameName(*game)));
 }
 
 NetPlaySetupDiag::NetPlaySetupDiag(wxWindow* const parent, const CGameListCtrl* const game_list)
-	: wxFrame(parent, wxID_ANY, NETPLAY_TITLEBAR)
+	: wxFrame(parent, wxID_ANY, _("Dolphin NetPlay Setup"))
 	, m_game_list(game_list)
 {
 	IniFile inifile;
@@ -131,10 +123,8 @@ NetPlaySetupDiag::NetPlaySetupDiag(wxWindow* const parent, const CGameListCtrl* 
 	wxStaticText* const alert_lbl = new wxStaticText(connect_tab, wxID_ANY,
 		_("ALERT:\n\n"
 		"Netplay will only work with the following settings:\n"
-		" - Enable Dual Core [OFF]\n"
 		" - DSP Emulator Engine Must be the same on all computers!\n"
 		" - DSP on Dedicated Thread [OFF]\n"
-		" - Framelimit NOT set to [Audio]\n"
 		" - Manually set the extensions for each wiimote\n"
 		"\n"
 		"All players should use the same Dolphin version and settings.\n"
@@ -257,13 +247,13 @@ void NetPlaySetupDiag::OnHost(wxCommandEvent&)
 	NetPlayDiag *&npd = NetPlayDiag::GetInstance();
 	if (npd)
 	{
-		PanicAlertT("A NetPlay window is already open!!");
+		WxUtils::ShowErrorDialog(_("A NetPlay window is already open!"));
 		return;
 	}
 
 	if (-1 == m_game_lbox->GetSelection())
 	{
-		PanicAlertT("You must choose a game!!");
+		WxUtils::ShowErrorDialog(_("You must choose a game!"));
 		return;
 	}
 
@@ -284,7 +274,7 @@ void NetPlaySetupDiag::OnHost(wxCommandEvent&)
 	}
 	else
 	{
-		PanicAlertT("Failed to listen.  Is another instance of the NetPlay server running?");
+		WxUtils::ShowErrorDialog(_("Failed to listen. Is another instance of the NetPlay server running?"));
 	}
 }
 
@@ -293,7 +283,7 @@ void NetPlaySetupDiag::OnJoin(wxCommandEvent&)
 	NetPlayDiag *&npd = NetPlayDiag::GetInstance();
 	if (npd)
 	{
-		PanicAlertT("A NetPlay window is already open!!");
+		WxUtils::ShowErrorDialog(_("A NetPlay window is already open!"));
 		return;
 	}
 
@@ -309,11 +299,13 @@ void NetPlaySetupDiag::OnQuit(wxCommandEvent&)
 
 NetPlayDiag::NetPlayDiag(wxWindow* const parent, const CGameListCtrl* const game_list,
 		const std::string& game, const bool is_hosting)
-	: wxFrame(parent, wxID_ANY, NETPLAY_TITLEBAR)
+	: wxFrame(parent, wxID_ANY, _("Dolphin NetPlay"))
 	, m_selected_game(game)
 	, m_start_btn(nullptr)
 	, m_game_list(game_list)
 {
+	Bind(wxEVT_THREAD, &NetPlayDiag::OnThread, this);
+
 	wxPanel* const panel = new wxPanel(this);
 
 	// top crap
@@ -355,6 +347,12 @@ NetPlayDiag::NetPlayDiag(wxWindow* const parent, const CGameListCtrl* const game
 	// player list
 	if (is_hosting)
 	{
+		m_player_lbox->Bind(wxEVT_LISTBOX, &NetPlayDiag::OnPlayerSelect, this);
+		m_kick_btn = new wxButton(panel, wxID_ANY, _("Kick Player"));
+		m_kick_btn->Bind(wxEVT_BUTTON, &NetPlayDiag::OnKick, this);
+		player_szr->Add(m_kick_btn, 0, wxEXPAND | wxTOP, 5);
+		m_kick_btn->Disable();
+
 		wxButton* const player_config_btn = new wxButton(panel, wxID_ANY, _("Configure Pads"));
 		player_config_btn->Bind(wxEVT_BUTTON, &NetPlayDiag::OnConfigPads, this);
 		player_szr->Add(player_config_btn, 0, wxEXPAND | wxTOP, 5);
@@ -376,7 +374,7 @@ NetPlayDiag::NetPlayDiag(wxWindow* const parent, const CGameListCtrl* const game
 		bottom_szr->Add(m_start_btn);
 
 		bottom_szr->Add(new wxStaticText(panel, wxID_ANY, _("Buffer:")), 0, wxLEFT | wxCENTER, 5 );
-		wxSpinCtrl* const padbuf_spin = new wxSpinCtrl(panel, wxID_ANY, "20"
+		wxSpinCtrl* const padbuf_spin = new wxSpinCtrl(panel, wxID_ANY, std::to_string(INITIAL_PAD_BUFFER_SIZE)
 			, wxDefaultPosition, wxSize(64, -1), wxSP_ARROW_KEYS, 0, 200, INITIAL_PAD_BUFFER_SIZE);
 		padbuf_spin->Bind(wxEVT_SPINCTRL, &NetPlayDiag::OnAdjustBuffer, this);
 		bottom_szr->Add(padbuf_spin, 0, wxCENTER);
@@ -422,14 +420,12 @@ NetPlayDiag::~NetPlayDiag()
 
 void NetPlayDiag::OnChat(wxCommandEvent&)
 {
-	wxString s = m_chat_msg_text->GetValue();
+	wxString text = m_chat_msg_text->GetValue();
 
-	if (s.Length())
+	if (!text.empty())
 	{
-		if (s.Length() > 2000)
-			s.erase(2000);
-		netplay_client->SendChatMessage(WxStrToStr(s));
-		m_chat_text->AppendText(s.Prepend(" >> ").Append('\n'));
+		netplay_client->SendChatMessage(WxStrToStr(text));
+		m_chat_text->AppendText(text.Prepend(" >> ").Append('\n'));
 		m_chat_msg_text->Clear();
 	}
 }
@@ -442,6 +438,8 @@ void NetPlayDiag::GetNetSettings(NetSettings &settings)
 	settings.m_DSPHLE = instance.m_LocalCoreStartupParameter.bDSPHLE;
 	settings.m_DSPEnableJIT = instance.m_DSPEnableJIT;
 	settings.m_WriteToMemcard = m_memcard_write->GetValue();
+	settings.m_OCEnable = instance.m_OCEnable;
+	settings.m_OCFactor = instance.m_OCFactor;
 	settings.m_EXIDevice[0] = instance.m_EXIDevice[0];
 	settings.m_EXIDevice[1] = instance.m_EXIDevice[1];
 }
@@ -453,7 +451,7 @@ std::string NetPlayDiag::FindGame()
 		if (m_selected_game == BuildGameName(*game))
 			return game->GetFileName();
 
-	PanicAlertT("Game not found!");
+	WxUtils::ShowErrorDialog(_("Game not found!"));
 	return "";
 }
 
@@ -462,7 +460,7 @@ void NetPlayDiag::OnStart(wxCommandEvent&)
 	NetSettings settings;
 	GetNetSettings(settings);
 	netplay_server->SetNetSettings(settings);
-	netplay_server->StartGame(FindGame());
+	netplay_server->StartGame();
 }
 
 void NetPlayDiag::BootGame(const std::string& filename)
@@ -478,7 +476,7 @@ void NetPlayDiag::StopGame()
 // NetPlayUI methods called from ---NETPLAY--- thread
 void NetPlayDiag::Update()
 {
-	wxCommandEvent evt(wxEVT_THREAD, 1);
+	wxThreadEvent evt(wxEVT_THREAD, 1);
 	GetEventHandler()->AddPendingEvent(evt);
 }
 
@@ -491,15 +489,14 @@ void NetPlayDiag::AppendChat(const std::string& msg)
 
 void NetPlayDiag::OnMsgChangeGame(const std::string& filename)
 {
-	wxCommandEvent evt(wxEVT_THREAD, NP_GUI_EVT_CHANGE_GAME);
-	// TODO: using a wxString in AddPendingEvent from another thread is unsafe i guess?
-	evt.SetString(StrToWxStr(filename));
-	GetEventHandler()->AddPendingEvent(evt);
+	wxThreadEvent* evt = new wxThreadEvent(wxEVT_THREAD, NP_GUI_EVT_CHANGE_GAME);
+	evt->SetString(StrToWxStr(filename));
+	GetEventHandler()->QueueEvent(evt);
 }
 
 void NetPlayDiag::OnMsgStartGame()
 {
-	wxCommandEvent evt(wxEVT_THREAD, NP_GUI_EVT_START_GAME);
+	wxThreadEvent evt(wxEVT_THREAD, NP_GUI_EVT_START_GAME);
 	GetEventHandler()->AddPendingEvent(evt);
 	if (m_start_btn)
 		m_start_btn->Disable();
@@ -508,7 +505,7 @@ void NetPlayDiag::OnMsgStartGame()
 
 void NetPlayDiag::OnMsgStopGame()
 {
-	wxCommandEvent evt(wxEVT_THREAD, NP_GUI_EVT_STOP_GAME);
+	wxThreadEvent evt(wxEVT_THREAD, NP_GUI_EVT_STOP_GAME);
 	GetEventHandler()->AddPendingEvent(evt);
 	if (m_start_btn)
 		m_start_btn->Enable();
@@ -532,7 +529,7 @@ void NetPlayDiag::OnQuit(wxCommandEvent&)
 }
 
 // update gui
-void NetPlayDiag::OnThread(wxCommandEvent& event)
+void NetPlayDiag::OnThread(wxThreadEvent& event)
 {
 	// player list
 	m_playerids.clear();
@@ -551,11 +548,11 @@ void NetPlayDiag::OnThread(wxCommandEvent& event)
 	// remove ping from selection string, in case it has changed
 	selection.erase(selection.find_last_of("|") + 1);
 
-	if (selection.Length() > 0)
+	if (!selection.empty())
 	{
 		for (unsigned int i = 0; i < m_player_lbox->GetCount(); ++i)
 		{
-			if (selection == m_player_lbox->GetString(i).Mid(0, selection.Length()))
+			if (selection == m_player_lbox->GetString(i).Mid(0, selection.length()))
 			{
 				m_player_lbox->SetSelection(i);
 				break;
@@ -580,7 +577,9 @@ void NetPlayDiag::OnThread(wxCommandEvent& event)
 		// update selected game :/
 		{
 		m_selected_game.assign(WxStrToStr(event.GetString()));
-		m_game_btn->SetLabel(event.GetString().Prepend(_(" Game : ")));
+
+		wxString button_label = event.GetString();
+		m_game_btn->SetLabel(button_label.Prepend(_(" Game : ")));
 		}
 		break;
 	case NP_GUI_EVT_START_GAME :
@@ -633,6 +632,27 @@ void NetPlayDiag::OnConfigPads(wxCommandEvent&)
 	pmd.ShowModal();
 	netplay_server->SetPadMapping(mapping);
 	netplay_server->SetWiimoteMapping(wiimotemapping);
+}
+
+void NetPlayDiag::OnKick(wxCommandEvent&)
+{
+	wxString selection = m_player_lbox->GetStringSelection();
+	unsigned long player = 0;
+	selection.Mid(selection.find_last_of("[") + 1, selection.find_last_of("]")).ToULong(&player);
+
+	netplay_server->KickPlayer((u8)player);
+
+	m_player_lbox->SetSelection(wxNOT_FOUND);
+	wxCommandEvent event;
+	OnPlayerSelect(event);
+}
+
+void NetPlayDiag::OnPlayerSelect(wxCommandEvent&)
+{
+	if (m_player_lbox->GetSelection() > 0)
+		m_kick_btn->Enable();
+	else
+		m_kick_btn->Disable();
 }
 
 bool NetPlayDiag::IsRecording()

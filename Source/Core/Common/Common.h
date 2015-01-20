@@ -4,9 +4,6 @@
 
 #pragma once
 
-// DO NOT EVER INCLUDE <windows.h> directly _or indirectly_ from this file
-// since it slows down the build a lot.
-
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -15,7 +12,7 @@
 #define __has_feature(x) 0
 #endif
 
-// SVN version number
+// Git version number
 extern const char *scm_desc_str;
 extern const char *scm_branch_str;
 extern const char *scm_rev_str;
@@ -37,13 +34,28 @@ extern const char *netplay_dolphin_ver;
 #define UNUSED
 #endif
 
-#define STACKALIGN
-
-#if __cplusplus >= 201103 || defined(_MSC_VER) || defined(__GXX_EXPERIMENTAL_CXX0X__)
-#define HAVE_CXX11_SYNTAX 1
+#if defined(__GNUC__) || __clang__
+	#define EXPECT(x, y) __builtin_expect(x, y)
+	#define LIKELY(x)    __builtin_expect(!!(x), 1)
+	#define UNLIKELY(x)  __builtin_expect(!!(x), 0)
+	// Careful, wrong assumptions result in undefined behavior!
+	#define UNREACHABLE  __builtin_unreachable()
+	// Careful, wrong assumptions result in undefined behavior!
+	#define ASSUME(x)    do { if (!x) __builtin_unreachable(); } while (0)
+#else
+	#define EXPECT(x, y) (x)
+	#define LIKELY(x)    (x)
+	#define UNLIKELY(x)  (x)
+	// Careful, wrong assumptions result in undefined behavior!
+	#define UNREACHABLE  ASSUME(0)
+	#if defined(_MSC_VER)
+		// Careful, wrong assumptions result in undefined behavior!
+		#define ASSUME(x) __assume(x)
+	#else
+		#define ASSUME(x) do { void(x); } while (0)
+	#endif
 #endif
 
-#if HAVE_CXX11_SYNTAX
 // An inheritable class to disallow the copy constructor and operator= functions
 class NonCopyable
 {
@@ -55,24 +67,8 @@ private:
 	NonCopyable(NonCopyable&);
 	NonCopyable& operator=(NonCopyable& other);
 };
-#endif
 
-#ifdef __APPLE__
-// The Darwin ABI requires that stack frames be aligned to 16-byte boundaries.
-// This is only needed on i386 gcc - x86_64 already aligns to 16 bytes.
-#if defined __i386__ && defined __GNUC__
-#undef STACKALIGN
-#define STACKALIGN __attribute__((__force_align_arg_pointer__))
-#endif
-
-#elif defined _WIN32
-
-// Check MSC ver
-	#if !defined _MSC_VER || _MSC_VER <= 1000
-		#error needs at least version 1000 of MSC
-	#endif
-
-	#define NOMINMAX
+#if defined _WIN32
 
 // Memory leak checks
 	#define CHECK_HEAP_INTEGRITY()
@@ -168,5 +164,5 @@ enum EMUSTATE_CHANGE
 
 #include "Common/CommonTypes.h" // IWYU pragma: export
 #include "Common/CommonFuncs.h" // IWYU pragma: export // NOLINT
-#include "Common/Log.h" // IWYU pragma: export
 #include "Common/MsgHandler.h" // IWYU pragma: export
+#include "Common/Logging/Log.h" // IWYU pragma: export

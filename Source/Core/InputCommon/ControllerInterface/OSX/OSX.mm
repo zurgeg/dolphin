@@ -30,7 +30,8 @@ void DeviceElementDebugPrint(const void *value, void *context)
 		recurse = *(bool*)context;
 
 	std::string type = "";
-	switch (IOHIDElementGetType(e)) {
+	switch (IOHIDElementGetType(e))
+	{
 	case kIOHIDElementTypeInput_Axis:
 		type = "axis";
 		break;
@@ -57,7 +58,8 @@ void DeviceElementDebugPrint(const void *value, void *context)
 	std::string c_type = "";
 	if (type == "collection")
 	{
-		switch (IOHIDElementGetCollectionType(e)) {
+		switch (IOHIDElementGetCollectionType(e))
+		{
 		case kIOHIDElementCollectionTypePhysical:
 			c_type = "physical";
 			break;
@@ -106,7 +108,7 @@ void DeviceElementDebugPrint(const void *value, void *context)
 	}
 }
 
-void DeviceDebugPrint(IOHIDDeviceRef device)
+static void DeviceDebugPrint(IOHIDDeviceRef device)
 {
 #if 0
 #define shortlog(x) NSLog(@"%s: %@", \

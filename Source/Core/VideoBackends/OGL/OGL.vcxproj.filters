@@ -16,6 +16,9 @@
     <Filter Include="GLExtensions">
       <UniqueIdentifier>{4366f285-ded5-48c9-9464-03fb46174526}</UniqueIdentifier>
     </Filter>
+    <Filter Include="GLInterface">
+      <UniqueIdentifier>{1734a626-f6e2-41b1-8753-43447bed39af}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="NativeVertexFormat.cpp">
@@ -32,6 +35,9 @@
     </ClCompile>
     <ClCompile Include="RasterFont.cpp">
       <Filter>Logging</Filter>
+    </ClCompile>
+    <ClCompile Include="BoundingBox.cpp">
+      <Filter>Render</Filter>
     </ClCompile>
     <ClCompile Include="FramebufferManager.cpp">
       <Filter>Render</Filter>
@@ -56,9 +62,14 @@
     </ClCompile>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="SamplerCache.cpp" />
-    <ClCompile Include="stdafx.cpp" />
     <ClCompile Include="GLExtensions\GLExtensions.cpp">
       <Filter>GLExtensions</Filter>
+    </ClCompile>
+    <ClCompile Include="GLInterface\GLInterface.cpp">
+      <Filter>GLInterface</Filter>
+    </ClCompile>
+    <ClCompile Include="GLInterface\WGL.cpp">
+      <Filter>GLInterface</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -73,6 +84,9 @@
     </ClInclude>
     <ClInclude Include="RasterFont.h">
       <Filter>Logging</Filter>
+    </ClInclude>
+    <ClInclude Include="BoundingBox.h">
+      <Filter>Render</Filter>
     </ClInclude>
     <ClInclude Include="FramebufferManager.h">
       <Filter>Render</Filter>
@@ -98,7 +112,6 @@
     <ClInclude Include="main.h" />
     <ClInclude Include="SamplerCache.h" />
     <ClInclude Include="VideoBackend.h" />
-    <ClInclude Include="stdafx.h" />
     <ClInclude Include="GLExtensions\ARB_blend_func_extended.h">
       <Filter>GLExtensions</Filter>
     </ClInclude>
@@ -179,6 +192,9 @@
     </ClInclude>
     <ClInclude Include="GLExtensions\KHR_debug.h">
       <Filter>GLExtensions</Filter>
+    </ClInclude>
+    <ClInclude Include="GLInterface\WGL.h">
+      <Filter>GLInterface</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

@@ -7,9 +7,11 @@
 #ifdef _WIN32
 #include <ws2tcpip.h>
 #include <iphlpapi.h>
-#include <iphlpapi.h>
+#include <WinSock2.h>
 
-#include "fakepoll.h"
+typedef pollfd pollfd_t;
+
+#define poll WSAPoll
 #define MALLOC(x) HeapAlloc(GetProcessHeap(), 0, (x))
 #define FREE(x) HeapFree(GetProcessHeap(), 0, (x))
 
@@ -50,12 +52,15 @@ typedef struct pollfd pollfd_t;
 #include "Core/IPC_HLE/WII_IPC_HLE_Device_net.h"
 #include "Core/IPC_HLE/WII_IPC_HLE_Device_net_ssl.h"
 
-enum {
+enum
+{
 	SO_MSG_OOB      = 0x01,
 	SO_MSG_PEEK     = 0x02,
 	SO_MSG_NONBLOCK = 0x04,
 };
-enum {
+
+enum
+{
 	SO_SUCCESS,
 	SO_E2BIG = 1,
 	SO_EACCES,
@@ -192,7 +197,7 @@ public:
 
 };
 
-class WiiSockMan
+class WiiSockMan : public ::NonCopyable
 {
 public:
 	static s32 GetNetErrorCode(s32 ret, std::string caller, bool isRW);
@@ -222,7 +227,8 @@ public:
 	template <typename T>
 	void DoSock(s32 sock, u32 CommandAddress, T type)
 	{
-		if (WiiSockets.find(sock) == WiiSockets.end())
+		auto socket_entry = WiiSockets.find(sock);
+		if (socket_entry == WiiSockets.end())
 		{
 			IPCCommandType ct = static_cast<IPCCommandType>(Memory::Read_U32(CommandAddress));
 			ERROR_LOG(WII_IPC_NET,
@@ -232,15 +238,15 @@ public:
 		}
 		else
 		{
-			WiiSockets[sock].DoSock(CommandAddress, type);
+			socket_entry->second.DoSock(CommandAddress, type);
 		}
 	}
 
-private:
-	WiiSockMan() {};                   // Constructor? (the {} brackets) are needed here.
-	WiiSockMan(WiiSockMan const&);     // Don't Implement
-	void operator=(WiiSockMan const&); // Don't implement
-	std::unordered_map<s32, WiiSocket> WiiSockets;
+	void UpdateWantDeterminism(bool want);
 
+private:
+	WiiSockMan() = default;
+
+	std::unordered_map<s32, WiiSocket> WiiSockets;
 	s32 errno_last;
 };

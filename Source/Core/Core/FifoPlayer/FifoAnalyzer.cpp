@@ -2,6 +2,7 @@
 // Licensed under GPLv2
 // Refer to the license.txt file included.
 
+#include "Core/ConfigManager.h"
 #include "Core/Core.h"
 #include "Core/FifoPlayer/FifoAnalyzer.h"
 
@@ -16,8 +17,6 @@ namespace FifoAnalyzer
 void Init()
 {
 	VertexLoader_Normal::Init();
-	VertexLoader_Position::Init();
-	VertexLoader_TextCoord::Init();
 }
 
 u8 ReadFifo8(u8 *&data)
@@ -75,7 +74,7 @@ void GetTlutLoadData(u32 &tlutAddr, u32 &memAddr, u32 &tlutXferCount, BPMemory &
 	tlutXferCount = (bpMem.tmem_config.tlut_dest & 0x1FFC00) >> 5;
 
 	// TODO - figure out a cleaner way.
-	if (Core::g_CoreStartupParameter.bWii)
+	if (SConfig::GetInstance().m_LocalCoreStartupParameter.bWii)
 		memAddr = bpMem.tmem_config.tlut_src << 5;
 	else
 		memAddr = (bpMem.tmem_config.tlut_src & 0xFFFFF) << 5;
@@ -139,7 +138,7 @@ void CalculateVertexElementSizes(int sizes[], int vatIndex, const CPMemory &cpMe
 	const VAT &vtxAttr = cpMem.vtxAttr[vatIndex];
 
 	// Colors
-	const u32 colDesc[2] = {vtxDesc.Color0, vtxDesc.Color1};
+	const u64 colDesc[2] = {vtxDesc.Color0, vtxDesc.Color1};
 	const u32 colComp[2] = {vtxAttr.g0.Color0Comp, vtxAttr.g0.Color1Comp};
 
 	const u32 tcElements[8] =

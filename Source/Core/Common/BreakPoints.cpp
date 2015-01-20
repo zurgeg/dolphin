@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "Common/BreakPoints.h"
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 #include "Common/DebugInterface.h"
 #include "Core/PowerPC/JitCommon/JitBase.h"
 #include "Core/PowerPC/JitCommon/JitCache.h"
@@ -66,7 +66,7 @@ void BreakPoints::Add(const TBreakPoint& bp)
 	{
 		m_BreakPoints.push_back(bp);
 		if (jit)
-			jit->GetBlockCache()->InvalidateICache(bp.iAddress, 4);
+			jit->GetBlockCache()->InvalidateICache(bp.iAddress, 4, true);
 	}
 }
 
@@ -82,7 +82,7 @@ void BreakPoints::Add(u32 em_address, bool temp)
 		m_BreakPoints.push_back(pt);
 
 		if (jit)
-			jit->GetBlockCache()->InvalidateICache(em_address, 4);
+			jit->GetBlockCache()->InvalidateICache(em_address, 4, true);
 	}
 }
 
@@ -94,7 +94,7 @@ void BreakPoints::Remove(u32 em_address)
 		{
 			m_BreakPoints.erase(i);
 			if (jit)
-				jit->GetBlockCache()->InvalidateICache(em_address, 4);
+				jit->GetBlockCache()->InvalidateICache(em_address, 4, true);
 			return;
 		}
 	}
@@ -106,11 +106,24 @@ void BreakPoints::Clear()
 	{
 		for (const TBreakPoint& bp : m_BreakPoints)
 		{
-			jit->GetBlockCache()->InvalidateICache(bp.iAddress, 4);
+			jit->GetBlockCache()->InvalidateICache(bp.iAddress, 4, true);
 		}
 	}
 
 	m_BreakPoints.clear();
+}
+
+void BreakPoints::ClearAllTemporary()
+{
+	for (const TBreakPoint& bp : m_BreakPoints)
+	{
+		if (bp.bTemporary)
+		{
+			if (jit)
+				jit->GetBlockCache()->InvalidateICache(bp.iAddress, 4, true);
+			Remove(bp.iAddress);
+		}
+	}
 }
 
 MemChecks::TMemChecksStr MemChecks::GetStrings() const
@@ -203,4 +216,88 @@ void TMemCheck::Action(DebugInterface *debug_interface, u32 iValue, u32 addr, bo
 		if (Break)
 			debug_interface->BreakNow();
 	}
+}
+
+
+bool Watches::IsAddressWatch(u32 _iAddress) const
+{
+	for (const TWatch& bp : m_Watches)
+		if (bp.iAddress == _iAddress)
+			return true;
+
+	return false;
+}
+
+Watches::TWatchesStr Watches::GetStrings() const
+{
+	TWatchesStr bps;
+	for (const TWatch& bp : m_Watches)
+	{
+		std::stringstream ss;
+		ss << std::hex << bp.iAddress << " " << bp.name;
+		bps.push_back(ss.str());
+	}
+
+	return bps;
+}
+
+void Watches::AddFromStrings(const TWatchesStr& bpstrs)
+{
+	for (const std::string& bpstr : bpstrs)
+	{
+		TWatch bp;
+		std::stringstream ss;
+		ss << std::hex << bpstr;
+		ss >> bp.iAddress;
+		ss >> std::ws;
+		getline(ss, bp.name);
+		Add(bp);
+	}
+}
+
+void Watches::Add(const TWatch& bp)
+{
+	if (!IsAddressWatch(bp.iAddress))
+	{
+		m_Watches.push_back(bp);
+	}
+}
+
+void Watches::Add(u32 em_address)
+{
+	if (!IsAddressWatch(em_address)) // only add new addresses
+	{
+		TWatch pt; // breakpoint settings
+		pt.bOn = true;
+		pt.iAddress = em_address;
+
+		m_Watches.push_back(pt);
+	}
+}
+
+void Watches::Update(int count, u32 em_address)
+{
+	m_Watches.at(count).iAddress = em_address;
+}
+
+void Watches::UpdateName(int count, const std::string name)
+{
+	m_Watches.at(count).name = name;
+}
+
+void Watches::Remove(u32 em_address)
+{
+	for (auto i = m_Watches.begin(); i != m_Watches.end(); ++i)
+	{
+		if (i->iAddress == em_address)
+		{
+			m_Watches.erase(i);
+			return;
+		}
+	}
+}
+
+void Watches::Clear()
+{
+	m_Watches.clear();
 }

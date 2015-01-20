@@ -30,25 +30,13 @@
 #include "Core/PowerPC/PPCTables.h"
 #include "Core/PowerPC/Jit64/JitAsm.h"
 #include "Core/PowerPC/JitCommon/Jit_Util.h"
-#include "Core/PowerPC/JitCommon/JitBackpatch.h"
 #include "Core/PowerPC/JitCommon/JitBase.h"
 #include "Core/PowerPC/JitCommon/JitCache.h"
 #include "Core/PowerPC/JitILCommon/IR.h"
 #include "Core/PowerPC/JitILCommon/JitILBase.h"
 
-#if _M_X86_64
-#define DISABLE64 \
-	{FallBackToInterpreter(inst); return;}
-#else
-#define DISABLE64
-#endif
-
-class JitIL : public JitILBase, public EmuCodeBlock
+class JitIL : public JitILBase
 {
-private:
-	JitBlockCache blocks;
-	TrampolineCache trampolines;
-
 public:
 	Jit64AsmRoutineManager asm_routines;
 
@@ -58,39 +46,37 @@ public:
 	// Initialization, etc
 
 	void Init() override;
+
+	void EnableBlockLink();
+
 	void Shutdown() override;
 
 	// Jit!
 
 	void Jit(u32 em_address) override;
-	const u8* DoJit(u32 em_address, PPCAnalyst::CodeBuffer *code_buffer, JitBlock *b);
+	const u8* DoJit(u32 em_address, PPCAnalyst::CodeBuffer *code_buffer, JitBlock *b, u32 nextPC);
 
 	void Trace();
 
 	JitBlockCache *GetBlockCache() override { return &blocks; }
 
-	const u8 *BackPatch(u8 *codePtr, u32 em_address, void *ctx) override { return nullptr; };
-
-	bool IsInCodeSpace(u8 *ptr) override { return IsInSpace(ptr); }
-
 	void ClearCache() override;
-	const u8 *GetDispatcher() {
+	const u8 *GetDispatcher()
+	{
 		return asm_routines.dispatcher;  // asm_routines.dispatcher
 	}
-	const CommonAsmRoutines *GetAsmRoutines() override {
+
+	const CommonAsmRoutines *GetAsmRoutines() override
+	{
 		return &asm_routines;
 	}
 
-	const char *GetName() override {
-#if _M_X86_64
+	const char *GetName() override
+	{
 		return "JIT64IL";
-#else
-		return "JIT32IL";
-#endif
 	}
 
 	// Run!
-
 	void Run() override;
 	void SingleStep() override;
 
@@ -103,8 +89,6 @@ public:
 	void WriteCallInterpreter(UGeckoInstruction _inst);
 	void Cleanup();
 
-	void WriteToConstRamAddress(int accessSize, const Gen::OpArg& arg, u32 address);
-	void WriteFloatToConstRamAddress(const Gen::X64Reg& xmm_reg, u32 address);
 	void GenerateCarry(Gen::X64Reg temp_reg);
 
 	void tri_op(int d, int a, int b, bool reversible, void (Gen::XEmitter::*op)(Gen::X64Reg, Gen::OpArg));
@@ -125,4 +109,5 @@ public:
 	void DynaRunTable31(UGeckoInstruction _inst) override;
 	void DynaRunTable59(UGeckoInstruction _inst) override;
 	void DynaRunTable63(UGeckoInstruction _inst) override;
+
 };

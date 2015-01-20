@@ -3,10 +3,10 @@
 // Refer to the license.txt file included.
 
 
-// DiscScrubber removes the garbage data from discs (currently wii only) which
+// DiscScrubber removes the garbage data from discs (currently Wii only) which
 // is on the disc due to encryption
 
-// It could be adapted to gc discs, but the gain is most likely negligible,
+// It could be adapted to GameCube discs, but the gain is most likely negligible,
 // and having 1:1 backups of discs is always nice when they are reasonably sized
 
 // Note: the technique is inspired by Wiiscrubber, but much simpler - intentionally :)
@@ -25,7 +25,7 @@ namespace DiscScrubber
 {
 
 bool SetupScrub(const std::string& filename, int block_size);
-void GetNextBlock(File::IOFile& in, u8* buffer);
+size_t GetNextBlock(File::IOFile& in, u8* buffer);
 void Cleanup();
 
 } // namespace DiscScrubber

@@ -39,6 +39,7 @@
   <ImportGroup Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
     <Import Project="..\..\Source\VSProps\Base.props" />
+    <Import Project="..\..\Source\VSProps\ClDisableAllWarnings.props" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <ItemGroup>
@@ -47,6 +48,9 @@
     <ClCompile Include="cpu_detect_x86.cpp" />
     <ClCompile Include="FIFOSampleBuffer.cpp" />
     <ClCompile Include="FIRFilter.cpp" />
+    <ClCompile Include="InterpolateCubic.cpp" />
+    <ClCompile Include="InterpolateLinear.cpp" />
+    <ClCompile Include="InterpolateShannon.cpp" />            
     <ClCompile Include="mmx_optimized.cpp" />
     <ClCompile Include="PeakFinder.cpp" />
     <ClCompile Include="RateTransposer.cpp" />
@@ -61,6 +65,9 @@
     <ClInclude Include="FIFOSampleBuffer.h" />
     <ClInclude Include="FIFOSamplePipe.h" />
     <ClInclude Include="FIRFilter.h" />
+    <ClInclude Include="InterpolateCubic.h" />
+    <ClInclude Include="InterpolateLinear.h" />
+    <ClInclude Include="InterpolateShannon.h" />            
     <ClInclude Include="PeakFinder.h" />
     <ClInclude Include="RateTransposer.h" />
     <ClInclude Include="SoundTouch.h" />

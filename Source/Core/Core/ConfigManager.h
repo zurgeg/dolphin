@@ -17,7 +17,6 @@
 #define BACKEND_ALSA        "ALSA"
 #define BACKEND_AOSOUND     "AOSound"
 #define BACKEND_COREAUDIO   "CoreAudio"
-#define BACKEND_DIRECTSOUND "DSound"
 #define BACKEND_OPENAL      "OpenAL"
 #define BACKEND_PULSEAUDIO  "Pulse"
 #define BACKEND_XAUDIO2     "XAudio2"
@@ -33,7 +32,7 @@ struct SConfig : NonCopyable
 	// name of the last used filename
 	std::string m_LastFilename;
 
-	// gcm folder
+	// ISO folder
 	std::vector<std::string> m_ISOFolder;
 	bool m_RecursiveISOFolder;
 
@@ -50,6 +49,8 @@ struct SConfig : NonCopyable
 	int m_InterfaceLanguage;
 	// framelimit choose
 	unsigned int m_Framelimit;
+	bool m_OCEnable;
+	float m_OCFactor;
 	// other interface settings
 	bool m_InterfaceToolbar;
 	bool m_InterfaceStatusbar;
@@ -65,9 +66,15 @@ struct SConfig : NonCopyable
 	bool m_ListPal;
 	bool m_ListUsa;
 	bool m_ListJap;
+	bool m_ListAustralia;
 	bool m_ListFrance;
+	bool m_ListGermany;
+	bool m_ListInternational;
 	bool m_ListItaly;
 	bool m_ListKorea;
+	bool m_ListNetherlands;
+	bool m_ListRussia;
+	bool m_ListSpain;
 	bool m_ListTaiwan;
 	bool m_ListUnknown;
 	int m_ListSort;
@@ -88,21 +95,31 @@ struct SConfig : NonCopyable
 	std::string m_WirelessMac;
 	bool m_PauseMovie;
 	bool m_ShowLag;
+	bool m_ShowFrameCount;
 	std::string m_strMovieAuthor;
 	unsigned int m_FrameSkip;
+	bool m_DumpFrames;
+	bool m_ShowInputDisplay;
 
 	// DSP settings
 	bool m_DSPEnableJIT;
+	bool m_DSPCaptureLog;
 	bool m_DumpAudio;
+	bool m_IsMuted;
 	int m_Volume;
 	std::string sBackend;
 
+	// Input settings
+	bool m_BackgroundInput;
+	bool m_GameCubeAdapter;
+	bool m_GameCubeAdapterThread;
+
 	SysConf* m_SYSCONF;
 
-	// save settings
+	// Save settings
 	void SaveSettings();
 
-	// load settings
+	// Load settings
 	void LoadSettings();
 
 	// Return the permanent and somewhat globally used instance of this struct
@@ -114,6 +131,28 @@ struct SConfig : NonCopyable
 private:
 	SConfig();
 	~SConfig();
+
+	void SaveGeneralSettings(IniFile& ini);
+	void SaveInterfaceSettings(IniFile& ini);
+	void SaveDisplaySettings(IniFile& ini);
+	void SaveHotkeySettings(IniFile& ini);
+	void SaveGameListSettings(IniFile& ini);
+	void SaveCoreSettings(IniFile& ini);
+	void SaveDSPSettings(IniFile& ini);
+	void SaveInputSettings(IniFile& ini);
+	void SaveMovieSettings(IniFile& ini);
+	void SaveFifoPlayerSettings(IniFile& ini);
+
+	void LoadGeneralSettings(IniFile& ini);
+	void LoadInterfaceSettings(IniFile& ini);
+	void LoadDisplaySettings(IniFile& ini);
+	void LoadHotkeySettings(IniFile& ini);
+	void LoadGameListSettings(IniFile& ini);
+	void LoadCoreSettings(IniFile& ini);
+	void LoadDSPSettings(IniFile& ini);
+	void LoadInputSettings(IniFile& ini);
+	void LoadMovieSettings(IniFile& ini);
+	void LoadFifoPlayerSettings(IniFile& ini);
 
 	static SConfig* m_Instance;
 };

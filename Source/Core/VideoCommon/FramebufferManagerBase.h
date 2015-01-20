@@ -4,7 +4,7 @@
 
 #include "VideoCommon/VideoCommon.h"
 
-inline bool addrRangesOverlap(u32 aLower, u32 aUpper, u32 bLower, u32 bUpper)
+inline bool AddressRangesOverlap(u32 aLower, u32 aUpper, u32 bLower, u32 bUpper)
 {
 	return !((aLower >= bUpper) || (bLower >= aUpper));
 }
@@ -12,9 +12,6 @@ inline bool addrRangesOverlap(u32 aLower, u32 aUpper, u32 bLower, u32 bUpper)
 struct XFBSourceBase
 {
 	virtual ~XFBSourceBase() {}
-
-	virtual void Draw(const MathUtil::Rectangle<int> &sourcerc,
-		const MathUtil::Rectangle<float> &drawrc) const = 0;
 
 	virtual void DecodeToTexture(u32 xfbAddr, u32 fbWidth, u32 fbHeight) = 0;
 
@@ -45,15 +42,17 @@ public:
 	virtual ~FramebufferManagerBase();
 
 	static void CopyToXFB(u32 xfbAddr, u32 fbWidth, u32 fbHeight, const EFBRectangle& sourceRc,float Gamma);
-	static const XFBSourceBase* const* GetXFBSource(u32 xfbAddr, u32 fbWidth, u32 fbHeight, u32 &xfbCount);
+	static const XFBSourceBase* const* GetXFBSource(u32 xfbAddr, u32 fbWidth, u32 fbHeight, u32* xfbCount);
 
 	static void SetLastXfbWidth(unsigned int width) { s_last_xfb_width = width; }
 	static void SetLastXfbHeight(unsigned int height) { s_last_xfb_height = height; }
 	static unsigned int LastXfbWidth() { return s_last_xfb_width; }
 	static unsigned int LastXfbHeight() { return s_last_xfb_height; }
 
-	static int ScaleToVirtualXfbWidth(int x, unsigned int backbuffer_width);
-	static int ScaleToVirtualXfbHeight(int y, unsigned int backbuffer_height);
+	static int ScaleToVirtualXfbWidth(int x);
+	static int ScaleToVirtualXfbHeight(int y);
+
+	static unsigned int GetEFBLayers() { return m_EFBLayers; }
 
 protected:
 	struct VirtualXFB
@@ -70,10 +69,12 @@ protected:
 
 	typedef std::list<VirtualXFB> VirtualXFBListType;
 
+	static unsigned int m_EFBLayers;
+
 private:
-	virtual XFBSourceBase* CreateXFBSource(unsigned int target_width, unsigned int target_height) = 0;
+	virtual XFBSourceBase* CreateXFBSource(unsigned int target_width, unsigned int target_height, unsigned int layers) = 0;
 	// TODO: figure out why OGL is different for this guy
-	virtual void GetTargetSize(unsigned int *width, unsigned int *height, const EFBRectangle& sourceRc) = 0;
+	virtual void GetTargetSize(unsigned int *width, unsigned int *height) = 0;
 
 	static VirtualXFBListType::iterator FindVirtualXFB(u32 xfbAddr, u32 width, u32 height);
 
@@ -83,8 +84,8 @@ private:
 	virtual void CopyToRealXFB(u32 xfbAddr, u32 fbWidth, u32 fbHeight, const EFBRectangle& sourceRc,float Gamma = 1.0f) = 0;
 	static void CopyToVirtualXFB(u32 xfbAddr, u32 fbWidth, u32 fbHeight, const EFBRectangle& sourceRc,float Gamma = 1.0f);
 
-	static const XFBSourceBase* const* GetRealXFBSource(u32 xfbAddr, u32 fbWidth, u32 fbHeight, u32 &xfbCount);
-	static const XFBSourceBase* const* GetVirtualXFBSource(u32 xfbAddr, u32 fbWidth, u32 fbHeight, u32 &xfbCount);
+	static const XFBSourceBase* const* GetRealXFBSource(u32 xfbAddr, u32 fbWidth, u32 fbHeight, u32* xfbCount);
+	static const XFBSourceBase* const* GetVirtualXFBSource(u32 xfbAddr, u32 fbWidth, u32 fbHeight, u32* xfbCount);
 
 	static XFBSourceBase *m_realXFBSource; // Only used in Real XFB mode
 	static VirtualXFBListType m_virtualXFBList; // Only used in Virtual XFB mode

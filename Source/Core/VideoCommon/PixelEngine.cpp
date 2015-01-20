@@ -8,12 +8,13 @@
 
 #include "Common/Atomic.h"
 #include "Common/ChunkFile.h"
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 #include "Core/ConfigManager.h"
 #include "Core/CoreTiming.h"
 #include "Core/State.h"
 #include "Core/HW/MMIO.h"
 #include "Core/HW/ProcessorInterface.h"
+#include "VideoCommon/BoundingBox.h"
 #include "VideoCommon/CommandProcessor.h"
 #include "VideoCommon/PixelEngine.h"
 #include "VideoCommon/RenderBase.h"
@@ -97,17 +98,14 @@ static UPEAlphaReadReg     m_AlphaRead;
 static UPECtrlReg          m_Control;
 //static u16                 m_Token; // token value most recently encountered
 
-volatile u32 g_bSignalTokenInterrupt;
-volatile u32 g_bSignalFinishInterrupt;
+static volatile u32 g_bSignalTokenInterrupt;
+static volatile u32 g_bSignalFinishInterrupt;
 
 static int et_SetTokenOnMainThread;
 static int et_SetFinishOnMainThread;
 
-volatile u32 interruptSetToken = 0;
-volatile u32 interruptSetFinish = 0;
-
-u16 bbox[4];
-bool bbox_active;
+static volatile u32 interruptSetToken = 0;
+static volatile u32 interruptSetFinish = 0;
 
 enum
 {
@@ -128,9 +126,6 @@ void DoState(PointerWrap &p)
 	p.Do(g_bSignalFinishInterrupt);
 	p.Do(interruptSetToken);
 	p.Do(interruptSetFinish);
-
-	p.Do(bbox);
-	p.Do(bbox_active);
 }
 
 void UpdateInterrupts();
@@ -155,13 +150,6 @@ void Init()
 
 	et_SetTokenOnMainThread = CoreTiming::RegisterEvent("SetToken", SetToken_OnMainThread);
 	et_SetFinishOnMainThread = CoreTiming::RegisterEvent("SetFinish", SetFinish_OnMainThread);
-
-	bbox[0] = 0x80;
-	bbox[1] = 0xA0;
-	bbox[2] = 0x80;
-	bbox[3] = 0xA0;
-
-	bbox_active = false;
 }
 
 void RegisterMMIO(MMIO::Mapping* mmio, u32 base)
@@ -244,17 +232,12 @@ void RegisterMMIO(MMIO::Mapping* mmio, u32 base)
 	{
 		mmio->Register(base | (PE_BBOX_LEFT + 2 * i),
 			MMIO::ComplexRead<u16>([i](u32) {
-				bbox_active = false;
-				return bbox[i];
+				BoundingBox::active = false;
+				return g_video_backend->Video_GetBoundingBox(i);
 			}),
 			MMIO::InvalidWrite<u16>()
 		);
 	}
-}
-
-bool AllowIdleSkipping()
-{
-	return !SConfig::GetInstance().m_LocalCoreStartupParameter.bCPUThread || (!m_Control.PETokenEnable && !m_Control.PEFinishEnable);
 }
 
 void UpdateInterrupts()
@@ -326,37 +309,6 @@ void SetFinish()
 	CommandProcessor::interruptFinishWaiting = true;
 	CoreTiming::ScheduleEvent_Threadsafe(0, et_SetFinishOnMainThread, 0);
 	INFO_LOG(PIXELENGINE, "VIDEO Set Finish");
-}
-
-//This function is used in CommandProcessor when write CTRL_REGISTER and the new fifo is attached.
-void ResetSetFinish()
-{
-	//if SetFinish happened but PE_CTRL_REGISTER not, I reset the interrupt else
-	//remove event from the queue
-	if (g_bSignalFinishInterrupt)
-	{
-		UpdateFinishInterrupt(false);
-		g_bSignalFinishInterrupt = false;
-	}
-	else
-	{
-		CoreTiming::RemoveEvent(et_SetFinishOnMainThread);
-	}
-	CommandProcessor::interruptFinishWaiting = false;
-}
-
-void ResetSetToken()
-{
-	if (g_bSignalTokenInterrupt)
-	{
-		UpdateTokenInterrupt(false);
-		g_bSignalTokenInterrupt = 0;
-	}
-	else
-	{
-		CoreTiming::RemoveEvent(et_SetTokenOnMainThread);
-	}
-	CommandProcessor::interruptTokenWaiting = false;
 }
 
 UPEAlphaReadReg GetAlphaReadMode()

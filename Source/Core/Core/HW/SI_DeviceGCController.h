@@ -7,11 +7,9 @@
 #include "Core/HW/SI_Device.h"
 #include "InputCommon/GCPadStatus.h"
 
-
-// standard gamecube controller
 class CSIDevice_GCController : public ISIDevice
 {
-private:
+protected:
 
 	// Commands
 	enum EBufferCommands
@@ -24,8 +22,7 @@ private:
 
 	struct SOrigin
 	{
-		u8 uCommand;// Maybe should be button bits?
-		u8 unk_1;   // ..and this would be the other half
+		u16 uButton;
 		u8 uOriginStickX;
 		u8 uOriginStickY;
 		u8 uSubStickStickX;
@@ -88,11 +85,15 @@ public:
 	virtual int RunBuffer(u8* _pBuffer, int _iLength) override;
 
 	// Send and Receive pad input from network
-	static bool NetPlay_GetInput(u8 numPAD, SPADStatus status, u32 *PADStatus);
+	static bool NetPlay_GetInput(u8 numPAD, GCPadStatus* status);
 	static u8 NetPlay_InGamePadToLocalPad(u8 numPAD);
 
 	// Return true on new data
 	virtual bool GetData(u32& _Hi, u32& _Low) override;
+
+	virtual GCPadStatus GetPadStatus();
+	virtual u32 MapPadStatus(const GCPadStatus& pad_status);
+	virtual void HandleButtonCombos(const GCPadStatus& pad_status);
 
 	// Send a command directly
 	virtual void SendCommand(u32 _Cmd, u8 _Poll) override;

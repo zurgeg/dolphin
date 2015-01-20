@@ -19,18 +19,23 @@
 #include <wx/windowid.h>
 
 #include "Common/IniFile.h"
+#include "Core/ActionReplay.h"
 
 class GameListItem;
 class wxButton;
 class wxCheckBox;
 class wxCheckListBox;
 class wxChoice;
+class wxSlider;
+class wxSpinCtrl;
 class wxStaticBitmap;
 class wxTextCtrl;
 class wxTreeCtrl;
 class wxWindow;
 namespace DiscIO { struct SFileInfo; }
 namespace Gecko { class CodeConfigPanel; }
+
+extern std::vector<ActionReplay::ARCode> arCodes;
 
 struct PHackData
 {
@@ -39,13 +44,14 @@ struct PHackData
 	std::string PHZNear;
 	std::string PHZFar;
 };
+extern PHackData PHack_Data;
 
 class CISOProperties : public wxDialog
 {
 public:
 	CISOProperties(const std::string fileName,
 			wxWindow* parent,
-			wxWindowID id = 1,
+			wxWindowID id = wxID_ANY,
 			const wxString& title = _("Properties"),
 			const wxPoint& pos = wxDefaultPosition,
 			const wxSize& size = wxDefaultSize,
@@ -63,51 +69,56 @@ private:
 	DECLARE_EVENT_TABLE();
 
 	// Core
-	wxCheckBox *CPUThread, *SkipIdle, *MMU, *DCBZOFF, *TLBHack;
+	wxCheckBox *CPUThread, *SkipIdle, *MMU, *BAT, *DCBZOFF, *FPRF;
 	wxCheckBox *VBeam, *SyncGPU, *FastDiscSpeed, *BlockMerging, *DSPHLE;
+
+	wxArrayString arrayStringFor_GPUDeterminism;
+	wxChoice* GPUDeterminism;
 	// Wii
-	wxCheckBox *EnableWideScreen;
-	// Video
-	wxCheckBox *PHackEnable, *UseBBox;
-	wxButton *PHSettings;
+	wxCheckBox* EnableWideScreen;
+
+	// Stereoscopy
+	wxSlider* DepthPercentage;
+	wxSpinCtrl* ConvergenceMinimum;
+	wxCheckBox* MonoDepth;
 
 	wxArrayString arrayStringFor_EmuState;
-	wxChoice *EmuState;
-	wxTextCtrl *EmuIssues;
+	wxChoice* EmuState;
+	wxTextCtrl* EmuIssues;
 	wxArrayString arrayStringFor_Patches;
-	wxCheckListBox *Patches;
-	wxButton *EditPatch;
-	wxButton *RemovePatch;
+	wxCheckListBox* Patches;
+	wxButton* EditPatch;
+	wxButton* RemovePatch;
 	wxArrayString arrayStringFor_Cheats;
-	wxCheckListBox *Cheats;
-	wxButton *EditCheat;
-	wxButton *RemoveCheat;
+	wxCheckListBox* Cheats;
+	wxButton* EditCheat;
+	wxButton* RemoveCheat;
 	wxArrayString arrayStringFor_Speedhacks;
-	wxCheckListBox *Speedhacks;
-	wxButton *EditSpeedhack;
-	wxButton *AddSpeedhack;
-	wxButton *RemoveSpeedhack;
+	wxCheckListBox* Speedhacks;
+	wxButton* EditSpeedhack;
+	wxButton* AddSpeedhack;
+	wxButton* RemoveSpeedhack;
 
-	wxTextCtrl *m_Name;
-	wxTextCtrl *m_GameID;
-	wxTextCtrl *m_Country;
-	wxTextCtrl *m_MakerID;
-	wxTextCtrl *m_Revision;
-	wxTextCtrl *m_Date;
-	wxTextCtrl *m_FST;
-	wxTextCtrl *m_MD5Sum;
-	wxButton   *m_MD5SumCompute;
+	wxTextCtrl* m_Name;
+	wxTextCtrl* m_GameID;
+	wxTextCtrl* m_Country;
+	wxTextCtrl* m_MakerID;
+	wxTextCtrl* m_Revision;
+	wxTextCtrl* m_Date;
+	wxTextCtrl* m_FST;
+	wxTextCtrl* m_MD5Sum;
+	wxButton*   m_MD5SumCompute;
 	wxArrayString arrayStringFor_Lang;
-	wxChoice *m_Lang;
-	wxTextCtrl *m_ShortName;
-	wxTextCtrl *m_Maker;
-	wxTextCtrl *m_Comment;
-	wxStaticBitmap *m_Banner;
+	wxChoice*   m_Lang;
+	wxTextCtrl* m_ShortName;
+	wxTextCtrl* m_Maker;
+	wxTextCtrl* m_Comment;
+	wxStaticBitmap* m_Banner;
 
-	wxTreeCtrl *m_Treectrl;
+	wxTreeCtrl* m_Treectrl;
 	wxTreeItemId RootId;
 
-	Gecko::CodeConfigPanel *m_geckocode_panel;
+	Gecko::CodeConfigPanel* m_geckocode_panel;
 
 	enum
 	{
@@ -125,15 +136,12 @@ private:
 		ID_IDLESKIP,
 		ID_MMU,
 		ID_DCBZOFF,
-		ID_TLBHACK,
 		ID_VBEAM,
 		ID_SYNCGPU,
 		ID_DISCSPEED,
 		ID_MERGEBLOCKS,
 		ID_AUDIO_DSP_HLE,
 		ID_USE_BBOX,
-		ID_PHACKENABLE,
-		ID_PHSETTINGS,
 		ID_ENABLEPROGRESSIVESCAN,
 		ID_ENABLEWIDESCREEN,
 		ID_EDITCONFIG,
@@ -148,6 +156,10 @@ private:
 		ID_EDITCHEAT,
 		ID_ADDCHEAT,
 		ID_REMOVECHEAT,
+		ID_GPUDETERMINISM,
+		ID_DEPTHPERCENTAGE,
+		ID_CONVERGENCEMINIMUM,
+		ID_MONODEPTH,
 
 		ID_NAME,
 		ID_GAMEID,
@@ -194,18 +206,17 @@ private:
 	void CheckPartitionIntegrity(wxCommandEvent& event);
 	void SetRefresh(wxCommandEvent& event);
 	void OnChangeBannerLang(wxCommandEvent& event);
-	void PHackButtonClicked(wxCommandEvent& event);
 
-	GameListItem *OpenGameListItem;
+	GameListItem* OpenGameListItem;
 
-	std::vector<const DiscIO::SFileInfo *> GCFiles;
-	typedef std::vector<const DiscIO::SFileInfo *>::iterator fileIter;
+	std::vector<const DiscIO::SFileInfo*> GCFiles;
+	typedef std::vector<const DiscIO::SFileInfo*>::iterator fileIter;
 
 	size_t CreateDirectoryTree(wxTreeItemId& parent,
 			std::vector<const DiscIO::SFileInfo*> fileInfos,
 			const size_t _FirstIndex,
 			const size_t _LastIndex);
-	void ExportDir(const char* _rFullPath, const char* _rExportFilename,
+	void ExportDir(const std::string& _rFullPath, const std::string& _rExportFilename,
 			const int partitionNum = 0);
 
 	IniFile GameIniDefault;

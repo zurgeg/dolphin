@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <array>
 #include <bitset>
 #include <map>
 #include <memory>
@@ -42,24 +43,19 @@ struct JitBlock
 
 	bool invalid;
 
-	struct LinkData {
+	struct LinkData
+	{
 		u8 *exitPtrs;    // to be able to rewrite the exit jum
 		u32 exitAddress;
 		bool linkStatus; // is it already linked?
 	};
 	std::vector<LinkData> linkData;
 
-#ifdef _WIN32
 	// we don't really need to save start and stop
 	// TODO (mb2): ticStart and ticStop -> "local var" mean "in block" ... low priority ;)
 	u64 ticStart;   // for profiling - time.
 	u64 ticStop;    // for profiling - time.
 	u64 ticCounter; // for profiling - time.
-#endif
-
-#ifdef USE_VTUNE
-	char blockName[32];
-#endif
 };
 
 typedef void (*CompiledCode)();
@@ -81,18 +77,22 @@ public:
 		m_valid_block.reset(new u32[VALID_BLOCK_ALLOC_ELEMENTS]);
 		ClearAll();
 	}
+
 	void Set(u32 bit)
 	{
 		m_valid_block[bit / 32] |= 1u << (bit % 32);
 	}
+
 	void Clear(u32 bit)
 	{
 		m_valid_block[bit / 32] &= ~(1u << (bit % 32));
 	}
+
 	void ClearAll()
 	{
 		memset(m_valid_block.get(), 0, sizeof(u32) * VALID_BLOCK_ALLOC_ELEMENTS);
 	}
+
 	bool Test(u32 bit)
 	{
 		return (m_valid_block[bit / 32] & (1u << (bit % 32))) != 0;
@@ -101,31 +101,37 @@ public:
 
 class JitBaseBlockCache
 {
-	const u8 **blockCodePointers;
-	JitBlock *blocks;
+	enum
+	{
+		MAX_NUM_BLOCKS = 65536 * 2,
+	};
+
+	std::array<const u8*, MAX_NUM_BLOCKS> blockCodePointers;
+	std::array<JitBlock, MAX_NUM_BLOCKS> blocks;
 	int num_blocks;
 	std::multimap<u32, int> links_to;
 	std::map<std::pair<u32,u32>, u32> block_map; // (end_addr, start_addr) -> number
 	ValidBlockBitSet valid_block;
 
-	enum
-	{
-		MAX_NUM_BLOCKS = 65536*2,
-	};
+	bool m_initialized;
 
 	bool RangeIntersect(int s1, int e1, int s2, int e2) const;
 	void LinkBlockExits(int i);
 	void LinkBlock(int i);
 	void UnlinkBlock(int i);
 
+	u32* GetICachePtr(u32 addr);
+	void DestroyBlock(int block_num, bool invalidate);
+
 	// Virtual for overloaded
 	virtual void WriteLinkBlock(u8* location, const u8* address) = 0;
 	virtual void WriteDestroyBlock(const u8* location, u32 address) = 0;
 
 public:
-	JitBaseBlockCache() :
-		blockCodePointers(nullptr), blocks(nullptr), num_blocks(0),
-		iCache(nullptr), iCacheEx(nullptr), iCacheVMEM(nullptr) {}
+	JitBaseBlockCache() : num_blocks(0), m_initialized(false)
+	{
+	}
+
 	int AllocateBlock(u32 em_address);
 	void FinalizeBlock(int block_num, bool block_link, const u8 *code_ptr);
 
@@ -140,21 +146,17 @@ public:
 	JitBlock *GetBlock(int block_num);
 	int GetNumBlocks() const;
 	const u8 **GetCodePointers();
-	u8 *iCache;
-	u8 *iCacheEx;
-	u8 *iCacheVMEM;
-
-	u32* GetICachePtr(u32 addr);
+	std::array<u8, JIT_ICACHE_SIZE>   iCache;
+	std::array<u8, JIT_ICACHEEX_SIZE> iCacheEx;
+	std::array<u8, JIT_ICACHE_SIZE>   iCacheVMEM;
 
 	// Fast way to get a block. Only works on the first ppc instruction of a block.
 	int GetBlockNumberFromStartAddress(u32 em_address);
 
-	u32 GetOriginalFirstOp(int block_num);
 	CompiledCode GetCompiledCodeFromBlock(int block_num);
 
 	// DOES NOT WORK CORRECTLY WITH INLINING
-	void InvalidateICache(u32 address, const u32 length);
-	void DestroyBlock(int block_num, bool invalidate);
+	void InvalidateICache(u32 address, const u32 length, bool forced);
 };
 
 // x86 BlockCache

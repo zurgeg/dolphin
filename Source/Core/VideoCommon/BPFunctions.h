@@ -18,7 +18,6 @@ namespace BPFunctions
 void FlushPipeline();
 void SetGenerationMode();
 void SetScissor();
-void SetLineWidth();
 void SetDepthMode();
 void SetBlendMode();
 void SetDitherMode();
@@ -30,4 +29,4 @@ void CopyEFB(u32 dstAddr, const EFBRectangle& srcRect,
 void ClearScreen(const EFBRectangle &rc);
 void OnPixelFormatChange();
 void SetInterlacingMode(const BPCmd &bp);
-};
+}

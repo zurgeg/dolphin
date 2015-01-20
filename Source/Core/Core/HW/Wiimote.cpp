@@ -2,7 +2,7 @@
 // Licensed under GPLv2
 // Refer to the license.txt file included.
 
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 
 #include "Core/ConfigManager.h"
 #include "Core/Movie.h"
@@ -16,19 +16,20 @@
 namespace Wiimote
 {
 
-static InputPlugin g_plugin(WIIMOTE_INI_NAME, _trans("Wiimote"), "Wiimote");
-InputPlugin *GetPlugin()
+static InputConfig s_config(WIIMOTE_INI_NAME, _trans("Wiimote"), "Wiimote");
+
+InputConfig* GetConfig()
 {
-	return &g_plugin;
+	return &s_config;
 }
 
 void Shutdown()
 {
-	for (const ControllerEmu* i : g_plugin.controllers)
+	for (const ControllerEmu* i : s_config.controllers)
 	{
 		delete i;
 	}
-	g_plugin.controllers.clear();
+	s_config.controllers.clear();
 
 	WiimoteReal::Stop();
 
@@ -40,18 +41,16 @@ void Initialize(void* const hwnd, bool wait)
 {
 	// add 4 wiimotes
 	for (unsigned int i = WIIMOTE_CHAN_0; i<MAX_BBMOTES; ++i)
-		g_plugin.controllers.push_back(new WiimoteEmu::Wiimote(i));
+		s_config.controllers.push_back(new WiimoteEmu::Wiimote(i));
 
+	g_controller_interface.Initialize(hwnd);
 
-	g_controller_interface.SetHwnd(hwnd);
-	g_controller_interface.Initialize();
-
-	g_plugin.LoadConfig(false);
+	s_config.LoadConfig(false);
 
 	WiimoteReal::Initialize(wait);
 
 	// reload Wiimotes with our settings
-	if (Movie::IsPlayingInput() || Movie::IsRecordingInput())
+	if (Movie::IsMovieActive())
 		Movie::ChangeWiiPads();
 }
 
@@ -81,7 +80,7 @@ void Pause()
 void ControlChannel(int _number, u16 _channelID, const void* _pData, u32 _Size)
 {
 	if (WIIMOTE_SRC_HYBRID & g_wiimote_sources[_number])
-		((WiimoteEmu::Wiimote*)g_plugin.controllers[_number])->ControlChannel(_channelID, _pData, _Size);
+		((WiimoteEmu::Wiimote*)s_config.controllers[_number])->ControlChannel(_channelID, _pData, _Size);
 }
 
 // __________________________________________________________________________________________________
@@ -99,7 +98,7 @@ void ControlChannel(int _number, u16 _channelID, const void* _pData, u32 _Size)
 void InterruptChannel(int _number, u16 _channelID, const void* _pData, u32 _Size)
 {
 	if (WIIMOTE_SRC_HYBRID & g_wiimote_sources[_number])
-		((WiimoteEmu::Wiimote*)g_plugin.controllers[_number])->InterruptChannel(_channelID, _pData, _Size);
+		((WiimoteEmu::Wiimote*)s_config.controllers[_number])->InterruptChannel(_channelID, _pData, _Size);
 }
 
 // __________________________________________________________________________________________________
@@ -113,18 +112,10 @@ void Update(int _number)
 	//PanicAlert( "Wiimote_Update" );
 
 	// TODO: change this to a try_to_lock, and make it give empty input on failure
-	std::lock_guard<std::recursive_mutex> lk(g_plugin.controls_lock);
-
-	static int _last_number = 4;
-	if (_number <= _last_number)
-	{
-		g_controller_interface.UpdateOutput();
-		g_controller_interface.UpdateInput();
-	}
-	_last_number = _number;
+	std::lock_guard<std::recursive_mutex> lk(s_config.controls_lock);
 
 	if (WIIMOTE_SRC_EMU & g_wiimote_sources[_number])
-		((WiimoteEmu::Wiimote*)g_plugin.controllers[_number])->Update();
+		((WiimoteEmu::Wiimote*)s_config.controllers[_number])->Update();
 	else
 		WiimoteReal::Update(_number);
 }
@@ -156,7 +147,7 @@ void DoState(u8 **ptr, PointerWrap::Mode mode)
 
 	PointerWrap p(ptr, mode);
 	for (unsigned int i=0; i<MAX_BBMOTES; ++i)
-		((WiimoteEmu::Wiimote*)g_plugin.controllers[i])->DoState(p);
+		((WiimoteEmu::Wiimote*)s_config.controllers[i])->DoState(p);
 }
 
 // ___________________________________________________________________________

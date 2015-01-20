@@ -2,19 +2,14 @@
 // Licensed under GPLv2
 // Refer to the license.txt file included.
 
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 #include "Core/PowerPC/JitILCommon/JitILBase.h"
 
 void JitILBase::lhax(UGeckoInstruction inst)
 {
 	INSTRUCTION_START
-	JITDISABLE(bJITLoadStoreOff)
-
-	if (js.memcheck)
-	{
-		FallBackToInterpreter(inst);
-		return;
-	}
+	JITDISABLE(bJITLoadStoreOff);
+	FALLBACK_IF(js.memcheck);
 
 	IREmitter::InstLoc addr = ibuild.EmitLoadGReg(inst.RB);
 	if (inst.RA)
@@ -28,13 +23,8 @@ void JitILBase::lhax(UGeckoInstruction inst)
 void JitILBase::lXz(UGeckoInstruction inst)
 {
 	INSTRUCTION_START
-	JITDISABLE(bJITLoadStoreOff)
-
-	if (js.memcheck)
-	{
-		FallBackToInterpreter(inst);
-		return;
-	}
+	JITDISABLE(bJITLoadStoreOff);
+	FALLBACK_IF(js.memcheck);
 
 	IREmitter::InstLoc addr = ibuild.EmitIntConst(inst.SIMM_16);
 	if (inst.RA)
@@ -43,20 +33,47 @@ void JitILBase::lXz(UGeckoInstruction inst)
 		ibuild.EmitStoreGReg(addr, inst.RA);
 
 	IREmitter::InstLoc val;
+
+	// Idle Skipping. This really should be done somewhere else.
+	// Either lower in the IR or higher in PPCAnalyist
+	if (SConfig::GetInstance().m_LocalCoreStartupParameter.bSkipIdle &&
+		PowerPC::GetState() != PowerPC::CPU_STEPPING &&
+		inst.OPCD == 32 && // Lwx
+		(inst.hex & 0xFFFF0000) == 0x800D0000 &&
+		(Memory::ReadUnchecked_U32(js.compilerPC + 4) == 0x28000000 ||
+		(SConfig::GetInstance().m_LocalCoreStartupParameter.bWii && Memory::ReadUnchecked_U32(js.compilerPC + 4) == 0x2C000000)) &&
+		Memory::ReadUnchecked_U32(js.compilerPC + 8) == 0x4182fff8)
+	{
+		val = ibuild.EmitLoad32(addr);
+		ibuild.EmitIdleBranch(val, ibuild.EmitIntConst(js.compilerPC));
+		ibuild.EmitStoreGReg(val, inst.RD);
+		return;
+	}
+
 	switch (inst.OPCD & ~0x1)
 	{
-	case 32: val = ibuild.EmitLoad32(addr); break; //lwz
-	case 40: val = ibuild.EmitLoad16(addr); break; //lhz
-	case 34: val = ibuild.EmitLoad8(addr);  break; //lbz
-	default: PanicAlert("lXz: invalid access size"); val = nullptr; break;
+	case 32: // lwz
+		val = ibuild.EmitLoad32(addr);
+		break;
+	case 40: // lhz
+		val = ibuild.EmitLoad16(addr);
+		break;
+	case 34: // lbz
+		val = ibuild.EmitLoad8(addr);
+		break;
+	default:
+		PanicAlert("lXz: invalid access size");
+		val = nullptr;
+		break;
 	}
+
 	ibuild.EmitStoreGReg(val, inst.RD);
 }
 
 void JitILBase::lbzu(UGeckoInstruction inst)
 {
 	INSTRUCTION_START
-	JITDISABLE(bJITLoadStoreOff)
+	JITDISABLE(bJITLoadStoreOff);
 	const IREmitter::InstLoc uAddress = ibuild.EmitAdd(ibuild.EmitLoadGReg(inst.RA), ibuild.EmitIntConst((int)inst.SIMM_16));
 	const IREmitter::InstLoc temp = ibuild.EmitLoad8(uAddress);
 	ibuild.EmitStoreGReg(temp, inst.RD);
@@ -66,13 +83,8 @@ void JitILBase::lbzu(UGeckoInstruction inst)
 void JitILBase::lha(UGeckoInstruction inst)
 {
 	INSTRUCTION_START
-	JITDISABLE(bJITLoadStoreOff)
-
-	if (js.memcheck)
-	{
-		FallBackToInterpreter(inst);
-		return;
-	}
+	JITDISABLE(bJITLoadStoreOff);
+	FALLBACK_IF(js.memcheck);
 
 	IREmitter::InstLoc addr = ibuild.EmitIntConst((s32)(s16)inst.SIMM_16);
 
@@ -87,13 +99,8 @@ void JitILBase::lha(UGeckoInstruction inst)
 void JitILBase::lXzx(UGeckoInstruction inst)
 {
 	INSTRUCTION_START
-	JITDISABLE(bJITLoadStoreOff)
-
-	if (js.memcheck)
-	{
-		FallBackToInterpreter(inst);
-		return;
-	}
+	JITDISABLE(bJITLoadStoreOff);
+	FALLBACK_IF(js.memcheck);
 
 	IREmitter::InstLoc addr = ibuild.EmitLoadGReg(inst.RB);
 
@@ -107,10 +114,17 @@ void JitILBase::lXzx(UGeckoInstruction inst)
 	IREmitter::InstLoc val;
 	switch (inst.SUBOP10 & ~32)
 	{
-	default: PanicAlert("lXzx: invalid access size");
-	case 23:  val = ibuild.EmitLoad32(addr); break; //lwzx
-	case 279: val = ibuild.EmitLoad16(addr); break; //lhzx
-	case 87:  val = ibuild.EmitLoad8(addr);  break; //lbzx
+	default:
+		PanicAlert("lXzx: invalid access size");
+	case 23:  // lwzx
+		val = ibuild.EmitLoad32(addr);
+		break;
+	case 279: // lhzx
+		val = ibuild.EmitLoad16(addr);
+		break;
+	case 87:  // lbzx
+		val = ibuild.EmitLoad8(addr);
+		break;
 	}
 	ibuild.EmitStoreGReg(val, inst.RD);
 }
@@ -118,56 +132,43 @@ void JitILBase::lXzx(UGeckoInstruction inst)
 void JitILBase::dcbst(UGeckoInstruction inst)
 {
 	INSTRUCTION_START
-	JITDISABLE(bJITLoadStoreOff)
+	JITDISABLE(bJITLoadStoreOff);
 
 	// If the dcbst instruction is preceded by dcbt, it is flushing a prefetched
 	// memory location.  Do not invalidate the JIT cache in this case as the memory
 	// will be the same.
 	// dcbt = 0x7c00022c
-	if ((Memory::ReadUnchecked_U32(js.compilerPC - 4) & 0x7c00022c) != 0x7c00022c)
-	{
-		FallBackToInterpreter(inst);
-		return;
-	}
+	FALLBACK_IF((Memory::ReadUnchecked_U32(js.compilerPC - 4) & 0x7c00022c) != 0x7c00022c);
 }
 
 // Zero cache line.
 void JitILBase::dcbz(UGeckoInstruction inst)
 {
-	FallBackToInterpreter(inst);
-	return;
+	FALLBACK_IF(true);
 
 	// TODO!
 #if 0
-	if (Core::g_CoreStartupParameter.bJITOff || Core::g_CoreStartupParameter.bJITLoadStoreOff)
-		{Default(inst); return;} // turn off from debugger
+	if (SConfig::GetInstance().m_LocalCoreStartupParameter.bJITOff || SConfig::GetInstance().m_LocalCoreStartupParameter.bJITLoadStoreOff)
+	{
+		Default(inst);
+		return;
+	}
 	INSTRUCTION_START;
-		MOV(32, R(EAX), gpr.R(inst.RB));
+		MOV(32, R(RSCRATCH), gpr.R(inst.RB));
 	if (inst.RA)
-		ADD(32, R(EAX), gpr.R(inst.RA));
-	AND(32, R(EAX), Imm32(~31));
+		ADD(32, R(RSCRATCH), gpr.R(inst.RA));
+	AND(32, R(RSCRATCH), Imm32(~31));
 	PXOR(XMM0, R(XMM0));
-#if _M_X86_64
-	MOVAPS(MComplex(EBX, EAX, SCALE_1, 0), XMM0);
-	MOVAPS(MComplex(EBX, EAX, SCALE_1, 16), XMM0);
-#else
-	AND(32, R(EAX), Imm32(Memory::MEMVIEW32_MASK));
-	MOVAPS(MDisp(EAX, (u32)Memory::base), XMM0);
-	MOVAPS(MDisp(EAX, (u32)Memory::base + 16), XMM0);
-#endif
+	MOVAPS(MComplex(RMEM, RSCRATCH, SCALE_1, 0), XMM0);
+	MOVAPS(MComplex(RMEM, RSCRATCH, SCALE_1, 16), XMM0);
 #endif
 }
 
 void JitILBase::stX(UGeckoInstruction inst)
 {
 	INSTRUCTION_START
-	JITDISABLE(bJITLoadStoreOff)
-
-	if (js.memcheck)
-	{
-		FallBackToInterpreter(inst);
-		return;
-	}
+	JITDISABLE(bJITLoadStoreOff);
+	FALLBACK_IF(js.memcheck);
 
 	IREmitter::InstLoc addr = ibuild.EmitIntConst(inst.SIMM_16);
 	IREmitter::InstLoc value = ibuild.EmitLoadGReg(inst.RS);
@@ -179,23 +180,26 @@ void JitILBase::stX(UGeckoInstruction inst)
 
 	switch (inst.OPCD & ~1)
 	{
-	case 36: ibuild.EmitStore32(value, addr); break; //stw
-	case 44: ibuild.EmitStore16(value, addr); break; //sth
-	case 38: ibuild.EmitStore8(value, addr); break;  //stb
-	default: _assert_msg_(DYNA_REC, 0, "AWETKLJASDLKF"); return;
+	case 36: // stw
+		ibuild.EmitStore32(value, addr);
+		break;
+	case 44: // sth
+		ibuild.EmitStore16(value, addr);
+		break;
+	case 38: // stb
+		ibuild.EmitStore8(value, addr);
+		break;
+	default:
+		_assert_msg_(DYNA_REC, 0, "stX: Invalid access size.");
+		return;
 	}
 }
 
 void JitILBase::stXx(UGeckoInstruction inst)
 {
 	INSTRUCTION_START
-	JITDISABLE(bJITLoadStoreOff)
-
-	if (js.memcheck)
-	{
-		FallBackToInterpreter(inst);
-		return;
-	}
+	JITDISABLE(bJITLoadStoreOff);
+	FALLBACK_IF(js.memcheck);
 
 	IREmitter::InstLoc addr = ibuild.EmitLoadGReg(inst.RB);
 	IREmitter::InstLoc value = ibuild.EmitLoadGReg(inst.RS);
@@ -207,10 +211,18 @@ void JitILBase::stXx(UGeckoInstruction inst)
 
 	switch (inst.SUBOP10 & ~32)
 	{
-	case 151: ibuild.EmitStore32(value, addr); break; //stw
-	case 407: ibuild.EmitStore16(value, addr); break; //sth
-	case 215: ibuild.EmitStore8(value, addr); break;  //stb
-	default: _assert_msg_(DYNA_REC, 0, "AWETKLJASDLKF"); return;
+	case 151: // stw
+		ibuild.EmitStore32(value, addr);
+		break;
+	case 407: // sth
+		ibuild.EmitStore16(value, addr);
+		break;
+	case 215: // stb
+		ibuild.EmitStore8(value, addr);
+		break;
+	default:
+		_assert_msg_(DYNA_REC, 0, "stXx: Invalid store size.");
+		return;
 	}
 }
 
@@ -218,13 +230,8 @@ void JitILBase::stXx(UGeckoInstruction inst)
 void JitILBase::lmw(UGeckoInstruction inst)
 {
 	INSTRUCTION_START
-	JITDISABLE(bJITLoadStoreOff)
-
-	if (js.memcheck)
-	{
-		FallBackToInterpreter(inst);
-		return;
-	}
+	JITDISABLE(bJITLoadStoreOff);
+	FALLBACK_IF(js.memcheck);
 
 	IREmitter::InstLoc addr = ibuild.EmitIntConst(inst.SIMM_16);
 
@@ -242,13 +249,8 @@ void JitILBase::lmw(UGeckoInstruction inst)
 void JitILBase::stmw(UGeckoInstruction inst)
 {
 	INSTRUCTION_START
-	JITDISABLE(bJITLoadStoreOff)
-
-	if (js.memcheck)
-	{
-		FallBackToInterpreter(inst);
-		return;
-	}
+	JITDISABLE(bJITLoadStoreOff);
+	FALLBACK_IF(js.memcheck);
 
 	IREmitter::InstLoc addr = ibuild.EmitIntConst(inst.SIMM_16);
 

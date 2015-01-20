@@ -8,7 +8,8 @@ namespace OGL
 
 void ClearEFBCache();
 
-enum GLSL_VERSION {
+enum GLSL_VERSION
+{
 	GLSL_130,
 	GLSL_140,
 	GLSL_150,  // and above
@@ -17,7 +18,8 @@ enum GLSL_VERSION {
 };
 
 // ogl-only config, so not in VideoConfig.h
-extern struct VideoConfig {
+struct VideoConfig
+{
 	bool bSupportsGLSLCache;
 	bool bSupportsGLPinnedMemory;
 	bool bSupportsGLSync;
@@ -28,6 +30,8 @@ extern struct VideoConfig {
 	GLSL_VERSION eSupportedGLSLVersion;
 	bool bSupportOGL31;
 	bool bSupportViewportFloat;
+	bool bSupportsAEP;
+	bool bSupportsDebug;
 
 	const char* gl_vendor;
 	const char* gl_renderer;
@@ -35,7 +39,8 @@ extern struct VideoConfig {
 	const char* glsl_version;
 
 	s32 max_samples;
-} g_ogl_config;
+};
+extern VideoConfig g_ogl_config;
 
 class Renderer : public ::Renderer
 {
@@ -53,7 +58,6 @@ public:
 	void SetDepthMode() override;
 	void SetLogicOpMode() override;
 	void SetDitherMode() override;
-	void SetLineWidth() override;
 	void SetSamplerState(int stage,int texindex) override;
 	void SetInterlacingMode() override;
 	void SetViewport() override;
@@ -63,17 +67,20 @@ public:
 	void RestoreState() override {}
 
 	void RenderText(const std::string& text, int left, int top, u32 color) override;
-	void DrawDebugInfo();
+	void ShowEfbCopyRegions();
 	void FlipImageData(u8 *data, int w, int h, int pixel_width = 3);
 
 	u32 AccessEFB(EFBAccessType type, u32 x, u32 y, u32 poke_data) override;
+
+	u16 BBoxRead(int index) override;
+	void BBoxWrite(int index, u16 value) override;
 
 	void ResetAPIState() override;
 	void RestoreAPIState() override;
 
 	TargetRectangle ConvertEFBRectangle(const EFBRectangle& rc) override;
 
-	void SwapImpl(u32 xfbAddr, u32 fbWidth, u32 fbHeight, const EFBRectangle& rc,float Gamma) override;
+	void SwapImpl(u32 xfbAddr, u32 fbWidth, u32 fbStride, u32 fbHeight, const EFBRectangle& rc, float Gamma) override;
 
 	void ClearScreen(const EFBRectangle& rc, bool colorEnable, bool alphaEnable, bool zEnable, u32 color, u32 z) override;
 
@@ -81,8 +88,12 @@ public:
 
 	bool SaveScreenshot(const std::string &filename, const TargetRectangle &rc) override;
 
+	int GetMaxTextureSize() override;
+
 private:
 	void UpdateEFBCache(EFBAccessType type, u32 cacheRectIdx, const EFBRectangle& efbPixelRc, const TargetRectangle& targetPixelRc, const u32* data);
+
+	void BlitScreen(TargetRectangle src, TargetRectangle dst, GLuint src_texture, int src_width, int src_height);
 };
 
 }

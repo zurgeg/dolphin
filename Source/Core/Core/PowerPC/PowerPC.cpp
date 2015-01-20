@@ -4,7 +4,7 @@
 
 #include "Common/Atomic.h"
 #include "Common/ChunkFile.h"
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 #include "Common/FPURoundMode.h"
 #include "Common/MathUtil.h"
 
@@ -30,21 +30,22 @@ namespace PowerPC
 
 // STATE_TO_SAVE
 PowerPCState GC_ALIGNED16(ppcState);
-volatile CPUState state = CPU_STEPPING;
+static volatile CPUState state = CPU_POWERDOWN;
 
 Interpreter * const interpreter = Interpreter::getInstance();
-CoreMode mode;
+static CoreMode mode;
 
+Watches watches;
 BreakPoints breakpoints;
 MemChecks memchecks;
 PPCDebugInterface debug_interface;
 
 u32 CompactCR()
 {
-	u32 new_cr = ppcState.cr_fast[0] << 28;
-	for (int i = 1; i < 8; i++)
+	u32 new_cr = 0;
+	for (int i = 0; i < 8; i++)
 	{
-		new_cr |= ppcState.cr_fast[i] << (28 - i * 4);
+		new_cr |= GetCRField(i) << (28 - i * 4);
 	}
 	return new_cr;
 }
@@ -53,7 +54,7 @@ void ExpandCR(u32 cr)
 {
 	for (int i = 0; i < 8; i++)
 	{
-		ppcState.cr_fast[i] = (cr >> (28 - i * 4)) & 0xF;
+		SetCRField(i, (cr >> (28 - i * 4)) & 0xF);
 	}
 }
 
@@ -74,7 +75,7 @@ void DoState(PointerWrap &p)
 	JitInterface::DoState(p);
 }
 
-void ResetRegisters()
+static void ResetRegisters()
 {
 	memset(ppcState.ps, 0, sizeof(ppcState.ps));
 	memset(ppcState.gpr, 0, sizeof(ppcState.gpr));
@@ -99,7 +100,8 @@ void ResetRegisters()
 	ppcState.pc = 0;
 	ppcState.npc = 0;
 	ppcState.Exceptions = 0;
-	((u64*)(&ppcState.cr_fast[0]))[0] = 0;
+	for (auto& v : ppcState.cr_val)
+		v = 0x8000000000000001;
 
 	TL = 0;
 	TU = 0;
@@ -116,15 +118,22 @@ void Init(int cpu_core)
 	FPURoundMode::SetPrecisionMode(FPURoundMode::PREC_53);
 
 	memset(ppcState.sr, 0, sizeof(ppcState.sr));
-	ppcState.DebugCount = 0;
-	ppcState.dtlb_last = 0;
-	memset(ppcState.dtlb_va, 0, sizeof(ppcState.dtlb_va));
-	memset(ppcState.dtlb_pa, 0, sizeof(ppcState.dtlb_pa));
-	ppcState.itlb_last = 0;
-	memset(ppcState.itlb_va, 0, sizeof(ppcState.itlb_va));
-	memset(ppcState.itlb_pa, 0, sizeof(ppcState.itlb_pa));
 	ppcState.pagetable_base = 0;
 	ppcState.pagetable_hashmask = 0;
+
+	for (int tlb = 0; tlb < 2; tlb++)
+	{
+		for (int set = 0; set < 64; set++)
+		{
+			ppcState.tlb[tlb][set].recent = 0;
+			for (int way = 0; way < 2; way++)
+			{
+				ppcState.tlb[tlb][set].paddr[way] = 0;
+				ppcState.tlb[tlb][set].pte[way] = 0;
+				ppcState.tlb[tlb][set].tag[way] = TLB_TAG_INVALID;
+			}
+		}
+	}
 
 	ResetRegisters();
 	PPCTables::InitTables(cpu_core);
@@ -161,6 +170,9 @@ void Init(int cpu_core)
 	state = CPU_STEPPING;
 
 	ppcState.iCache.Init();
+
+	if (SConfig::GetInstance().m_LocalCoreStartupParameter.bEnableDebugging)
+		breakpoints.ClearAllTemporary();
 }
 
 void Shutdown()
@@ -299,10 +311,6 @@ void UpdatePerformanceMonitor(u32 cycles, u32 num_load_stores, u32 num_fp_inst)
 
 void CheckExceptions()
 {
-	// Make sure we are checking against the latest EXI status. This is required
-	// for devices which interrupt frequently, such as the gc mic
-	ExpansionInterface::UpdateInterrupts();
-
 	// Read volatile data once
 	u32 exceptions = ppcState.Exceptions;
 
@@ -360,7 +368,7 @@ void CheckExceptions()
 	}
 	else if (exceptions & EXCEPTION_FPU_UNAVAILABLE)
 	{
-		//This happens a lot - Gamecube OS uses deferred FPU context switching
+		//This happens a lot - GameCube OS uses deferred FPU context switching
 		SRR0 = PC; // re-execute the instruction
 		SRR1 = MSR & 0x87C0FFFF;
 		MSR |= (MSR >> 16) & 1;
@@ -446,7 +454,7 @@ void CheckExternalExceptions()
 	u32 exceptions = ppcState.Exceptions;
 
 	// EXTERNAL INTERRUPT
-	if (MSR & 0x0008000) //hacky...the exception shouldn't be generated if EE isn't set...
+	if (exceptions && (MSR & 0x0008000))  // Handling is delayed until MSR.EE=1.
 	{
 		if (exceptions & EXCEPTION_EXTERNAL_INT)
 		{

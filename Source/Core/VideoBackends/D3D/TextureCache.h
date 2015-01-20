@@ -23,7 +23,7 @@ private:
 
 		D3D11_USAGE usage;
 
-		TCacheEntry(D3DTexture2D *_tex) : texture(_tex) {}
+		TCacheEntry(const TCacheEntryConfig& config, D3DTexture2D *_tex) : TCacheEntryBase(config), texture(_tex) {}
 		~TCacheEntry();
 
 		void Load(unsigned int width, unsigned int height,
@@ -38,11 +38,12 @@ private:
 		bool Save(const std::string& filename, unsigned int level) override;
 	};
 
-	TCacheEntryBase* CreateTexture(unsigned int width, unsigned int height,
-		unsigned int expanded_width, unsigned int tex_levels, PC_TexFormat pcfmt) override;
+	TCacheEntryBase* CreateTexture(const TCacheEntryConfig& config) override;
 
-	TCacheEntryBase* CreateRenderTargetTexture(unsigned int scaled_tex_w, unsigned int scaled_tex_h) override;
 	u64 EncodeToRamFromTexture(u32 address, void* source_texture, u32 SourceW, u32 SourceH, bool bFromZBuffer, bool bIsIntensityFmt, u32 copyfmt, int bScaleByHalf, const EFBRectangle& source) {return 0;};
+
+	void CompileShaders() override { }
+	void DeleteShaders() override { }
 };
 
 }

@@ -24,6 +24,7 @@ import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ListView;
 
+import org.dolphinemu.dolphinemu.AssetCopyService;
 import org.dolphinemu.dolphinemu.NativeLibrary;
 import org.dolphinemu.dolphinemu.R;
 import org.dolphinemu.dolphinemu.about.AboutActivity;
@@ -103,10 +104,15 @@ public final class GameListActivity extends Activity
 		};
 		mDrawerLayout.setDrawerListener(mDrawerToggle);
 
-		// Display the game list fragment on activity creation,
-		// but only if no previous states have been saved. 
+
+		// Stuff in this block only happens when this activity is newly created (i.e. not a rotation)
 		if (savedInstanceState == null)
 		{
+			// Copy assets into appropriate locations.
+			Intent copyAssets = new Intent(this, AssetCopyService.class);
+			startService(copyAssets);
+
+			// Display the game list fragment.
 			final GameListFragment gameList = new GameListFragment();
 			FragmentTransaction ft = getFragmentManager().beginTransaction();
 			ft.replace(R.id.content_frame, gameList);
@@ -257,16 +263,16 @@ public final class GameListActivity extends Activity
 			builder.setPositiveButton(R.string.yes, new DialogInterface.OnClickListener() {
 				public void onClick(DialogInterface dialog, int which)
 				{
-					String directories = NativeLibrary.GetConfig("Dolphin.ini", "General", "GCMPathes", "0");
+					String directories = NativeLibrary.GetConfig("Dolphin.ini", "General", "ISOPaths", "0");
 					int intDirs = Integer.parseInt(directories);
 
 					for (int i = 0; i < intDirs; i++)
 					{
-						NativeLibrary.SetConfig("Dolphin.ini", "General", "GCMPath" + i, "");
+						NativeLibrary.SetConfig("Dolphin.ini", "General", "ISOPath" + i, "");
 					}
 
 					// Since we flushed all paths, we signify this in the ini.
-					NativeLibrary.SetConfig("Dolphin.ini", "General", "GCMPathes", "0");
+					NativeLibrary.SetConfig("Dolphin.ini", "General", "ISOPaths", "0");
 
 					// Now finally, clear the game list.
 					((GameListFragment) getFragmentManager().findFragmentById(R.id.content_frame)).clearGameList();
@@ -298,6 +304,13 @@ public final class GameListActivity extends Activity
 	@Override
 	public void onBackPressed()
 	{
-		SwitchPage(0);
+		if (mCurFragmentNum == 0)
+		{
+			finish();
+		}
+		else
+		{
+			SwitchPage(0);
+		}
 	}
 }

@@ -3,10 +3,11 @@
 // Refer to the license.txt file included.
 
 #include <cinttypes>
+#include <memory>
 
 #include "Common/CDUtils.h"
-#include "Common/Common.h"
 #include "Common/CommonPaths.h"
+#include "Common/CommonTypes.h"
 #include "Common/FileUtil.h"
 #include "Common/StringUtil.h"
 
@@ -21,9 +22,8 @@
 #include "DiscIO/VolumeCreator.h"
 
 SCoreStartupParameter::SCoreStartupParameter()
-: hInstance(nullptr),
-  bEnableDebugging(false), bAutomaticStart(false), bBootToPause(false),
-  bJITNoBlockCache(false), bJITBlockLinking(true),
+: bEnableDebugging(false), bAutomaticStart(false), bBootToPause(false),
+  bJITNoBlockCache(false), bJITNoBlockLinking(false),
   bJITOff(false),
   bJITLoadStoreOff(false), bJITLoadStorelXzOff(false),
   bJITLoadStorelwzOff(false), bJITLoadStorelbzxOff(false),
@@ -32,14 +32,15 @@ SCoreStartupParameter::SCoreStartupParameter()
   bJITPairedOff(false), bJITSystemRegistersOff(false),
   bJITBranchOff(false),
   bJITILTimeProfiling(false), bJITILOutputIR(false),
-  bEnableFPRF(false),
+  bFPRF(false),
   bCPUThread(true), bDSPThread(false), bDSPHLE(true),
-  bSkipIdle(true), bNTSC(false), bForceNTSCJ(false),
+  bSkipIdle(true), bSyncGPUOnSkipIdleHack(true), bNTSC(false), bForceNTSCJ(false),
   bHLE_BS2(true), bEnableCheats(false),
   bMergeBlocks(false), bEnableMemcardSaving(true),
   bDPL2Decoder(false), iLatency(14),
   bRunCompareServer(false), bRunCompareClient(false),
-  bMMU(false), bDCBZOFF(false), bTLBHack(false), iBBDumpPort(0), bVBeamSpeedHack(false),
+  bBAT(false), bMMU(false), bDCBZOFF(false),
+  iBBDumpPort(0), bVBeamSpeedHack(false),
   bSyncGPU(false), bFastDiscSpeed(false),
   SelectedLanguage(0), bWii(false),
   bConfirmStop(false), bHideCursor(false),
@@ -65,17 +66,17 @@ void SCoreStartupParameter::LoadDefaults()
 	iGDBPort = -1;
 	#endif
 
-	iCPUCore = 1;
+	iCPUCore = CORE_JIT64;
 	bCPUThread = false;
 	bSkipIdle = false;
+	bSyncGPUOnSkipIdleHack = true;
 	bRunCompareServer = false;
 	bDSPHLE = true;
-	bDSPThread = true;
 	bFastmem = true;
-	bEnableFPRF = false;
+	bFPRF = false;
+	bBAT = false;
 	bMMU = false;
 	bDCBZOFF = false;
-	bTLBHack = false;
 	iBBDumpPort = -1;
 	bVBeamSpeedHack = false;
 	bSyncGPU = false;
@@ -135,13 +136,13 @@ bool SCoreStartupParameter::AutoSetup(EBootBS2 _BootBS2)
 				bootDrive)
 			{
 				m_BootType = BOOT_ISO;
-				DiscIO::IVolume* pVolume = DiscIO::CreateVolumeFromFilename(m_strFilename);
+				std::unique_ptr<DiscIO::IVolume> pVolume(DiscIO::CreateVolumeFromFilename(m_strFilename));
 				if (pVolume == nullptr)
 				{
 					if (bootDrive)
 						PanicAlertT("Could not read \"%s\".  "
 								"There is no disc in the drive, or it is not a GC/Wii/U backup.  "
-								"Please note that original Gamecube and Wii discs cannot be read "
+								"Please note that original GameCube and Wii discs cannot be read "
 								"by most PC DVD drives.", m_strFilename.c_str());
 					else
 						PanicAlertT("\"%s\" is an invalid GCM/ISO/WUD file, or is not a GC/Wii/U ISO.",
@@ -153,7 +154,7 @@ bool SCoreStartupParameter::AutoSetup(EBootBS2 _BootBS2)
 				m_strRevisionSpecificUniqueID = pVolume->GetRevisionSpecificUniqueID();
 
 				// Check if we have a Wii disc
-				bWii = DiscIO::IsVolumeWiiDisc(pVolume);
+				bWii = DiscIO::IsVolumeWiiDisc(pVolume.get());
 				switch (pVolume->GetCountry())
 				{
 				case DiscIO::IVolume::COUNTRY_USA:
@@ -169,14 +170,19 @@ bool SCoreStartupParameter::AutoSetup(EBootBS2 _BootBS2)
 					Region = JAP_DIR;
 					break;
 
+				case DiscIO::IVolume::COUNTRY_AUSTRALIA:
 				case DiscIO::IVolume::COUNTRY_EUROPE:
 				case DiscIO::IVolume::COUNTRY_FRANCE:
+				case DiscIO::IVolume::COUNTRY_INTERNATIONAL:
 				case DiscIO::IVolume::COUNTRY_ITALY:
+				case DiscIO::IVolume::COUNTRY_NETHERLANDS:
 				case DiscIO::IVolume::COUNTRY_RUSSIA:
+				case DiscIO::IVolume::COUNTRY_SPAIN:
 					bNTSC = false;
 					Region = EUR_DIR;
 					break;
 
+				case DiscIO::IVolume::COUNTRY_UNKNOWN:
 				default:
 					if (PanicYesNoT("Your GCM/ISO/WUD file seems to be invalid (invalid country)."
 								   "\nContinue with PAL region?"))
@@ -184,10 +190,12 @@ bool SCoreStartupParameter::AutoSetup(EBootBS2 _BootBS2)
 						bNTSC = false;
 						Region = EUR_DIR;
 						break;
-					}else return false;
+					}
+					else
+					{
+						return false;
+					}
 				}
-
-				delete pVolume;
 			}
 			else if (!strcasecmp(Extension.c_str(), ".rpx") || !strcasecmp(Extension.c_str(), ".rpl"))
 			{
@@ -219,17 +227,16 @@ bool SCoreStartupParameter::AutoSetup(EBootBS2 _BootBS2)
 				bNTSC = true;
 				m_BootType = BOOT_DFF;
 
-				FifoDataFile *ddfFile = FifoDataFile::Load(m_strFilename, true);
+				std::unique_ptr<FifoDataFile> ddfFile(FifoDataFile::Load(m_strFilename, true));
 
 				if (ddfFile)
 				{
 					bWii = ddfFile->GetIsWii();
-					delete ddfFile;
 				}
 			}
 			else if (DiscIO::CNANDContentManager::Access().GetNANDLoader(m_strFilename).IsValid())
 			{
-				const DiscIO::IVolume* pVolume = DiscIO::CreateVolumeFromFilename(m_strFilename);
+				std::unique_ptr<DiscIO::IVolume> pVolume(DiscIO::CreateVolumeFromFilename(m_strFilename));
 				const DiscIO::INANDContentLoader& ContentLoader = DiscIO::CNANDContentManager::Access().GetNANDLoader(m_strFilename);
 
 				if (ContentLoader.GetContentByIndex(ContentLoader.GetBootIndex()) == nullptr)
@@ -256,14 +263,17 @@ bool SCoreStartupParameter::AutoSetup(EBootBS2 _BootBS2)
 					Region = JAP_DIR;
 					break;
 
+				case DiscIO::IVolume::COUNTRY_AUSTRALIA:
 				case DiscIO::IVolume::COUNTRY_EUROPE:
 				case DiscIO::IVolume::COUNTRY_FRANCE:
+				case DiscIO::IVolume::COUNTRY_INTERNATIONAL:
 				case DiscIO::IVolume::COUNTRY_ITALY:
 				case DiscIO::IVolume::COUNTRY_RUSSIA:
 					bNTSC = false;
 					Region = EUR_DIR;
 					break;
 
+				case DiscIO::IVolume::COUNTRY_UNKNOWN:
 				default:
 					bNTSC = false;
 					Region = EUR_DIR;
@@ -277,7 +287,6 @@ bool SCoreStartupParameter::AutoSetup(EBootBS2 _BootBS2)
 				{
 					m_strName = pVolume->GetName();
 					m_strUniqueID = pVolume->GetUniqueID();
-					delete pVolume;
 				}
 				else
 				{
@@ -289,18 +298,16 @@ bool SCoreStartupParameter::AutoSetup(EBootBS2 _BootBS2)
 
 				// Use the TitleIDhex for name and/or unique ID if launching from nand folder
 				// or if it is not ascii characters (specifically sysmenu could potentially apply to other things)
-				char titleidstr[17];
-				snprintf(titleidstr, 17, "%016" PRIx64, ContentLoader.GetTitleID());
+				std::string titleidstr = StringFromFormat("%016" PRIx64, ContentLoader.GetTitleID());
 
-				if (!m_strName.length())
+				if (m_strName.empty())
 				{
 					m_strName = titleidstr;
 				}
-				if (!m_strUniqueID.length())
+				if (m_strUniqueID.empty())
 				{
 					m_strUniqueID = titleidstr;
 				}
-
 			}
 			else
 			{
@@ -335,12 +342,12 @@ bool SCoreStartupParameter::AutoSetup(EBootBS2 _BootBS2)
 	m_strSRAM = File::GetUserPath(F_GCSRAM_IDX);
 	if (!bWii)
 	{
-		m_strBootROM = File::GetUserPath(D_GCUSER_IDX) + DIR_SEP + Region + DIR_SEP GC_IPL;
-		if (!File::Exists(m_strBootROM))
-			m_strBootROM = File::GetSysDirectory() + GC_SYS_DIR + DIR_SEP + Region + DIR_SEP GC_IPL;
-
 		if (!bHLE_BS2)
 		{
+			m_strBootROM = File::GetUserPath(D_GCUSER_IDX) + DIR_SEP + Region + DIR_SEP GC_IPL;
+			if (!File::Exists(m_strBootROM))
+				m_strBootROM = File::GetSysDirectory() + GC_SYS_DIR + DIR_SEP + Region + DIR_SEP GC_IPL;
+
 			if (!File::Exists(m_strBootROM))
 			{
 				WARN_LOG(BOOT, "Bootrom file %s not found - using HLE.", m_strBootROM.c_str());
@@ -399,7 +406,7 @@ void SCoreStartupParameter::CheckMemcardPath(std::string& memcardPath, std::stri
 		{
 			// filename has region, but it's not == gameRegion
 			// Just set the correct filename, the EXI Device will create it if it doesn't exist
-			memcardPath = filename.replace(filename.size()-ext.size(), ext.size(), ext);;
+			memcardPath = filename.replace(filename.size()-ext.size(), ext.size(), ext);
 		}
 	}
 }

@@ -3,22 +3,20 @@
 // Refer to the license.txt file included.
 
 #include <string>
-#include <wx/wx.h>
 
 #include "Common/FileUtil.h"
 #include "Common/IniFile.h"
-#include "Common/LogManager.h"
 #include "Common/StringUtil.h"
+#include "Common/Logging/LogManager.h"
 
 #include "Core/ConfigManager.h"
 #include "Core/Core.h"
 #include "Core/Host.h"
 
-#include "DolphinWX/VideoConfigDiag.h"
-#include "DolphinWX/Debugger/DebuggerPanel.h"
-
+#include "VideoBackends/D3D/BoundingBox.h"
 #include "VideoBackends/D3D/D3DBase.h"
 #include "VideoBackends/D3D/D3DUtil.h"
+#include "VideoBackends/D3D/GeometryShaderCache.h"
 #include "VideoBackends/D3D/Globals.h"
 #include "VideoBackends/D3D/PerfQuery.h"
 #include "VideoBackends/D3D/PixelShaderCache.h"
@@ -29,8 +27,8 @@
 
 #include "VideoCommon/BPStructs.h"
 #include "VideoCommon/CommandProcessor.h"
-#include "VideoCommon/EmuWindow.h"
 #include "VideoCommon/Fifo.h"
+#include "VideoCommon/GeometryShaderManager.h"
 #include "VideoCommon/IndexGenerator.h"
 #include "VideoCommon/OnScreenDisplay.h"
 #include "VideoCommon/OpcodeDecoding.h"
@@ -56,11 +54,6 @@ unsigned int VideoBackend::PeekMessages()
 	return TRUE;
 }
 
-void VideoBackend::UpdateFPSDisplay(const std::string& text)
-{
-	EmuWindow::SetWindowText(StringFromFormat("%s | D3D | %s", scm_rev_str, text.c_str()));
-}
-
 std::string VideoBackend::GetName() const
 {
 	return "D3D";
@@ -82,12 +75,12 @@ void InitBackendInfo()
 	}
 
 	g_Config.backend_info.APIType = API_D3D;
-	g_Config.backend_info.bUseRGBATextures = true; // the GX formats barely match any D3D11 formats
-	g_Config.backend_info.bUseMinimalMipCount = true;
-	g_Config.backend_info.bSupports3DVision = false;
+	g_Config.backend_info.bSupportsExclusiveFullscreen = true;
 	g_Config.backend_info.bSupportsDualSourceBlend = true;
 	g_Config.backend_info.bSupportsPrimitiveRestart = true;
 	g_Config.backend_info.bSupportsOversizedViewports = false;
+	g_Config.backend_info.bSupportsGeometryShaders = true;
+	g_Config.backend_info.bSupports3DVision = true;
 
 	IDXGIFactory* factory;
 	IDXGIAdapter* ad;
@@ -108,25 +101,34 @@ void InitBackendInfo()
 		// TODO: These don't get updated on adapter change, yet
 		if (adapter_index == g_Config.iAdapter)
 		{
-			char buf[32];
-			std::vector<DXGI_SAMPLE_DESC> modes;
-			modes = DX11::D3D::EnumAAModes(ad);
+			std::string samples;
+			std::vector<DXGI_SAMPLE_DESC> modes = DX11::D3D::EnumAAModes(ad);
 			for (unsigned int i = 0; i < modes.size(); ++i)
 			{
-				if (i == 0) sprintf_s(buf, 32, _trans("None"));
-				else if (modes[i].Quality) sprintf_s(buf, 32, _trans("%d samples (quality level %d)"), modes[i].Count, modes[i].Quality);
-				else sprintf_s(buf, 32, _trans("%d samples"), modes[i].Count);
-				g_Config.backend_info.AAModes.push_back(buf);
+				if (i == 0)
+					samples = _trans("None");
+				else if (modes[i].Quality)
+					samples = StringFromFormat(_trans("%d samples (quality level %d)"), modes[i].Count, modes[i].Quality);
+				else
+					samples = StringFromFormat(_trans("%d samples"), modes[i].Count);
+
+				g_Config.backend_info.AAModes.push_back(samples);
 			}
 
-			// Requires the earlydepthstencil attribute (only available in shader model 5)
-			g_Config.backend_info.bSupportsEarlyZ = (DX11::D3D::GetFeatureLevel(ad) == D3D_FEATURE_LEVEL_11_0);
-		}
+			bool shader_model_5_supported = (DX11::D3D::GetFeatureLevel(ad) >= D3D_FEATURE_LEVEL_11_0);
 
+			// Requires the earlydepthstencil attribute (only available in shader model 5)
+			g_Config.backend_info.bSupportsEarlyZ = shader_model_5_supported;
+
+			// Requires full UAV functionality (only available in shader model 5)
+			g_Config.backend_info.bSupportsBBox = shader_model_5_supported;
+
+			// Requires the instance attribute (only available in shader model 5)
+			g_Config.backend_info.bSupportsGSInstancing = shader_model_5_supported;
+		}
 		g_Config.backend_info.Adapters.push_back(UTF16ToUTF8(desc.Description));
 		ad->Release();
 	}
-
 	factory->Release();
 
 	// Clear ppshaders string vector
@@ -136,17 +138,17 @@ void InitBackendInfo()
 	DX11::D3D::UnloadD3D();
 }
 
-void VideoBackend::ShowConfig(void *_hParent)
+void VideoBackend::ShowConfig(void *hParent)
 {
-#if defined(HAVE_WX) && HAVE_WX
 	InitBackendInfo();
-	VideoConfigDiag diag((wxWindow*)_hParent, _trans("Direct3D"), "gfx_dx11");
-	diag.ShowModal();
-#endif
+	Host_ShowVideoConfig(hParent, GetDisplayName(), "gfx_dx11");
 }
 
-bool VideoBackend::Initialize(void *&window_handle)
+bool VideoBackend::Initialize(void *window_handle)
 {
+	if (window_handle == nullptr)
+		return false;
+
 	InitializeShared();
 	InitBackendInfo();
 
@@ -158,12 +160,7 @@ bool VideoBackend::Initialize(void *&window_handle)
 	g_Config.VerifyValidity();
 	UpdateActiveConfig();
 
-	window_handle = (void*)EmuWindow::Create((HWND)window_handle, GetModuleHandle(0), _T("Loading - Please wait."));
-	if (window_handle == nullptr)
-	{
-		ERROR_LOG(VIDEO, "An error has occurred while trying to create the window.");
-		return false;
-	}
+	m_window_handle = window_handle;
 
 	s_BackendInitialized = true;
 
@@ -172,18 +169,14 @@ bool VideoBackend::Initialize(void *&window_handle)
 
 void VideoBackend::Video_Prepare()
 {
-	// Better be safe...
-	s_efbAccessRequested = FALSE;
-	s_FifoShuttingDown = FALSE;
-	s_swapRequested = FALSE;
-
 	// internal interfaces
-	g_renderer = new Renderer;
+	g_renderer = new Renderer(m_window_handle);
 	g_texture_cache = new TextureCache;
 	g_vertex_manager = new VertexManager;
 	g_perf_query = new PerfQuery;
 	VertexShaderCache::Init();
 	PixelShaderCache::Init();
+	GeometryShaderCache::Init();
 	D3D::InitUtils();
 
 	// VideoCommon
@@ -194,8 +187,10 @@ void VideoBackend::Video_Prepare()
 	OpcodeDecoder_Init();
 	VertexShaderManager::Init();
 	PixelShaderManager::Init();
+	GeometryShaderManager::Init();
 	CommandProcessor::Init();
 	PixelEngine::Init();
+	BBox::Init();
 
 	// Tell the host that the window is ready
 	Host_Message(WM_USER_CREATE);
@@ -208,13 +203,10 @@ void VideoBackend::Shutdown()
 	// TODO: should be in Video_Cleanup
 	if (g_renderer)
 	{
-		s_efbAccessRequested = FALSE;
-		s_FifoShuttingDown = FALSE;
-		s_swapRequested = FALSE;
-
 		// VideoCommon
 		Fifo_Shutdown();
 		CommandProcessor::Shutdown();
+		GeometryShaderManager::Shutdown();
 		PixelShaderManager::Shutdown();
 		VertexShaderManager::Shutdown();
 		OpcodeDecoder_Shutdown();
@@ -224,6 +216,9 @@ void VideoBackend::Shutdown()
 		D3D::ShutdownUtils();
 		PixelShaderCache::Shutdown();
 		VertexShaderCache::Shutdown();
+		GeometryShaderCache::Shutdown();
+		BBox::Shutdown();
+
 		delete g_perf_query;
 		delete g_vertex_manager;
 		delete g_texture_cache;
@@ -233,7 +228,8 @@ void VideoBackend::Shutdown()
 	}
 }
 
-void VideoBackend::Video_Cleanup() {
+void VideoBackend::Video_Cleanup()
+{
 }
 
 }

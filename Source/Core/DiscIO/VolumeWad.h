@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -24,8 +25,7 @@ class CVolumeWAD : public IVolume
 public:
 	CVolumeWAD(IBlobReader* _pReader);
 	~CVolumeWAD();
-	bool Read(u64 _Offset, u64 _Length, u8* _pBuffer) const override;
-	bool RAWRead(u64 _Offset, u64 _Length, u8* _pBuffer) const override { return false; }
+	bool Read(u64 _Offset, u64 _Length, u8* _pBuffer, bool decrypt = false) const override;
 	bool GetTitleID(u8* _pBuffer) const override;
 	std::string GetUniqueID() const override;
 	std::string GetMakerID() const override;
@@ -37,8 +37,13 @@ public:
 	u64 GetRawSize() const override;
 
 private:
-	IBlobReader* m_pReader;
-	u32 OpeningBnrOffset, hdr_size, cert_size, tick_size, tmd_size, data_size;
+	std::unique_ptr<IBlobReader> m_pReader;
+	u32 m_opening_bnr_offset;
+	u32 m_hdr_size;
+	u32 m_cert_size;
+	u32 m_tick_size;
+	u32 m_tmd_size;
+	u32 m_data_size;
 	u8 m_Country;
 };
 

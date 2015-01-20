@@ -27,7 +27,7 @@ IFileSystem* CreateFileSystem(const IVolume* _rVolume)
 	if (_rVolume)
 	{
 		u32 Temp = 0;
-		_rVolume->RAWRead(0, 4, (u8*)&Temp);
+		_rVolume->Read(0, 4, (u8*)&Temp, false);
 		Temp = Common::swap32(Temp);
 		is_wii_u = (Temp == 0x5755502D);
 	}

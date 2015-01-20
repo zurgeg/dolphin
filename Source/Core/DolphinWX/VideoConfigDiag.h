@@ -1,9 +1,14 @@
+// Copyright 2013 Dolphin Emulator Project
+// Licensed under GPLv2
+// Refer to the license.txt file included.
+
 #pragma once
 
 #include <cstddef>
 #include <map>
 #include <string>
 #include <vector>
+#include <wx/button.h>
 #include <wx/checkbox.h>
 #include <wx/choice.h>
 #include <wx/defs.h>
@@ -22,7 +27,9 @@
 #include "Core/ConfigManager.h"
 #include "Core/Core.h"
 #include "Core/CoreParameter.h"
+#include "DolphinWX/PostProcessingConfigDiag.h"
 #include "DolphinWX/WxUtils.h"
+#include "VideoCommon/PostProcessing.h"
 #include "VideoCommon/VideoBackendBase.h"
 #include "VideoCommon/VideoConfig.h"
 
@@ -86,11 +93,11 @@ protected:
 		VideoBackend* new_backend = g_available_video_backends[ev.GetInt()];
 		if (g_video_backend != new_backend)
 		{
-			bool do_switch = Core::GetState() == Core::CORE_UNINITIALIZED;
+			bool do_switch = !Core::IsRunning();
 			if (new_backend->GetName() == "Software Renderer")
 			{
 				do_switch = (wxYES == wxMessageBox(_("Software rendering is an order of magnitude slower than using the other backends.\nIt's only useful for debugging purposes.\nDo you really want to enable software rendering? If unsure, select 'No'."),
-							_("Warning"), wxYES_NO | wxNO_DEFAULT | wxICON_EXCLAMATION, wxGetActiveWindow()));
+							_("Warning"), wxYES_NO | wxNO_DEFAULT | wxICON_EXCLAMATION, wxWindow::FindFocus()));
 			}
 
 			if (do_switch)
@@ -142,6 +149,49 @@ protected:
 		else
 			vconfig.sPostProcessingShader.clear();
 
+		// Should we enable the configuration button?
+		PostProcessingShaderConfiguration postprocessing_shader;
+		postprocessing_shader.LoadShader(vconfig.sPostProcessingShader);
+		button_config_pp->Enable(postprocessing_shader.HasOptions() && vconfig.iStereoMode != STEREO_ANAGLYPH);
+
+		ev.Skip();
+	}
+
+	void Event_ConfigurePPShader(wxCommandEvent &ev)
+	{
+		PostProcessingConfigDiag dialog(this, vconfig.sPostProcessingShader);
+		dialog.ShowModal();
+
+		ev.Skip();
+	}
+
+	void Event_StereoDepth(wxCommandEvent &ev)
+	{
+		vconfig.iStereoDepth = ev.GetInt();
+
+		ev.Skip();
+	}
+
+	void Event_StereoConvergence(wxCommandEvent &ev)
+	{
+		vconfig.iStereoConvergence = ev.GetInt();
+
+		ev.Skip();
+	}
+
+	void Event_StereoMode(wxCommandEvent &ev)
+	{
+		if (ev.GetInt() == STEREO_ANAGLYPH && vconfig.backend_info.PPShaders.size())
+		{
+			// Anaglyph overrides post-processing shaders
+			choice_ppshader->Select(0);
+			choice_ppshader->Enable(false);
+		}
+		else if (vconfig.backend_info.PPShaders.size())
+		{
+			choice_ppshader->Enable(true);
+		}
+
 		ev.Skip();
 	}
 
@@ -155,10 +205,6 @@ protected:
 		choice_aamode->Enable(vconfig.backend_info.AAModes.size() > 1);
 		text_aamode->Enable(vconfig.backend_info.AAModes.size() > 1);
 
-		// 3D vision
-		_3d_vision->Enable(vconfig.backend_info.bSupports3DVision);
-		_3d_vision->Show(vconfig.backend_info.bSupports3DVision);
-
 		// EFB copy
 		efbcopy_texture->Enable(vconfig.bEFBCopyEnable);
 		efbcopy_ram->Enable(vconfig.bEFBCopyEnable);
@@ -168,6 +214,29 @@ protected:
 		virtual_xfb->Enable(vconfig.bUseXFB);
 		real_xfb->Enable(vconfig.bUseXFB);
 
+		// Things which shouldn't be changed during emulation
+		if (Core::IsRunning())
+		{
+			choice_backend->Disable();
+			label_backend->Disable();
+
+			//D3D only
+			if (vconfig.backend_info.Adapters.size())
+			{
+				choice_adapter->Disable();
+				label_adapter->Disable();
+			}
+
+#ifndef __APPLE__
+			// This isn't supported on OSX.
+
+			choice_display_resolution->Disable();
+			label_display_resolution->Disable();
+#endif
+
+			progressive_scan_checkbox->Disable();
+			render_to_main_checkbox->Disable();
+		}
 		ev.Skip();
 	}
 
@@ -184,11 +253,21 @@ protected:
 	void CreateDescriptionArea(wxPanel* const page, wxBoxSizer* const sizer);
 
 	wxChoice* choice_backend;
+	wxChoice* choice_adapter;
 	wxChoice* choice_display_resolution;
+
+	wxStaticText* label_backend;
+	wxStaticText* label_adapter;
+
 	wxStaticText* text_aamode;
 	SettingChoice* choice_aamode;
 
-	SettingCheckBox* _3d_vision;
+	wxStaticText* label_display_resolution;
+
+	wxButton* button_config_pp;
+
+	SettingCheckBox* borderless_fullscreen;
+	SettingCheckBox* render_to_main_checkbox;
 
 	SettingRadioButton* efbcopy_texture;
 	SettingRadioButton* efbcopy_ram;
@@ -196,6 +275,10 @@ protected:
 
 	SettingRadioButton* virtual_xfb;
 	SettingRadioButton* real_xfb;
+
+	wxCheckBox* progressive_scan_checkbox;
+
+	wxChoice* choice_ppshader;
 
 	std::map<wxWindow*, wxString> ctrl_descs; // maps setting controls to their descriptions
 	std::map<wxWindow*, wxStaticText*> desc_texts; // maps dialog tabs (which are the parents of the setting controls) to their description text objects

@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 #include "Core/HW/DSPHLE/UCodes/UCodes.h"
 
 // Obviously missing things that must be in here, somewhere among the "unknown":
@@ -125,7 +125,7 @@ public:
 	void HandleMail_LightVersion(u32 mail);
 	void HandleMail_SMSVersion(u32 mail);
 	void HandleMail_NormalVersion(u32 mail);
-	void Update(int cycles) override;
+	void Update() override;
 
 	void CopyPBsFromRAM();
 	void CopyPBsToRAM();
@@ -146,7 +146,7 @@ public:
 	}
 
 private:
-	// These map CRC to behaviour.
+	// These map CRC to behavior.
 
 	// DMA version
 	// - sound data transferred using DMA instead of accelerator
@@ -173,7 +173,7 @@ private:
 		{
 			case 0x6ba3b3ea: // IPL - PAL
 			case 0x24b22038: // IPL - NTSC/NTSC-JAP
-			case 0x42f64ac4: // Luigi
+			case 0x42f64ac4: // Luigi's Mansion
 			case 0x4be6a5cb: // AC, Pikmin NTSC
 				return true;
 			default:
@@ -285,7 +285,7 @@ private:
 	void Resample(ZeldaVoicePB &PB, int size, s16 *in, s32 *out, bool do_resample = false);
 
 	int ConvertRatio(int pb_ratio);
-	int SizeForResampling(ZeldaVoicePB &PB, int size, int ratio);
+	int SizeForResampling(ZeldaVoicePB &PB, int size);
 
 	// Renders a voice and mixes it into LeftBuffer, RightBuffer
 	void RenderAddVoice(ZeldaVoicePB& PB, s32* _LeftBuffer, s32* _RightBuffer, int _Size);

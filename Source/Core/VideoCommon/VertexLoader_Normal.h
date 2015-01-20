@@ -4,21 +4,21 @@
 
 #pragma once
 
-#include "Common/Common.h"
+#include "VideoCommon/NativeVertexFormat.h"
 
 class VertexLoader_Normal
 {
 public:
 
 	// Init
-	static void Init(void);
+	static void Init();
 
 	// GetSize
-	static unsigned int GetSize(unsigned int _type, unsigned int _format,
+	static unsigned int GetSize(u64 _type, unsigned int _format,
 		unsigned int _elements, unsigned int _index3);
 
 	// GetFunction
-	static TPipelineFunction GetFunction(unsigned int _type,
+	static TPipelineFunction GetFunction(u64 _type,
 		unsigned int _format, unsigned int _elements, unsigned int _index3);
 
 private:

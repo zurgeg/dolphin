@@ -3,41 +3,52 @@
 // Refer to the license.txt file included.
 
 #include <algorithm>
+#include <string>
 
 #include "Common/FileUtil.h"
 #include "Common/MemoryUtil.h"
+#include "Common/StringUtil.h"
 
 #include "Core/ConfigManager.h"
 #include "Core/HW/Memmap.h"
 
 #include "VideoCommon/Debugger.h"
+#include "VideoCommon/FramebufferManagerBase.h"
 #include "VideoCommon/HiresTextures.h"
 #include "VideoCommon/RenderBase.h"
 #include "VideoCommon/Statistics.h"
 #include "VideoCommon/TextureCacheBase.h"
 #include "VideoCommon/VideoConfig.h"
 
-// ugly
-extern int frameCount;
-
-enum
-{
-	TEXTURE_KILL_THRESHOLD = 200,
-};
+static const u64 TEXHASH_INVALID = 0;
+static const int TEXTURE_KILL_THRESHOLD = 200;
+static const int TEXTURE_POOL_KILL_THRESHOLD = 3;
+static const u64 FRAMECOUNT_INVALID = 0;
 
 TextureCache *g_texture_cache;
 
 GC_ALIGNED16(u8 *TextureCache::temp) = nullptr;
-unsigned int TextureCache::temp_size;
+size_t TextureCache::temp_size;
 
 TextureCache::TexCache TextureCache::textures;
+TextureCache::TexPool TextureCache::texture_pool;
 
 TextureCache::BackupConfig TextureCache::backup_config;
 
-bool invalidate_texture_cache_requested;
+static bool invalidate_texture_cache_requested;
 
 TextureCache::TCacheEntryBase::~TCacheEntryBase()
 {
+}
+
+void TextureCache::CheckTempSize(size_t required_size)
+{
+	if (required_size <= temp_size)
+		return;
+
+	temp_size = required_size;
+	FreeAlignedMemory(temp);
+	temp = (u8*)AllocateAlignedMemory(temp_size, 16);
 }
 
 TextureCache::TextureCache()
@@ -49,9 +60,9 @@ TextureCache::TextureCache()
 	TexDecoder_SetTexFmtOverlayOptions(g_ActiveConfig.bTexFmtOverlayEnable, g_ActiveConfig.bTexFmtOverlayCenter);
 
 	if (g_ActiveConfig.bHiresTextures && !g_ActiveConfig.bDumpTextures)
-		HiresTextures::Init(SConfig::GetInstance().m_LocalCoreStartupParameter.m_strUniqueID);
+		HiresTexture::Init(SConfig::GetInstance().m_LocalCoreStartupParameter.m_strUniqueID);
 
-	SetHash64Function(g_ActiveConfig.bHiresTextures || g_ActiveConfig.bDumpTextures);
+	SetHash64Function();
 
 	invalidate_texture_cache_requested = false;
 }
@@ -68,6 +79,12 @@ void TextureCache::Invalidate()
 		delete tex.second;
 	}
 	textures.clear();
+
+	for (auto& rt : texture_pool)
+	{
+		delete rt.second;
+	}
+	texture_pool.clear();
 }
 
 TextureCache::~TextureCache()
@@ -91,52 +108,75 @@ void TextureCache::OnConfigChanged(VideoConfig& config)
 			g_texture_cache->Invalidate();
 
 			if (g_ActiveConfig.bHiresTextures)
-				HiresTextures::Init(SConfig::GetInstance().m_LocalCoreStartupParameter.m_strUniqueID);
+				HiresTexture::Init(SConfig::GetInstance().m_LocalCoreStartupParameter.m_strUniqueID);
 
-			SetHash64Function(g_ActiveConfig.bHiresTextures || g_ActiveConfig.bDumpTextures);
 			TexDecoder_SetTexFmtOverlayOptions(g_ActiveConfig.bTexFmtOverlayEnable, g_ActiveConfig.bTexFmtOverlayCenter);
 
 			invalidate_texture_cache_requested = false;
 		}
 
 		// TODO: Probably shouldn't clear all render targets here, just mark them dirty or something.
-		if (config.bEFBCopyCacheEnable != backup_config.s_copy_cache_enable || // TODO: not sure if this is needed?
-			config.bCopyEFBToTexture != backup_config.s_copy_efb_to_texture ||
-			config.bCopyEFBScaled != backup_config.s_copy_efb_scaled ||
-			config.bEFBCopyEnable != backup_config.s_copy_efb ||
-			config.iEFBScale != backup_config.s_efb_scale)
+		if (config.bEFBCopyCacheEnable != backup_config.s_copy_cache_enable) // TODO: not sure if this is needed?
 		{
 			g_texture_cache->ClearRenderTargets();
+		}
+
+		if ((config.iStereoMode > 0) != backup_config.s_stereo_3d ||
+			config.bStereoEFBMonoDepth != backup_config.s_efb_mono_depth)
+		{
+			g_texture_cache->DeleteShaders();
+			g_texture_cache->CompileShaders();
 		}
 	}
 
 	backup_config.s_colorsamples = config.iSafeTextureCache_ColorSamples;
-	backup_config.s_copy_efb_to_texture = config.bCopyEFBToTexture;
-	backup_config.s_copy_efb_scaled = config.bCopyEFBScaled;
-	backup_config.s_copy_efb = config.bEFBCopyEnable;
-	backup_config.s_efb_scale = config.iEFBScale;
 	backup_config.s_texfmt_overlay = config.bTexFmtOverlayEnable;
 	backup_config.s_texfmt_overlay_center = config.bTexFmtOverlayCenter;
 	backup_config.s_hires_textures = config.bHiresTextures;
 	backup_config.s_copy_cache_enable = config.bEFBCopyCacheEnable;
+	backup_config.s_stereo_3d = config.iStereoMode > 0;
+	backup_config.s_efb_mono_depth = config.bStereoEFBMonoDepth;
 }
 
-void TextureCache::Cleanup()
+void TextureCache::Cleanup(int _frameCount)
 {
 	TexCache::iterator iter = textures.begin();
 	TexCache::iterator tcend = textures.end();
 	while (iter != tcend)
 	{
-		if (frameCount > TEXTURE_KILL_THRESHOLD + iter->second->frameCount &&
-            // EFB copies living on the host GPU are unrecoverable and thus shouldn't be deleted
+		if(iter->second->frameCount == FRAMECOUNT_INVALID)
+		{
+			iter->second->frameCount = _frameCount;
+		}
+		if (_frameCount > TEXTURE_KILL_THRESHOLD + iter->second->frameCount &&
+		    // EFB copies living on the host GPU are unrecoverable and thus shouldn't be deleted
 		    !iter->second->IsEfbCopy())
 		{
-			delete iter->second;
-			textures.erase(iter++);
+			FreeTexture(iter->second);
+			iter = textures.erase(iter);
 		}
 		else
 		{
 			++iter;
+		}
+	}
+
+	TexPool::iterator iter2 = texture_pool.begin();
+	TexPool::iterator tcend2 = texture_pool.end();
+	while (iter2 != tcend2)
+	{
+		if(iter2->second->frameCount == FRAMECOUNT_INVALID)
+		{
+			iter2->second->frameCount = _frameCount;
+		}
+		if (_frameCount > TEXTURE_POOL_KILL_THRESHOLD + iter2->second->frameCount)
+		{
+			delete iter2->second;
+			iter2 = texture_pool.erase(iter2);
+		}
+		else
+		{
+			++iter2;
 		}
 	}
 }
@@ -148,10 +188,9 @@ void TextureCache::InvalidateRange(u32 start_address, u32 size)
 		tcend = textures.end();
 	while (iter != tcend)
 	{
-		const int rangePosition = iter->second->IntersectsMemoryRange(start_address, size);
-		if (0 == rangePosition)
+		if (iter->second->OverlapsMemoryRange(start_address, size))
 		{
-			delete iter->second;
+			FreeTexture(iter->second);
 			textures.erase(iter++);
 		}
 		else
@@ -172,8 +211,7 @@ void TextureCache::MakeRangeDynamic(u32 start_address, u32 size)
 
 	for (; iter != tcend; ++iter)
 	{
-		const int rangePosition = iter->second->IntersectsMemoryRange(start_address, size);
-		if (0 == rangePosition)
+		if (iter->second->OverlapsMemoryRange(start_address, size))
 		{
 			iter->second->SetHashes(TEXHASH_INVALID);
 		}
@@ -190,15 +228,15 @@ bool TextureCache::Find(u32 start_address, u64 hash)
 	return false;
 }
 
-int TextureCache::TCacheEntryBase::IntersectsMemoryRange(u32 range_address, u32 range_size) const
+bool TextureCache::TCacheEntryBase::OverlapsMemoryRange(u32 range_address, u32 range_size) const
 {
-	if (addr + size_in_bytes < range_address)
-		return -1;
+	if (addr + size_in_bytes <= range_address)
+		return false;
 
 	if (addr >= range_address + range_size)
-		return 1;
+		return false;
 
-	return 0;
+	return true;
 }
 
 void TextureCache::ClearRenderTargets()
@@ -211,7 +249,7 @@ void TextureCache::ClearRenderTargets()
 	{
 		if (iter->second->type == TCET_EC_VRAM)
 		{
-			delete iter->second;
+			FreeTexture(iter->second);
 			textures.erase(iter++);
 		}
 		else
@@ -221,73 +259,8 @@ void TextureCache::ClearRenderTargets()
 	}
 }
 
-bool TextureCache::CheckForCustomTextureLODs(u64 tex_hash, int texformat, unsigned int levels)
+void TextureCache::DumpTexture(TCacheEntryBase* entry, std::string basename, unsigned int level)
 {
-	if (levels == 1)
-		return false;
-
-	// Just checking if the necessary files exist, if they can't be loaded or have incorrect dimensions LODs will be black
-	char texBasePathTemp[MAX_PATH];
-	char texPathTemp[MAX_PATH];
-
-	sprintf(texBasePathTemp, "%s_%08x_%i", SConfig::GetInstance().m_LocalCoreStartupParameter.m_strUniqueID.c_str(), (u32) (tex_hash & 0x00000000FFFFFFFFLL), texformat);
-
-	for (unsigned int level = 1; level < levels; ++level)
-	{
-		sprintf(texPathTemp, "%s_mip%u", texBasePathTemp, level);
-		if (!HiresTextures::HiresTexExists(texPathTemp))
-		{
-			if (level > 1)
-				WARN_LOG(VIDEO, "Couldn't find custom texture LOD with index %u (filename: %s), disabling custom LODs for this texture", level, texPathTemp);
-
-			return false;
-		}
-	}
-	return true;
-}
-
-PC_TexFormat TextureCache::LoadCustomTexture(u64 tex_hash, int texformat, unsigned int level, unsigned int& width, unsigned int& height)
-{
-	char texPathTemp[MAX_PATH];
-	unsigned int newWidth = 0;
-	unsigned int newHeight = 0;
-	u32 tex_hash_u32 = tex_hash & 0x00000000FFFFFFFFLL;
-
-	if (level == 0)
-		sprintf(texPathTemp, "%s_%08x_%i", SConfig::GetInstance().m_LocalCoreStartupParameter.m_strUniqueID.c_str(), tex_hash_u32, texformat);
-	else
-		sprintf(texPathTemp, "%s_%08x_%i_mip%u", SConfig::GetInstance().m_LocalCoreStartupParameter.m_strUniqueID.c_str(), tex_hash_u32, texformat, level);
-
-	unsigned int required_size = 0;
-	PC_TexFormat ret = HiresTextures::GetHiresTex(texPathTemp, &newWidth, &newHeight, &required_size, texformat, temp_size, temp);
-	if (ret == PC_TEX_FMT_NONE && temp_size < required_size)
-	{
-		// Allocate more memory and try again
-		// TODO: Should probably check if newWidth and newHeight are texture dimensions which are actually supported by the current video backend
-		temp_size = required_size;
-		FreeAlignedMemory(temp);
-		temp = (u8*)AllocateAlignedMemory(temp_size, 16);
-		ret = HiresTextures::GetHiresTex(texPathTemp, &newWidth, &newHeight, &required_size, texformat, temp_size, temp);
-	}
-
-	if (ret != PC_TEX_FMT_NONE)
-	{
-		if (level > 0 && (newWidth != width || newHeight != height))
-			ERROR_LOG(VIDEO, "Invalid custom texture size %dx%d for texture %s. This mipmap layer _must_ be %dx%d.", newWidth, newHeight, texPathTemp, width, height);
-		if (newWidth * height != newHeight * width)
-			ERROR_LOG(VIDEO, "Invalid custom texture size %dx%d for texture %s. The aspect differs from the native size %dx%d.", newWidth, newHeight, texPathTemp, width, height);
-		if (newWidth % width || newHeight % height)
-			WARN_LOG(VIDEO, "Invalid custom texture size %dx%d for texture %s. Please use an integer upscaling factor based on the native size %dx%d.", newWidth, newHeight, texPathTemp, width, height);
-
-		width = newWidth;
-		height = newHeight;
-	}
-	return ret;
-}
-
-void TextureCache::DumpTexture(TCacheEntryBase* entry, unsigned int level)
-{
-	std::string filename;
 	std::string szDir = File::GetUserPath(D_DUMPTEXTURES_IDX) +
 		SConfig::GetInstance().m_LocalCoreStartupParameter.m_strUniqueID;
 
@@ -295,20 +268,11 @@ void TextureCache::DumpTexture(TCacheEntryBase* entry, unsigned int level)
 	if (!File::Exists(szDir) || !File::IsDirectory(szDir))
 		File::CreateDir(szDir);
 
-	// For compatibility with old texture packs, don't print the LOD index for level 0.
-	 // TODO: TLUT format should actually be stored in filename? :/
-	if (level == 0)
+	if (level > 0)
 	{
-		filename = StringFromFormat("%s/%s_%08x_%i.png", szDir.c_str(),
-			SConfig::GetInstance().m_LocalCoreStartupParameter.m_strUniqueID.c_str(),
-			(u32)(entry->hash & 0x00000000FFFFFFFFLL), entry->format & 0xFFFF);
+		basename += StringFromFormat("_mip%i", level);
 	}
-	else
-	{
-		filename = StringFromFormat("%s/%s_%08x_%i_mip%i.png", szDir.c_str(),
-				SConfig::GetInstance().m_LocalCoreStartupParameter.m_strUniqueID.c_str(),
-				(u32) (entry->hash & 0x00000000FFFFFFFFLL), entry->format & 0xFFFF, level);
-	}
+	std::string filename = szDir + "/" + basename + ".png";
 
 	if (!File::Exists(filename))
 		entry->Save(filename, level);
@@ -322,7 +286,7 @@ static u32 CalculateLevelSize(u32 level_0_size, u32 level)
 // Used by TextureCache::Load
 static TextureCache::TCacheEntryBase* ReturnEntry(unsigned int stage, TextureCache::TCacheEntryBase* entry)
 {
-	entry->frameCount = frameCount;
+	entry->frameCount = FRAMECOUNT_INVALID;
 	entry->Bind(stage);
 
 	GFX_DEBUGGER_PAUSE_AT(NEXT_TEXTURE_CHANGE, true);
@@ -330,10 +294,20 @@ static TextureCache::TCacheEntryBase* ReturnEntry(unsigned int stage, TextureCac
 	return entry;
 }
 
-TextureCache::TCacheEntryBase* TextureCache::Load(unsigned int const stage,
-	u32 const address, unsigned int width, unsigned int height, int const texformat,
-	unsigned int const tlutaddr, int const tlutfmt, bool const use_mipmaps, unsigned int maxlevel, bool const from_tmem)
+TextureCache::TCacheEntryBase* TextureCache::Load(const u32 stage)
 {
+	const FourTexUnits &tex = bpmem.tex[stage >> 2];
+	const u32 id = stage & 3;
+	const u32 address = (tex.texImage3[id].image_base/* & 0x1FFFFF*/) << 5;
+	u32 width = tex.texImage0[id].width + 1;
+	u32 height = tex.texImage0[id].height + 1;
+	const int texformat = tex.texImage0[id].format;
+	const u32 tlutaddr = tex.texTlut[id].tmem_offset << 9;
+	const u32 tlutfmt = tex.texTlut[id].tlut_format;
+	const bool use_mipmaps = (tex.texMode0[id].min_filter & 3) != 0;
+	u32 tex_levels = (tex.texMode1[id].max_lod + 0xf) / 0x10 + 1;
+	const bool from_tmem = tex.texImage1[id].image_type != 0;
+
 	if (0 == address)
 		return nullptr;
 
@@ -352,7 +326,6 @@ TextureCache::TCacheEntryBase* TextureCache::Load(unsigned int const stage,
 	u64 tlut_hash = TEXHASH_INVALID;
 
 	u32 full_format = texformat;
-	PC_TexFormat pcfmt = PC_TEX_FMT_NONE;
 
 	const bool isPaletteTexture = (texformat == GX_TF_C4 || texformat == GX_TF_C8 || texformat == GX_TF_C14X2);
 	if (isPaletteTexture)
@@ -368,9 +341,10 @@ TextureCache::TCacheEntryBase* TextureCache::Load(unsigned int const stage,
 
 	// TODO: This doesn't hash GB tiles for preloaded RGBA8 textures (instead, it's hashing more data from the low tmem bank than it should)
 	tex_hash = GetHash64(src_data, texture_size, g_ActiveConfig.iSafeTextureCache_ColorSamples);
+	u32 palette_size = 0;
 	if (isPaletteTexture)
 	{
-		const u32 palette_size = TexDecoder_GetPaletteSize(texformat);
+		palette_size = TexDecoder_GetPaletteSize(texformat);
 		tlut_hash = GetHash64(&texMem[tlutaddr], palette_size, g_ActiveConfig.iSafeTextureCache_ColorSamples);
 
 		// NOTE: For non-paletted textures, texID is equal to the texture address.
@@ -386,12 +360,11 @@ TextureCache::TCacheEntryBase* TextureCache::Load(unsigned int const stage,
 		tex_hash ^= tlut_hash;
 	}
 
-	// D3D doesn't like when the specified mipmap count would require more than one 1x1-sized LOD in the mipmap chain
-	// e.g. 64x64 with 7 LODs would have the mipmap chain 64x64,32x32,16x16,8x8,4x4,2x2,1x1,1x1, so we limit the mipmap count to 6 there
-	while (g_ActiveConfig.backend_info.bUseMinimalMipCount && std::max(expandedWidth, expandedHeight) >> maxlevel == 0)
-		--maxlevel;
+	// GPUs don't like when the specified mipmap count would require more than one 1x1-sized LOD in the mipmap chain
+	// e.g. 64x64 with 7 LODs would have the mipmap chain 64x64,32x32,16x16,8x8,4x4,2x2,1x1,0x0, so we limit the mipmap count to 6 there
+	tex_levels = std::min<u32>(IntLog2(std::max(width, height)) + 1, tex_levels);
 
-	TCacheEntryBase *entry = textures[texID];
+	TCacheEntryBase*& entry = textures[texID];
 	if (entry)
 	{
 		// 1. Calculate reference hash:
@@ -412,163 +385,139 @@ TextureCache::TCacheEntryBase* TextureCache::Load(unsigned int const stage,
 
 		// 2. b) For normal textures, all texture parameters need to match
 		if (address == entry->addr && tex_hash == entry->hash && full_format == entry->format &&
-			entry->num_mipmaps > maxlevel && entry->native_width == nativeW && entry->native_height == nativeH)
+			entry->native_levels >= tex_levels && entry->native_width == nativeW && entry->native_height == nativeH)
 		{
 			return ReturnEntry(stage, entry);
 		}
 
-		// 3. If we reach this line, we'll have to upload the new texture data to VRAM.
-		//    If we're lucky, the texture parameters didn't change and we can reuse the internal texture object instead of destroying and recreating it.
-		//
-		// TODO: Don't we need to force texture decoding to RGBA8 for dynamic EFB copies?
-		// TODO: Actually, it should be enough if the internal texture format matches...
-		if ((entry->type == TCET_NORMAL &&
-		     width == entry->virtual_width &&
-		     height == entry->virtual_height &&
-		     full_format == entry->format &&
-		     entry->num_mipmaps > maxlevel) ||
-		    (entry->type == TCET_EC_DYNAMIC &&
-		     entry->native_width == width &&
-		     entry->native_height == height))
-		{
-			// reuse the texture
-		}
-		else
-		{
-			// delete the texture and make a new one
-			delete entry;
-			entry = nullptr;
-		}
+		// pool this texture and make a new one later
+		FreeTexture(entry);
 	}
 
-	bool using_custom_texture = false;
-
+	std::unique_ptr<HiresTexture> hires_tex;
 	if (g_ActiveConfig.bHiresTextures)
 	{
-		// This function may modify width/height.
-		pcfmt = LoadCustomTexture(tex_hash, texformat, 0, width, height);
-		if (pcfmt != PC_TEX_FMT_NONE)
-		{
-			if (expandedWidth != width || expandedHeight != height)
-			{
-				expandedWidth = width;
-				expandedHeight = height;
+		hires_tex.reset(HiresTexture::Search(
+			src_data, texture_size,
+			&texMem[tlutaddr], palette_size,
+			width, height,
+			texformat
+		));
 
-				// If we thought we could reuse the texture before, make sure to pool it now!
-				if (entry)
-				{
-					delete entry;
-					entry = nullptr;
-				}
+		if (hires_tex)
+		{
+			auto& l = hires_tex->m_levels[0];
+			if (l.width != width || l.height != height)
+			{
+				width = l.width;
+				height = l.height;
 			}
-			using_custom_texture = true;
+			expandedWidth = l.width;
+			expandedHeight = l.height;
+			CheckTempSize(l.data_size);
+			memcpy(temp, l.data, l.data_size);
 		}
 	}
 
-	if (!using_custom_texture)
+	if (!hires_tex)
 	{
 		if (!(texformat == GX_TF_RGBA8 && from_tmem))
 		{
-			pcfmt = TexDecoder_Decode(temp, src_data, expandedWidth,
-						expandedHeight, texformat, tlutaddr, tlutfmt, g_ActiveConfig.backend_info.bUseRGBATextures);
+			const u8* tlut = &texMem[tlutaddr];
+			TexDecoder_Decode(temp, src_data, expandedWidth, expandedHeight, texformat, tlut, (TlutFormat) tlutfmt);
 		}
 		else
 		{
 			u8* src_data_gb = &texMem[bpmem.tex[stage/4].texImage2[stage%4].tmem_odd * TMEM_LINE_SIZE];
-			pcfmt = TexDecoder_DecodeRGBA8FromTmem(temp, src_data, src_data_gb, expandedWidth, expandedHeight);
+			TexDecoder_DecodeRGBA8FromTmem(temp, src_data, src_data_gb, expandedWidth, expandedHeight);
 		}
 	}
 
-	u32 texLevels = use_mipmaps ? (maxlevel + 1) : 1;
-	const bool using_custom_lods = using_custom_texture && CheckForCustomTextureLODs(tex_hash, texformat, texLevels);
+	u32 texLevels = use_mipmaps ? tex_levels : 1;
+	const bool using_custom_lods = hires_tex && hires_tex->m_levels.size() >= texLevels;
 	// Only load native mips if their dimensions fit to our virtual texture dimensions
 	const bool use_native_mips = use_mipmaps && !using_custom_lods && (width == nativeW && height == nativeH);
 	texLevels = (use_native_mips || using_custom_lods) ? texLevels : 1; // TODO: Should be forced to 1 for non-pow2 textures (e.g. efb copies with automatically adjusted IR)
 
 	// create the entry/texture
-	if (nullptr == entry)
-	{
-		textures[texID] = entry = g_texture_cache->CreateTexture(width, height, expandedWidth, texLevels, pcfmt);
+	TCacheEntryConfig config;
+	config.width = width;
+	config.height = height;
+	config.levels = texLevels;
+	entry = AllocateTexture(config);
+	entry->type = TCET_NORMAL;
+	GFX_DEBUGGER_PAUSE_AT(NEXT_NEW_TEXTURE, true);
 
-		// Sometimes, we can get around recreating a texture if only the number of mip levels changes
-		// e.g. if our texture cache entry got too many mipmap levels we can limit the number of used levels by setting the appropriate render states
-		// Thus, we don't update this member for every Load, but just whenever the texture gets recreated
-
-		// TODO: This is the wrong value. We should be storing the number of levels our actual texture has.
-		// But that will currently make the above "existing entry" tests fail as "texLevels" is not calculated until after.
-		// Currently, we might try to reuse a texture which appears to have more levels than actual, maybe..
-		entry->num_mipmaps = maxlevel + 1;
-		entry->type = TCET_NORMAL;
-
-		GFX_DEBUGGER_PAUSE_AT(NEXT_NEW_TEXTURE, true);
-	}
-	else
-	{
-		// load texture (CreateTexture also loads level 0)
-		entry->Load(width, height, expandedWidth, 0);
-	}
-
-	entry->SetGeneralParameters(address, texture_size, full_format, entry->num_mipmaps);
-	entry->SetDimensions(nativeW, nativeH, width, height);
+	entry->SetGeneralParameters(address, texture_size, full_format);
+	entry->SetDimensions(nativeW, nativeH, tex_levels);
 	entry->hash = tex_hash;
+
+	// load texture
+	entry->Load(width, height, expandedWidth, 0);
 
 	if (entry->IsEfbCopy() && !g_ActiveConfig.bCopyEFBToTexture)
 		entry->type = TCET_EC_DYNAMIC;
 	else
 		entry->type = TCET_NORMAL;
 
-	if (g_ActiveConfig.bDumpTextures && !using_custom_texture)
-		DumpTexture(entry, 0);
+	std::string basename = "";
+	if (g_ActiveConfig.bDumpTextures && !hires_tex)
+	{
+		basename = HiresTexture::GenBaseName(
+			src_data, texture_size,
+			&texMem[tlutaddr], palette_size,
+			width, height,
+			texformat
+		);
+		DumpTexture(entry, basename, 0);
+	}
 
 	u32 level = 1;
 	// load mips - TODO: Loading mipmaps from tmem is untested!
-	if (pcfmt != PC_TEX_FMT_NONE)
+	if (use_native_mips)
 	{
-		if (use_native_mips)
+		src_data += texture_size;
+
+		const u8* ptr_even = nullptr;
+		const u8* ptr_odd = nullptr;
+		if (from_tmem)
 		{
-			src_data += texture_size;
-
-			const u8* ptr_even = nullptr;
-			const u8* ptr_odd = nullptr;
-			if (from_tmem)
-			{
-				ptr_even = &texMem[bpmem.tex[stage/4].texImage1[stage%4].tmem_even * TMEM_LINE_SIZE + texture_size];
-				ptr_odd = &texMem[bpmem.tex[stage/4].texImage2[stage%4].tmem_odd * TMEM_LINE_SIZE];
-			}
-
-			for (; level != texLevels; ++level)
-			{
-				const u32 mip_width = CalculateLevelSize(width, level);
-				const u32 mip_height = CalculateLevelSize(height, level);
-				const u32 expanded_mip_width = (mip_width + bsw) & (~bsw);
-				const u32 expanded_mip_height = (mip_height + bsh) & (~bsh);
-
-				const u8*& mip_src_data = from_tmem
-					? ((level % 2) ? ptr_odd : ptr_even)
-					: src_data;
-				TexDecoder_Decode(temp, mip_src_data, expanded_mip_width, expanded_mip_height, texformat, tlutaddr, tlutfmt, g_ActiveConfig.backend_info.bUseRGBATextures);
-				mip_src_data += TexDecoder_GetTextureSizeInBytes(expanded_mip_width, expanded_mip_height, texformat);
-
-				entry->Load(mip_width, mip_height, expanded_mip_width, level);
-
-				if (g_ActiveConfig.bDumpTextures)
-					DumpTexture(entry, level);
-			}
+			ptr_even = &texMem[bpmem.tex[stage/4].texImage1[stage%4].tmem_even * TMEM_LINE_SIZE + texture_size];
+			ptr_odd = &texMem[bpmem.tex[stage/4].texImage2[stage%4].tmem_odd * TMEM_LINE_SIZE];
 		}
-		else if (using_custom_lods)
-		{
-			for (; level != texLevels; ++level)
-			{
-				unsigned int mip_width = CalculateLevelSize(width, level);
-				unsigned int mip_height = CalculateLevelSize(height, level);
 
-				LoadCustomTexture(tex_hash, texformat, level, mip_width, mip_height);
-				entry->Load(mip_width, mip_height, mip_width, level);
-			}
+		for (; level != texLevels; ++level)
+		{
+			const u32 mip_width = CalculateLevelSize(width, level);
+			const u32 mip_height = CalculateLevelSize(height, level);
+			const u32 expanded_mip_width = (mip_width + bsw) & (~bsw);
+			const u32 expanded_mip_height = (mip_height + bsh) & (~bsh);
+
+			const u8*& mip_src_data = from_tmem
+				? ((level % 2) ? ptr_odd : ptr_even)
+				: src_data;
+			const u8* tlut = &texMem[tlutaddr];
+			TexDecoder_Decode(temp, mip_src_data, expanded_mip_width, expanded_mip_height, texformat, tlut, (TlutFormat) tlutfmt);
+			mip_src_data += TexDecoder_GetTextureSizeInBytes(expanded_mip_width, expanded_mip_height, texformat);
+
+			entry->Load(mip_width, mip_height, expanded_mip_width, level);
+
+			if (g_ActiveConfig.bDumpTextures)
+				DumpTexture(entry, basename, level);
+		}
+	}
+	else if (using_custom_lods)
+	{
+		for (; level != texLevels; ++level)
+		{
+			auto& l = hires_tex->m_levels[level];
+			CheckTempSize(l.data_size);
+			memcpy(temp, l.data, l.data_size);
+			entry->Load(l.width, l.height, l.width, level);
 		}
 	}
 
-	INCSTAT(stats.numTexturesCreated);
+	INCSTAT(stats.numTexturesUploaded);
 	SETSTAT(stats.numTexturesAlive, textures.size());
 
 	return ReturnEntry(stage, entry);
@@ -756,7 +705,8 @@ void TextureCache::CopyRenderTargetToTexture(u32 dstAddr, unsigned int dstFormat
 			ColorMask[4] = ColorMask[7] = 1.0f / 15.0f;
 
 			cbufid = 16;
-			if (!efbHasAlpha) {
+			if (!efbHasAlpha)
+			{
 				ColorMask[3] = 0.0f;
 				fConstAdd[3] = 1.0f;
 				cbufid = 17;
@@ -766,7 +716,8 @@ void TextureCache::CopyRenderTargetToTexture(u32 dstAddr, unsigned int dstFormat
 			colmat[0] = colmat[4] = colmat[8] = colmat[15] = 1.0f;
 
 			cbufid = 18;
-			if (!efbHasAlpha) {
+			if (!efbHasAlpha)
+			{
 				ColorMask[3] = 0.0f;
 				fConstAdd[3] = 1.0f;
 				cbufid = 19;
@@ -777,7 +728,8 @@ void TextureCache::CopyRenderTargetToTexture(u32 dstAddr, unsigned int dstFormat
 			colmat[3] = colmat[7] = colmat[11] = colmat[15] = 1.0f;
 
 			cbufid = 20;
-			if (!efbHasAlpha) {
+			if (!efbHasAlpha)
+			{
 				ColorMask[3] = 0.0f;
 				fConstAdd[0] = 1.0f;
 				fConstAdd[1] = 1.0f;
@@ -824,7 +776,8 @@ void TextureCache::CopyRenderTargetToTexture(u32 dstAddr, unsigned int dstFormat
 			ColorMask[7] = 1.0f / 7.0f;
 
 			cbufid = 27;
-			if (!efbHasAlpha) {
+			if (!efbHasAlpha)
+			{
 				ColorMask[3] = 0.0f;
 				fConstAdd[3] = 1.0f;
 				cbufid = 28;
@@ -834,7 +787,8 @@ void TextureCache::CopyRenderTargetToTexture(u32 dstAddr, unsigned int dstFormat
 			colmat[0] = colmat[5] = colmat[10] = colmat[15] = 1.0f;
 
 			cbufid = 29;
-			if (!efbHasAlpha) {
+			if (!efbHasAlpha)
+			{
 				ColorMask[3] = 0.0f;
 				fConstAdd[3] = 1.0f;
 				cbufid = 30;
@@ -855,36 +809,46 @@ void TextureCache::CopyRenderTargetToTexture(u32 dstAddr, unsigned int dstFormat
 	unsigned int scaled_tex_w = g_ActiveConfig.bCopyEFBScaled ? Renderer::EFBToScaledX(tex_w) : tex_w;
 	unsigned int scaled_tex_h = g_ActiveConfig.bCopyEFBScaled ? Renderer::EFBToScaledY(tex_h) : tex_h;
 
-
-	TCacheEntryBase *entry = textures[dstAddr];
+	TCacheEntryBase*& entry = textures[dstAddr];
 	if (entry)
-	{
-		if (entry->type == TCET_EC_DYNAMIC && entry->native_width == tex_w && entry->native_height == tex_h)
-		{
-			scaled_tex_w = tex_w;
-			scaled_tex_h = tex_h;
-		}
-		else if (!(entry->type == TCET_EC_VRAM && entry->virtual_width == scaled_tex_w && entry->virtual_height == scaled_tex_h))
-		{
-			// remove it and recreate it as a render target
-			delete entry;
-			entry = nullptr;
-		}
-	}
+		FreeTexture(entry);
 
-	if (nullptr == entry)
-	{
-		// create the texture
-		textures[dstAddr] = entry = g_texture_cache->CreateRenderTargetTexture(scaled_tex_w, scaled_tex_h);
+	// create the texture
+	TCacheEntryConfig config;
+	config.rendertarget = true;
+	config.width = scaled_tex_w;
+	config.height = scaled_tex_h;
+	config.layers = FramebufferManagerBase::GetEFBLayers();
 
-		// TODO: Using the wrong dstFormat, dumb...
-		entry->SetGeneralParameters(dstAddr, 0, dstFormat, 1);
-		entry->SetDimensions(tex_w, tex_h, scaled_tex_w, scaled_tex_h);
-		entry->SetHashes(TEXHASH_INVALID);
-		entry->type = TCET_EC_VRAM;
-	}
+	entry = AllocateTexture(config);
 
-	entry->frameCount = frameCount;
+	// TODO: Using the wrong dstFormat, dumb...
+	entry->SetGeneralParameters(dstAddr, 0, dstFormat);
+	entry->SetDimensions(tex_w, tex_h, 1);
+	entry->SetHashes(TEXHASH_INVALID);
+	entry->type = TCET_EC_VRAM;
+
+	entry->frameCount = FRAMECOUNT_INVALID;
 
 	entry->FromRenderTarget(dstAddr, dstFormat, srcFormat, srcRect, isIntensity, scaleByHalf, cbufid, colmat);
+}
+
+TextureCache::TCacheEntryBase* TextureCache::AllocateTexture(const TCacheEntryConfig& config)
+{
+	TexPool::iterator iter = texture_pool.find(config);
+	if (iter != texture_pool.end())
+	{
+		TextureCache::TCacheEntryBase* entry = iter->second;
+		texture_pool.erase(iter);
+		return entry;
+	}
+
+	INCSTAT(stats.numTexturesCreated);
+	return g_texture_cache->CreateTexture(config);
+}
+
+void TextureCache::FreeTexture(TCacheEntryBase* entry)
+{
+	entry->frameCount = FRAMECOUNT_INVALID;
+	texture_pool.insert(TexPool::value_type(entry->config, entry));
 }

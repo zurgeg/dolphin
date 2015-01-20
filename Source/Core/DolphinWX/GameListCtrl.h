@@ -24,11 +24,13 @@ class wxEmuStateTip : public wxTipWindow
 {
 public:
 	wxEmuStateTip(wxWindow* parent, const wxString& text, wxEmuStateTip** windowPtr)
-		: wxTipWindow(parent, text, 70, (wxTipWindow**)windowPtr) {}
+	    : wxTipWindow(parent, text, 70, (wxTipWindow**)windowPtr)
+	{
+		Bind(wxEVT_KEY_DOWN, &wxEmuStateTip::OnKeyDown, this);
+	}
+
 	// wxTipWindow doesn't correctly handle KeyEvents and crashes... we must overload that.
 	void OnKeyDown(wxKeyEvent& event) { event.StopPropagation(); Close(); }
-private:
-	DECLARE_EVENT_TABLE()
 };
 
 class CGameListCtrl : public wxListCtrl
@@ -83,8 +85,6 @@ private:
 	void SetBackgroundColor();
 	void ScanForISOs();
 
-	DECLARE_EVENT_TABLE()
-
 	// events
 	void OnLeftClick(wxMouseEvent& event);
 	void OnRightClick(wxMouseEvent& event);
@@ -98,13 +98,13 @@ private:
 	void OnOpenContainingFolder(wxCommandEvent& event);
 	void OnOpenSaveFolder(wxCommandEvent& event);
 	void OnExportSave(wxCommandEvent& event);
-	void OnSetDefaultGCM(wxCommandEvent& event);
-	void OnDeleteGCM(wxCommandEvent& event);
-	void OnCompressGCM(wxCommandEvent& event);
-	void OnMultiCompressGCM(wxCommandEvent& event);
-	void OnMultiDecompressGCM(wxCommandEvent& event);
+	void OnSetDefaultISO(wxCommandEvent& event);
+	void OnDeleteISO(wxCommandEvent& event);
+	void OnCompressISO(wxCommandEvent& event);
+	void OnMultiCompressISO(wxCommandEvent& event);
+	void OnMultiDecompressISO(wxCommandEvent& event);
 	void OnInstallWAD(wxCommandEvent& event);
-	void OnDropFiles(wxDropFilesEvent& event);
+	void OnChangeDisc(wxCommandEvent& event);
 
 	void CompressSelection(bool _compress);
 	void AutomaticColumnWidth();
@@ -113,6 +113,6 @@ private:
 	static size_t m_currentItem;
 	static std::string m_currentFilename;
 	static size_t m_numberItem;
-	static void CompressCB(const char* text, float percent, void* arg);
-	static void MultiCompressCB(const char* text, float percent, void* arg);
+	static bool CompressCB(const std::string& text, float percent, void* arg);
+	static bool MultiCompressCB(const std::string& text, float percent, void* arg);
 };

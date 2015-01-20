@@ -2,6 +2,7 @@
 // Licensed under GPLv2
 // Refer to the license.txt file included.
 
+#include "VideoBackends/OGL/GLInterfaceBase.h"
 #include "VideoBackends/OGL/SamplerCache.h"
 #include "VideoCommon/DriverDetails.h"
 
@@ -49,7 +50,7 @@ void SamplerCache::SetSamplerState(int stage, const TexMode0& tm0, const TexMode
 	}
 }
 
-auto SamplerCache::GetEntry(const Params& params) -> Value&
+SamplerCache::Value& SamplerCache::GetEntry(const Params& params)
 {
 	auto& val = m_cache[params];
 	if (!val.sampler_id)

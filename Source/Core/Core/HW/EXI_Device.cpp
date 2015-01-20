@@ -59,7 +59,7 @@ void IEXIDevice::DMARead(u32 _uAddr, u32 _uSize)
 		TransferByte(uByte);
 		Memory::Write_U8(uByte, _uAddr++);
 	}
-};
+}
 
 
 // --- class CEXIDummy ---
@@ -99,9 +99,12 @@ IEXIDevice* EXIDevice_Create(TEXIDevices device_type, const int channel_num)
 		break;
 
 	case EXIDEVICE_MEMORYCARD:
-		result = new CEXIMemoryCard(channel_num);
+	case EXIDEVICE_MEMORYCARDFOLDER:
+	{
+		bool gci_folder = (device_type == EXIDEVICE_MEMORYCARDFOLDER);
+		result = new CEXIMemoryCard(channel_num, gci_folder);
 		break;
-
+	}
 	case EXIDEVICE_MASKROM:
 		result = new CEXIIPL();
 		break;

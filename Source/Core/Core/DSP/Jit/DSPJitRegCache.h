@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <array>
 #include "Common/x64Emitter.h"
 
 class DSPEmitter;
@@ -12,14 +13,10 @@ enum DSPJitRegSpecial
 {
 	DSP_REG_AX0_32   =32,
 	DSP_REG_AX1_32   =33,
-#if _M_X86_64
 	DSP_REG_ACC0_64  =34,
 	DSP_REG_ACC1_64  =35,
 	DSP_REG_PROD_64  =36,
 	DSP_REG_MAX_MEM_BACKED = 36,
-#else
-	DSP_REG_MAX_MEM_BACKED = 33,
-#endif
 
 	DSP_REG_USED     =253,
 	DSP_REG_STATIC   =254,
@@ -33,18 +30,12 @@ enum DSPJitSignExtend
 	NONE
 };
 
-#if _M_X86_64
-#define NUMXREGS 16
-#else
-#define NUMXREGS 8
-#endif
-
 class DSPJitRegCache
 {
 private:
 	struct X64CachedReg
 	{
-		int guest_reg; //including DSPJitRegSpecial
+		size_t guest_reg; //including DSPJitRegSpecial
 		bool pushed;
 	};
 
@@ -70,8 +61,8 @@ private:
  */
 	};
 
-	DynamicReg regs[DSP_REG_MAX_MEM_BACKED+1];
-	X64CachedReg xregs[NUMXREGS];
+	std::array<DynamicReg, 37> regs;
+	std::array<X64CachedReg, 16> xregs;
 
 	DSPEmitter &emitter;
 	bool temporary;
@@ -85,10 +76,10 @@ private:
 	Gen::X64Reg findSpillFreeXReg();
 	void spillXReg(Gen::X64Reg reg);
 
-	void movToHostReg(int reg, Gen::X64Reg host_reg, bool load);
-	void movToHostReg(int reg, bool load);
-	void rotateHostReg(int reg, int shift, bool emit);
-	void movToMemory(int reg);
+	void movToHostReg(size_t reg, Gen::X64Reg host_reg, bool load);
+	void movToHostReg(size_t reg, bool load);
+	void rotateHostReg(size_t reg, int shift, bool emit);
+	void movToMemory(size_t reg);
 	void flushMemBackedRegs();
 
 public:

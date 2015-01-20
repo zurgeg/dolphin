@@ -12,6 +12,8 @@ const XFBSourceBase* FramebufferManagerBase::m_overlappingXFBArray[MAX_VIRTUAL_X
 unsigned int FramebufferManagerBase::s_last_xfb_width = 1;
 unsigned int FramebufferManagerBase::s_last_xfb_height = 1;
 
+unsigned int FramebufferManagerBase::m_EFBLayers = 1;
+
 FramebufferManagerBase::FramebufferManagerBase()
 {
 	m_realXFBSource = nullptr;
@@ -31,20 +33,20 @@ FramebufferManagerBase::~FramebufferManagerBase()
 	delete m_realXFBSource;
 }
 
-const XFBSourceBase* const* FramebufferManagerBase::GetXFBSource(u32 xfbAddr, u32 fbWidth, u32 fbHeight, u32 &xfbCount)
+const XFBSourceBase* const* FramebufferManagerBase::GetXFBSource(u32 xfbAddr, u32 fbWidth, u32 fbHeight, u32* xfbCountP)
 {
 	if (!g_ActiveConfig.bUseXFB)
 		return nullptr;
 
 	if (g_ActiveConfig.bUseRealXFB)
-		return GetRealXFBSource(xfbAddr, fbWidth, fbHeight, xfbCount);
+		return GetRealXFBSource(xfbAddr, fbWidth, fbHeight, xfbCountP);
 	else
-		return GetVirtualXFBSource(xfbAddr, fbWidth, fbHeight, xfbCount);
+		return GetVirtualXFBSource(xfbAddr, fbWidth, fbHeight, xfbCountP);
 }
 
-const XFBSourceBase* const* FramebufferManagerBase::GetRealXFBSource(u32 xfbAddr, u32 fbWidth, u32 fbHeight, u32 &xfbCount)
+const XFBSourceBase* const* FramebufferManagerBase::GetRealXFBSource(u32 xfbAddr, u32 fbWidth, u32 fbHeight, u32* xfbCountP)
 {
-	xfbCount = 1;
+	*xfbCountP = 1;
 
 	// recreate if needed
 	if (m_realXFBSource && (m_realXFBSource->texWidth != fbWidth || m_realXFBSource->texHeight != fbHeight))
@@ -54,7 +56,7 @@ const XFBSourceBase* const* FramebufferManagerBase::GetRealXFBSource(u32 xfbAddr
 	}
 
 	if (!m_realXFBSource)
-		m_realXFBSource = g_framebuffer_manager->CreateXFBSource(fbWidth, fbHeight);
+		m_realXFBSource = g_framebuffer_manager->CreateXFBSource(fbWidth, fbHeight, 1);
 
 	m_realXFBSource->srcAddr = xfbAddr;
 
@@ -64,7 +66,6 @@ const XFBSourceBase* const* FramebufferManagerBase::GetRealXFBSource(u32 xfbAddr
 	m_realXFBSource->texWidth = fbWidth;
 	m_realXFBSource->texHeight = fbHeight;
 
-	// TODO: stuff only used by OGL... :/
 	// OpenGL texture coordinates originate at the lower left, which is why
 	// sourceRc.top = fbHeight and sourceRc.bottom = 0.
 	m_realXFBSource->sourceRc.left = 0;
@@ -79,9 +80,9 @@ const XFBSourceBase* const* FramebufferManagerBase::GetRealXFBSource(u32 xfbAddr
 	return &m_overlappingXFBArray[0];
 }
 
-const XFBSourceBase* const* FramebufferManagerBase::GetVirtualXFBSource(u32 xfbAddr, u32 fbWidth, u32 fbHeight, u32 &xfbCount)
+const XFBSourceBase* const* FramebufferManagerBase::GetVirtualXFBSource(u32 xfbAddr, u32 fbWidth, u32 fbHeight, u32* xfbCountP)
 {
-	xfbCount = 0;
+	u32 xfbCount = 0;
 
 	if (m_virtualXFBList.empty())  // no Virtual XFBs available
 		return nullptr;
@@ -99,13 +100,14 @@ const XFBSourceBase* const* FramebufferManagerBase::GetVirtualXFBSource(u32 xfbA
 		u32 dstLower = vxfb->xfbAddr;
 		u32 dstUpper = vxfb->xfbAddr + 2 * vxfb->xfbWidth * vxfb->xfbHeight;
 
-		if (addrRangesOverlap(srcLower, srcUpper, dstLower, dstUpper))
+		if (AddressRangesOverlap(srcLower, srcUpper, dstLower, dstUpper))
 		{
 			m_overlappingXFBArray[xfbCount] = vxfb->xfbSource;
 			++xfbCount;
 		}
 	}
 
+	*xfbCountP = xfbCount;
 	return &m_overlappingXFBArray[0];
 }
 
@@ -144,7 +146,7 @@ void FramebufferManagerBase::CopyToVirtualXFB(u32 xfbAddr, u32 fbWidth, u32 fbHe
 		m_virtualXFBList.splice(m_virtualXFBList.begin(), m_virtualXFBList, vxfb);
 
 	unsigned int target_width, target_height;
-	g_framebuffer_manager->GetTargetSize(&target_width, &target_height, sourceRc);
+	g_framebuffer_manager->GetTargetSize(&target_width, &target_height);
 
 	// recreate if needed
 	if (vxfb->xfbSource && (vxfb->xfbSource->texWidth != target_width || vxfb->xfbSource->texHeight != target_height))
@@ -155,7 +157,7 @@ void FramebufferManagerBase::CopyToVirtualXFB(u32 xfbAddr, u32 fbWidth, u32 fbHe
 
 	if (!vxfb->xfbSource)
 	{
-		vxfb->xfbSource = g_framebuffer_manager->CreateXFBSource(target_width, target_height);
+		vxfb->xfbSource = g_framebuffer_manager->CreateXFBSource(target_width, target_height, m_EFBLayers);
 		vxfb->xfbSource->texWidth = target_width;
 		vxfb->xfbSource->texHeight = target_height;
 	}
@@ -213,7 +215,7 @@ void FramebufferManagerBase::ReplaceVirtualXFB()
 			it->xfbHeight = 0;
 			it->xfbWidth = 0;
 		}
-		else if (addrRangesOverlap(srcLower, srcUpper, dstLower, dstUpper))
+		else if (AddressRangesOverlap(srcLower, srcUpper, dstLower, dstUpper))
 		{
 			s32 upperOverlap = (srcUpper - dstLower) / lineSize;
 			s32 lowerOverlap = (dstUpper - srcLower) / lineSize;
@@ -231,34 +233,18 @@ void FramebufferManagerBase::ReplaceVirtualXFB()
 	}
 }
 
-int FramebufferManagerBase::ScaleToVirtualXfbWidth(int x, unsigned int backbuffer_width)
+int FramebufferManagerBase::ScaleToVirtualXfbWidth(int x)
 {
 	if (g_ActiveConfig.RealXFBEnabled())
 		return x;
 
-	if (g_ActiveConfig.b3DVision)
-	{
-		// This works, yet the version in the else doesn't. No idea why.
-		return x * (int)backbuffer_width / (int)FramebufferManagerBase::LastXfbWidth();
-	}
-	else
-	{
-		return x * (int)Renderer::GetTargetRectangle().GetWidth() / (int)FramebufferManagerBase::LastXfbWidth();
-	}
+	return x * (int)Renderer::GetTargetRectangle().GetWidth() / (int)FramebufferManagerBase::LastXfbWidth();
 }
 
-int FramebufferManagerBase::ScaleToVirtualXfbHeight(int y, unsigned int backbuffer_height)
+int FramebufferManagerBase::ScaleToVirtualXfbHeight(int y)
 {
 	if (g_ActiveConfig.RealXFBEnabled())
 		return y;
 
-	if (g_ActiveConfig.b3DVision)
-	{
-		// This works, yet the version in the else doesn't. No idea why.
-		return y * (int)backbuffer_height / (int)FramebufferManagerBase::LastXfbHeight();
-	}
-	else
-	{
-		return y * (int)Renderer::GetTargetRectangle().GetHeight() / (int)FramebufferManagerBase::LastXfbHeight();
-	}
+	return y * (int)Renderer::GetTargetRectangle().GetHeight() / (int)FramebufferManagerBase::LastXfbHeight();
 }

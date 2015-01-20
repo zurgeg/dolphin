@@ -123,8 +123,8 @@ public final class FolderBrowser extends ListFragment
 		if(currentDir == null)
 			currentDir = new File(Environment.getExternalStorageDirectory().getPath());
 
-		ListView rootView = (ListView) inflater.inflate(R.layout.gamelist_listview, container, false);
-		adapter = new FolderBrowserAdapter(getActivity(), R.layout.gamelist_folderbrowser_list_item);
+		ListView rootView = (ListView) inflater.inflate(R.layout.folderbrowser_listview, container, false);
+		adapter = new FolderBrowserAdapter(getActivity(), R.layout.folderbrowser_list_item);
 		rootView.setAdapter(adapter);
 
 		Fill(currentDir);
@@ -133,7 +133,7 @@ public final class FolderBrowser extends ListFragment
 
 	private void FolderSelected()
 	{
-		String Directories = NativeLibrary.GetConfig("Dolphin.ini", "General", "GCMPathes", "0");
+		String Directories = NativeLibrary.GetConfig("Dolphin.ini", "General", "ISOPaths", "0");
 		int intDirectories = Integer.parseInt(Directories);
 
 		// Check to see if a path set in the Dolphin config
@@ -142,23 +142,16 @@ public final class FolderBrowser extends ListFragment
 		boolean pathNotPresent = true;
 		for (int i = 0; i < intDirectories; i++)
 		{
-			String gcmPath = NativeLibrary.GetConfig("Dolphin.ini", "General", "GCMPath" + i, "");
+			String isoPath = NativeLibrary.GetConfig("Dolphin.ini", "General", "ISOPath" + i, "");
 
-			if (gcmPath.equals(currentDir.getPath()))
-			{
-				pathNotPresent = false;
-			}
-			else
-			{
-				pathNotPresent = true;
-			}
+			pathNotPresent = !isoPath.equals(currentDir.getPath());
 		}
 
 		// User doesn't have this path in the config, so add it.
 		if (pathNotPresent)
 		{
-			NativeLibrary.SetConfig("Dolphin.ini", "General", "GCMPathes", Integer.toString(intDirectories+1));
-			NativeLibrary.SetConfig("Dolphin.ini", "General", "GCMPath" + Integer.toString(intDirectories), currentDir.getPath());
+			NativeLibrary.SetConfig("Dolphin.ini", "General", "ISOPaths", Integer.toString(intDirectories+1));
+			NativeLibrary.SetConfig("Dolphin.ini", "General", "ISOPath" + Integer.toString(intDirectories), currentDir.getPath());
 		}
 
 		((GameListActivity)getActivity()).SwitchPage(0);

@@ -5,7 +5,6 @@
 #include "Common/FileUtil.h"
 
 #include "Core/Boot/Boot.h"
-#include "Core/Boot/Boot_ELF.h"
 #include "Core/Boot/ElfReader.h"
 #include "Core/HLE/HLE.h"
 #include "Core/PowerPC/PowerPC.h"
@@ -16,11 +15,11 @@ bool CBoot::IsElfWii(const std::string& filename)
 	   there is no need for another check, just read the file right away */
 
 	const u64 filesize = File::GetSize(filename);
-	u8 *const mem = new u8[(size_t)filesize];
+	std::vector<u8> mem((size_t)filesize);
 
 	{
 	File::IOFile f(filename, "rb");
-	f.ReadBytes(mem, (size_t)filesize);
+	f.ReadBytes(mem.data(), (size_t)filesize);
 	}
 
 	// Use the same method as the DOL loader uses: search for mfspr from HID4,
@@ -31,13 +30,12 @@ bool CBoot::IsElfWii(const std::string& filename)
 
 	u32 HID4_pattern = 0x7c13fba6;
 	u32 HID4_mask = 0xfc1fffff;
-	ElfReader reader(mem);
-	bool isWii = false;
+	ElfReader reader(mem.data());
 
 	// WiiU is not a Wii
 	if (reader.is_rpx)
 	{
-		isWii = false;
+		return false;
 	}
 	else
 	{
@@ -50,16 +48,14 @@ bool CBoot::IsElfWii(const std::string& filename)
 					u32 word = Common::swap32(((u32*)reader.GetSectionDataPtr(i))[j]);
 					if ((word & HID4_mask) == HID4_pattern)
 					{
-						isWii = true;
-						break;
+						return true;
 					}
 				}
 			}
 		}
 	}
 
-	delete[] mem;
-	return isWii;
+	return false;
 }
 
 // Thanks to Tom
@@ -117,14 +113,14 @@ bool CBoot::IsElfWiiU(const std::string& filename)
 bool CBoot::Boot_ELF(const std::string& filename)
 {
 	const u64 filesize = File::GetSize(filename);
-	u8 *mem = new u8[(size_t)filesize];
+	std::vector<u8> mem((size_t)filesize);
 
 	{
 	File::IOFile f(filename, "rb");
-	f.ReadBytes(mem, (size_t)filesize);
+	f.ReadBytes(mem.data(), (size_t)filesize);
 	}
 
-	ElfReader reader(mem);
+	ElfReader reader(mem.data());
 	reader.LoadInto(0x80000000);
 	if (!reader.LoadSymbols())
 	{
@@ -137,7 +133,6 @@ bool CBoot::Boot_ELF(const std::string& filename)
 	}
 
 	PC = reader.GetEntryPoint();
-	delete[] mem;
 
 	return true;
 }

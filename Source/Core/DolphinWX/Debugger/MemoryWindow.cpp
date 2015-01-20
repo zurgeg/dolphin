@@ -24,7 +24,7 @@
 #include <wx/windowid.h>
 #include <wx/wxcrtvararg.h>
 
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 #include "Common/FileUtil.h"
 #include "Common/IniFile.h"
 #include "Common/StringUtil.h"
@@ -40,11 +40,9 @@
 #include "DolphinWX/Debugger/MemoryView.h"
 #include "DolphinWX/Debugger/MemoryWindow.h"
 
-class DebugInterface;
-
 enum
 {
-	IDM_MEM_ADDRBOX = 350,
+	IDM_MEM_ADDRBOX,
 	IDM_SYMBOLLIST,
 	IDM_SETVALBUTTON,
 	IDM_DUMP_MEMORY,
@@ -102,7 +100,7 @@ CMemoryWindow::CMemoryWindow(wxWindow* parent, wxWindowID id,
 	sizerRight->Add(new wxButton(this, IDM_DUMP_MEMORY, _("&Dump MRAM")));
 	sizerRight->Add(new wxButton(this, IDM_DUMP_MEM2, _("&Dump EXRAM")));
 
-	if (SConfig::GetInstance().m_LocalCoreStartupParameter.bTLBHack == true)
+	if (!SConfig::GetInstance().m_LocalCoreStartupParameter.bMMU)
 		sizerRight->Add(new wxButton(this, IDM_DUMP_FAKEVMEM, _("&Dump FakeVMEM")));
 
 	wxStaticBoxSizer* sizerSearchType = new wxStaticBoxSizer(wxVERTICAL, this, _("Search"));
@@ -127,25 +125,29 @@ CMemoryWindow::CMemoryWindow(wxWindow* parent, wxWindowID id,
 	sizerBig->Fit(this);
 }
 
-void CMemoryWindow::Save(IniFile& _IniFile) const
+void CMemoryWindow::Save(IniFile& ini) const
 {
 	// Prevent these bad values that can happen after a crash or hanging
 	if (GetPosition().x != -32000 && GetPosition().y != -32000)
 	{
-		_IniFile.Set("MemoryWindow", "x", GetPosition().x);
-		_IniFile.Set("MemoryWindow", "y", GetPosition().y);
-		_IniFile.Set("MemoryWindow", "w", GetSize().GetWidth());
-		_IniFile.Set("MemoryWindow", "h", GetSize().GetHeight());
+		IniFile::Section* mem_window = ini.GetOrCreateSection("MemoryWindow");
+		mem_window->Set("x", GetPosition().x);
+		mem_window->Set("y", GetPosition().y);
+		mem_window->Set("w", GetSize().GetWidth());
+		mem_window->Set("h", GetSize().GetHeight());
 	}
 }
 
-void CMemoryWindow::Load(IniFile& _IniFile)
+void CMemoryWindow::Load(IniFile& ini)
 {
 	int x, y, w, h;
-	_IniFile.Get("MemoryWindow", "x", &x, GetPosition().x);
-	_IniFile.Get("MemoryWindow", "y", &y, GetPosition().y);
-	_IniFile.Get("MemoryWindow", "w", &w, GetSize().GetWidth());
-	_IniFile.Get("MemoryWindow", "h", &h, GetSize().GetHeight());
+
+	IniFile::Section* mem_window = ini.GetOrCreateSection("MemoryWindow");
+	mem_window->Get("x", &x, GetPosition().x);
+	mem_window->Get("y", &y, GetPosition().y);
+	mem_window->Get("w", &w, GetSize().GetWidth());
+	mem_window->Get("h", &h, GetSize().GetHeight());
+
 	SetSize(x, y, w, h);
 }
 
@@ -156,6 +158,12 @@ void CMemoryWindow::JumpToAddress(u32 _Address)
 
 void CMemoryWindow::SetMemoryValue(wxCommandEvent& event)
 {
+	if (!Memory::IsInitialized())
+	{
+		WxUtils::ShowErrorDialog(_("Cannot set uninitialized memory."));
+		return;
+	}
+
 	std::string str_addr = WxStrToStr(addrbox->GetValue());
 	std::string str_val = WxStrToStr(valbox->GetValue());
 	u32 addr;
@@ -163,13 +171,13 @@ void CMemoryWindow::SetMemoryValue(wxCommandEvent& event)
 
 	if (!TryParse(std::string("0x") + str_addr, &addr))
 	{
-		PanicAlertT("Invalid Address: %s", str_addr.c_str());
+		WxUtils::ShowErrorDialog(wxString::Format(_("Invalid address: %s"), str_addr.c_str()));
 		return;
 	}
 
 	if (!TryParse(std::string("0x") + str_val, &val))
 	{
-		PanicAlertT("Invalid Value: %s", str_val.c_str());
+		WxUtils::ShowErrorDialog(wxString::Format(_("Invalid value: %s"), str_val.c_str()));
 		return;
 	}
 
@@ -187,7 +195,7 @@ void CMemoryWindow::OnAddrBoxChange(wxCommandEvent& event)
 		memview->Center(addr & ~3);
 	}
 
-	event.Skip(1);
+	event.Skip();
 }
 
 void CMemoryWindow::Update()
@@ -231,13 +239,13 @@ void CMemoryWindow::OnHostMessage(wxCommandEvent& event)
 {
 	switch (event.GetId())
 	{
-		case IDM_NOTIFYMAPLOADED:
+		case IDM_NOTIFY_MAP_LOADED:
 			NotifyMapLoaded();
 			break;
 	}
 }
 
-void DumpArray(const std::string& filename, const u8* data, size_t length)
+static void DumpArray(const std::string& filename, const u8* data, size_t length)
 {
 	if (data)
 	{
@@ -268,7 +276,7 @@ void CMemoryWindow::OnDumpMem2( wxCommandEvent& event )
 // Write fake vmem to file
 void CMemoryWindow::OnDumpFakeVMEM( wxCommandEvent& event )
 {
-	DumpArray(File::GetUserPath(F_FAKEVMEMDUMP_IDX), Memory::m_pVirtualFakeVMEM, Memory::FAKEVMEM_SIZE);
+	DumpArray(File::GetUserPath(F_FAKEVMEMDUMP_IDX), Memory::m_pFakeVMEM, Memory::FAKEVMEM_SIZE);
 }
 
 void CMemoryWindow::U8(wxCommandEvent& event)
@@ -415,10 +423,7 @@ void CMemoryWindow::onSearch(wxCommandEvent& event)
 			{
 				//Match was found
 				wxMessageBox(_("A match was found. Placing viewer at the offset."));
-				wxChar tmpwxstr[128] = {0};
-				wxSprintf(tmpwxstr, "%08x", i);
-				wxString tmpwx(tmpwxstr);
-				addrbox->SetValue(tmpwx);
+				addrbox->SetValue(wxString::Format("%08x", i));
 				//memview->curAddress = i;
 				//memview->Refresh();
 				OnAddrBoxChange(event);

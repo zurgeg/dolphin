@@ -5,7 +5,7 @@
 #include <string>
 
 #include "AudioCommon/WaveFile.h"
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 #include "Core/ConfigManager.h"
 
 enum {BUF_SIZE = 32*1024};
@@ -137,8 +137,12 @@ void WaveFileWriter::AddStereoSamplesBE(const short *sample_data, u32 count)
 			return;
 	}
 
-	for (u32 i = 0; i < count * 2; i++)
-		conv_buffer[i] = Common::swap16((u16)sample_data[i]);
+	for (u32 i = 0; i < count; i++)
+	{
+		//Flip the audio channels from RL to LR
+		conv_buffer[2 * i] = Common::swap16((u16)sample_data[2 * i + 1]);
+		conv_buffer[2 * i + 1] = Common::swap16((u16)sample_data[2 * i]);
+	}
 
 	file.WriteBytes(conv_buffer, count * 4);
 	audio_size += count * 4;

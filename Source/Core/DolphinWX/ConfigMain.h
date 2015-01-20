@@ -45,7 +45,7 @@ class CConfigMain : public wxDialog
 public:
 
 	CConfigMain(wxWindow* parent,
-		wxWindowID id = 1,
+		wxWindowID id = wxID_ANY,
 		const wxString& title = _("Dolphin Configuration"),
 		const wxPoint& pos = wxDefaultPosition,
 		const wxSize& size = wxDefaultSize,
@@ -69,6 +69,7 @@ public:
 		ID_GAMECUBEPAGE,
 		ID_WIIPAGE,
 		ID_PATHSPAGE,
+		ID_ADVANCEDPAGE,
 	};
 
 private:
@@ -77,10 +78,11 @@ private:
 		ID_CPUTHREAD = 1010,
 		ID_IDLESKIP,
 		ID_ENABLECHEATS,
+		ID_ENABLEOVERCLOCK,
 		ID_FRAMELIMIT,
+		ID_OVERCLOCK,
 
 		ID_CPUENGINE,
-		ID_DSPTHREAD,
 
 		ID_NTSCJ,
 
@@ -88,7 +90,6 @@ private:
 		ID_DSPENGINE,
 		ID_ENABLE_HLE_AUDIO,
 		ID_ENABLE_THROTTLE,
-		ID_DUMP_AUDIO,
 		ID_DPL2DECODER,
 		ID_LATENCY,
 		ID_BACKEND,
@@ -109,11 +110,6 @@ private:
 		ID_GC_EXIDEVICE_SLOTB,
 		ID_GC_EXIDEVICE_SLOTB_PATH,
 		ID_GC_EXIDEVICE_SP1,
-		ID_GC_SIDEVICE0,
-		ID_GC_SIDEVICE1,
-		ID_GC_SIDEVICE2,
-		ID_GC_SIDEVICE3,
-
 
 		ID_WII_IPL_SSV,
 		ID_WII_IPL_E60,
@@ -150,8 +146,10 @@ private:
 
 	// Advanced
 	wxRadioBox* CPUEngine;
-	wxCheckBox* DSPThread;
 	wxCheckBox* _NTSCJ;
+	wxSlider* OCSlider;
+	wxStaticText* OCText;
+	wxCheckBox* EnableOC;
 
 
 	wxBoxSizer* sDisplayPage; // Display settings
@@ -163,7 +161,6 @@ private:
 	wxRadioBox* DSPEngine;
 	wxSlider*   VolumeSlider;
 	wxStaticText* VolumeText;
-	wxCheckBox* DumpAudio;
 	wxCheckBox* DPL2Decoder;
 	wxArrayString wxArrayBackends;
 	wxChoice*   BackendSelection;
@@ -188,8 +185,6 @@ private:
 	// Device
 	wxChoice* GCEXIDevice[3];
 	wxButton* GCMemcardPath[2];
-	wxChoice* GCSIDevice[4];
-
 
 	wxBoxSizer* sWiiPage; // Wii settings
 	wxStaticBoxSizer* /*sbWiimoteSettings, **/sbWiiIPLSettings, *sbWiiDeviceSettings; // Wiimote, Misc and Device sections
@@ -197,7 +192,7 @@ private:
 
 	// Misc
 	wxCheckBox* WiiScreenSaver;
-	wxCheckBox* WiiEuRGB60;
+	wxCheckBox* WiiPAL60;
 	wxChoice* WiiAspectRatio;
 	wxChoice* WiiSystemLang;
 
@@ -249,6 +244,7 @@ private:
 	void UpdateGUI();
 	void OnClose(wxCloseEvent& event);
 
+	void UpdateCPUClock();
 	void CoreSettingsChanged(wxCommandEvent& event);
 
 	void DisplaySettingsChanged(wxCommandEvent& event);
@@ -259,7 +255,6 @@ private:
 
 	void GCSettingsChanged(wxCommandEvent& event);
 	void ChooseMemcardPath(std::string& strMemcard, bool isSlotA);
-	void ChooseSIDevice(wxString deviceName, int deviceNum);
 	void ChooseEXIDevice(wxString deviceName, int deviceNum);
 
 	void WiiSettingsChanged(wxCommandEvent& event);

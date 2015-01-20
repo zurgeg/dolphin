@@ -10,7 +10,6 @@
 #include "Core/PowerPC/JitArm32/JitRegCache.h"
 
 #define ARMFPUREGS 32
-using namespace ArmGen;
 
 class ArmFPRCache
 {
@@ -22,28 +21,30 @@ private:
 	int NUMPPCREG;
 	int NUMARMREG;
 
-	ARMReg *GetAllocationOrder(int &count);
-	ARMReg *GetPPCAllocationOrder(int &count);
+	ArmGen::ARMReg *GetAllocationOrder(int &count);
+	ArmGen::ARMReg *GetPPCAllocationOrder(int &count);
 
-	ARMReg GetPPCReg(u32 preg, bool PS1, bool preLoad);
+	ArmGen::ARMReg GetPPCReg(u32 preg, bool PS1, bool preLoad);
 
 	u32 GetLeastUsedRegister(bool increment);
 	bool FindFreeRegister(u32 &regindex);
 protected:
-	ARMXEmitter *emit;
+	ArmGen::ARMXEmitter *emit;
 
 public:
 	ArmFPRCache();
 	~ArmFPRCache() {}
 
-	void Init(ARMXEmitter *emitter);
+	void Init(ArmGen::ARMXEmitter *emitter);
 	void Start(PPCAnalyst::BlockRegStats &stats);
 
-	void SetEmitter(ARMXEmitter *emitter) {emit = emitter;}
+	void SetEmitter(ArmGen::ARMXEmitter *emitter) {emit = emitter;}
 
-	ARMReg GetReg(bool AutoLock = true); // Return a ARM register we can use.
-	void Unlock(ARMReg V0);
-	void Flush();
-	ARMReg R0(u32 preg, bool preLoad = true); // Returns a cached register
-	ARMReg R1(u32 preg, bool preLoad = true);
+	ArmGen::ARMReg GetReg(bool AutoLock = true); // Return a ARM register we can use.
+	void Unlock(ArmGen::ARMReg V0);
+	void Flush(FlushMode mode = FLUSH_ALL);
+	ArmGen::ARMReg R0(u32 preg, bool preLoad = true); // Returns a cached register
+	ArmGen::ARMReg R1(u32 preg, bool preLoad = true);
+
+	void StoreFromRegister(u32 preg);
 };

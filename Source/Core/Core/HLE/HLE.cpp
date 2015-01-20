@@ -2,7 +2,7 @@
 // Licensed under GPLv2
 // Refer to the license.txt file included.
 
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 
 #include "Core/ConfigManager.h"
 #include "Core/Core.h"
@@ -45,10 +45,6 @@ static const SPatch OSPatches[] =
 
 	// Name doesn't matter, installed in CBoot::BootUp()
 	{ "HBReload",             HLE_Misc::HBReload,              HLE_HOOK_REPLACE, HLE_TYPE_GENERIC },
-
-	// ES_LAUNCH
-	{ "__OSBootDol",          HLE_Misc::OSBootDol,             HLE_HOOK_REPLACE, HLE_TYPE_GENERIC },
-	{ "OSGetResetCode",       HLE_Misc::OSGetResetCode,        HLE_HOOK_REPLACE, HLE_TYPE_GENERIC },
 
 	// Debug/OS Support
 	{ "OSPanic",              HLE_OS::HLE_OSPanic,             HLE_HOOK_REPLACE, HLE_TYPE_DEBUG },
@@ -147,10 +143,7 @@ int GetFunctionFlagsByIndex(u32 index)
 
 bool IsEnabled(int flags)
 {
-	if (flags == HLE::HLE_TYPE_MEMORY && Core::g_CoreStartupParameter.bMMU)
-		return false;
-
-	if (flags == HLE::HLE_TYPE_DEBUG && !Core::g_CoreStartupParameter.bEnableDebugging && PowerPC::GetMode() != MODE_INTERPRETER)
+	if (flags == HLE::HLE_TYPE_DEBUG && !SConfig::GetInstance().m_LocalCoreStartupParameter.bEnableDebugging && PowerPC::GetMode() != MODE_INTERPRETER)
 		return false;
 
 	return true;

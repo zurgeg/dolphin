@@ -12,6 +12,7 @@
 #include <wx/event.h>
 #include <wx/gbsizer.h>
 #include <wx/gdicmn.h>
+#include <wx/msgdlg.h>
 #include <wx/sizer.h>
 #include <wx/spinbutt.h>
 #include <wx/stattext.h>
@@ -20,26 +21,20 @@
 #include <wx/translation.h>
 #include <wx/windowid.h>
 
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 #include "Common/StringUtil.h"
 #include "Core/ActionReplay.h"
 #include "Core/ARDecrypt.h"
 #include "DolphinWX/ARCodeAddEdit.h"
+#include "DolphinWX/ISOProperties.h"
 #include "DolphinWX/WxUtils.h"
-
-class wxWindow;
-
-extern std::vector<ActionReplay::ARCode> arCodes;
-
-BEGIN_EVENT_TABLE(CARCodeAddEdit, wxDialog)
-	EVT_BUTTON(wxID_OK, CARCodeAddEdit::SaveCheatData)
-	EVT_SPIN(ID_ENTRY_SELECT, CARCodeAddEdit::ChangeEntry)
-END_EVENT_TABLE()
 
 CARCodeAddEdit::CARCodeAddEdit(int _selection, wxWindow* parent, wxWindowID id, const wxString& title, const wxPoint& position, const wxSize& size, long style)
 	: wxDialog(parent, id, title, position, size, style)
 	, selection(_selection)
 {
+	Bind(wxEVT_BUTTON, &CARCodeAddEdit::SaveCheatData, this, wxID_OK);
+
 	ActionReplay::ARCode tempEntries;
 	wxString currentName = _("Insert name here..");
 
@@ -57,13 +52,16 @@ CARCodeAddEdit::CARCodeAddEdit(int _selection, wxWindow* parent, wxWindowID id, 
 	wxStaticBoxSizer* sbEntry = new wxStaticBoxSizer(wxVERTICAL, this, _("Cheat Code"));
 	wxGridBagSizer* sgEntry = new wxGridBagSizer(0, 0);
 
-	wxStaticText* EditCheatNameText = new wxStaticText(this, ID_EDITCHEAT_NAME_TEXT, _("Name:"));
-	EditCheatName = new wxTextCtrl(this, ID_EDITCHEAT_NAME, wxEmptyString);
+	wxStaticText* EditCheatNameText = new wxStaticText(this, wxID_ANY, _("Name:"));
+	EditCheatName = new wxTextCtrl(this, wxID_ANY, wxEmptyString);
 	EditCheatName->SetValue(currentName);
-	EntrySelection = new wxSpinButton(this, ID_ENTRY_SELECT);
+
+	EntrySelection = new wxSpinButton(this);
 	EntrySelection->SetRange(1, ((int)arCodes.size()) > 0 ? (int)arCodes.size() : 1);
 	EntrySelection->SetValue((int)(arCodes.size() - selection));
-	EditCheatCode = new wxTextCtrl(this, ID_EDITCHEAT_CODE, wxEmptyString, wxDefaultPosition, wxSize(300, 100), wxTE_MULTILINE);
+	EntrySelection->Bind(wxEVT_SPIN, &CARCodeAddEdit::ChangeEntry, this);
+
+	EditCheatCode = new wxTextCtrl(this, wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize(300, 100), wxTE_MULTILINE);
 	UpdateTextCtrl(tempEntries);
 
 	sgEntry->Add(EditCheatNameText, wxGBPosition(0, 0), wxGBSpan(1, 1), wxALIGN_CENTER|wxALL, 5);
@@ -149,7 +147,7 @@ void CARCodeAddEdit::SaveCheatData(wxCommandEvent& WXUNUSED (event))
 	// Codes with no lines appear to be deleted/hidden from the list.  Let's prevent that.
 	if (!decryptedLines.size())
 	{
-		PanicAlertT("The resulting decrypted AR code doesn't contain any lines.");
+		WxUtils::ShowErrorDialog(_("The resulting decrypted AR code doesn't contain any lines."));
 		return;
 	}
 

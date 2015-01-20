@@ -4,7 +4,7 @@
 
 #include "Common/Atomic.h"
 #include "Common/ChunkFile.h"
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 #include "Common/MathUtil.h"
 #include "Common/Thread.h"
 #include "Core/ConfigManager.h"
@@ -24,28 +24,23 @@
 namespace CommandProcessor
 {
 
-int et_UpdateInterrupts;
+static int et_UpdateInterrupts;
 
 // TODO(ector): Warn on bbox read/write
 
 // STATE_TO_SAVE
 SCPFifoStruct fifo;
-UCPStatusReg m_CPStatusReg;
-UCPCtrlReg  m_CPCtrlReg;
-UCPClearReg m_CPClearReg;
+static UCPStatusReg m_CPStatusReg;
+static UCPCtrlReg  m_CPCtrlReg;
+static UCPClearReg m_CPClearReg;
 
-u16 m_bboxleft;
-u16 m_bboxtop;
-u16 m_bboxright;
-u16 m_bboxbottom;
-u16 m_tokenReg;
-
-static bool bProcessFifoToLoWatermark = false;
-static bool bProcessFifoAllDistance = false;
+static u16 m_bboxleft;
+static u16 m_bboxtop;
+static u16 m_bboxright;
+static u16 m_bboxbottom;
+static u16 m_tokenReg;
 
 volatile bool isPossibleWaitingSetDrawDone = false;
-volatile bool isHiWatermarkActive = false;
-volatile bool isLoWatermarkActive = false;
 volatile bool interruptSet= false;
 volatile bool interruptWaiting= false;
 volatile bool interruptTokenWaiting = false;
@@ -53,12 +48,12 @@ volatile bool interruptFinishWaiting = false;
 
 volatile u32 VITicks = CommandProcessor::m_cpClockOrigin;
 
-bool IsOnThread()
+static bool IsOnThread()
 {
 	return SConfig::GetInstance().m_LocalCoreStartupParameter.bCPUThread;
 }
 
-void UpdateInterrupts_Wrapper(u64 userdata, int cyclesLate)
+static void UpdateInterrupts_Wrapper(u64 userdata, int cyclesLate)
 {
 	UpdateInterrupts(userdata);
 }
@@ -75,10 +70,6 @@ void DoState(PointerWrap &p)
 	p.Do(m_tokenReg);
 	p.Do(fifo);
 
-	p.Do(bProcessFifoToLoWatermark);
-	p.Do(bProcessFifoAllDistance);
-	p.Do(isHiWatermarkActive);
-	p.Do(isLoWatermarkActive);
 	p.Do(isPossibleWaitingSetDrawDone);
 	p.Do(interruptSet);
 	p.Do(interruptWaiting);
@@ -86,11 +77,22 @@ void DoState(PointerWrap &p)
 	p.Do(interruptFinishWaiting);
 }
 
-inline void WriteLow (volatile u32& _reg, u16 lowbits)  {Common::AtomicStore(_reg,(_reg & 0xFFFF0000) | lowbits);}
-inline void WriteHigh(volatile u32& _reg, u16 highbits) {Common::AtomicStore(_reg,(_reg & 0x0000FFFF) | ((u32)highbits << 16));}
-
-inline u16 ReadLow  (u32 _reg)  {return (u16)(_reg & 0xFFFF);}
-inline u16 ReadHigh (u32 _reg)  {return (u16)(_reg >> 16);}
+static inline void WriteLow(volatile u32& _reg, u16 lowbits)
+{
+	Common::AtomicStore(_reg, (_reg & 0xFFFF0000) | lowbits);
+}
+static inline void WriteHigh(volatile u32& _reg, u16 highbits)
+{
+	Common::AtomicStore(_reg, (_reg & 0x0000FFFF) | ((u32)highbits << 16));
+}
+static inline u16 ReadLow(u32 _reg)
+{
+	return (u16)(_reg & 0xFFFF);
+}
+static inline u16 ReadHigh(u32 _reg)
+{
+	return (u16)(_reg >> 16);
+}
 
 void Init()
 {
@@ -110,8 +112,6 @@ void Init()
 	m_tokenReg = 0;
 
 	memset(&fifo,0,sizeof(fifo));
-	fifo.CPCmdIdle  = 1;
-	fifo.CPReadIdle = 1;
 	fifo.bFF_Breakpoint = 0;
 	fifo.bFF_HiWatermark = 0;
 	fifo.bFF_HiWatermarkInt = 0;
@@ -123,11 +123,7 @@ void Init()
 	interruptFinishWaiting = false;
 	interruptTokenWaiting = false;
 
-	bProcessFifoToLoWatermark = false;
-	bProcessFifoAllDistance = false;
 	isPossibleWaitingSetDrawDone = false;
-	isHiWatermarkActive = false;
-	isLoWatermarkActive = false;
 
 	et_UpdateInterrupts = CoreTiming::RegisterEvent("CPInterrupt", UpdateInterrupts_Wrapper);
 }
@@ -163,9 +159,8 @@ void RegisterMMIO(MMIO::Mapping* mmio, u32 base)
 		{ FIFO_WRITE_POINTER_LO, MMIO::Utils::LowPart(&fifo.CPWritePointer), false, true },
 		{ FIFO_WRITE_POINTER_HI, MMIO::Utils::HighPart(&fifo.CPWritePointer) },
 		// FIFO_READ_POINTER has different code for single/dual core.
-		{ FIFO_BP_LO, MMIO::Utils::LowPart(&fifo.CPBreakpoint), false, true },
-		{ FIFO_BP_HI, MMIO::Utils::HighPart(&fifo.CPBreakpoint) },
 	};
+
 	for (auto& mapped_var : directly_mapped_vars)
 	{
 		u16 wmask = mapped_var.writes_align_to_32_bytes ? 0xFFE0 : 0xFFFF;
@@ -176,6 +171,19 @@ void RegisterMMIO(MMIO::Mapping* mmio, u32 base)
 				: MMIO::DirectWrite<u16>(mapped_var.ptr, wmask)
 		);
 	}
+
+	mmio->Register(base | FIFO_BP_LO,
+		MMIO::DirectRead<u16>(MMIO::Utils::LowPart(&fifo.CPBreakpoint)),
+		MMIO::ComplexWrite<u16>([](u32, u16 val) {
+			WriteLow(fifo.CPBreakpoint, val & 0xffe0);
+		})
+	);
+	mmio->Register(base | FIFO_BP_HI,
+		MMIO::DirectRead<u16>(MMIO::Utils::HighPart(&fifo.CPBreakpoint)),
+		MMIO::ComplexWrite<u16>([](u32, u16 val) {
+			WriteHigh(fifo.CPBreakpoint, val);
+		})
+	);
 
 	// Timing and metrics MMIOs are stubbed with fixed values.
 	struct {
@@ -220,8 +228,7 @@ void RegisterMMIO(MMIO::Mapping* mmio, u32 base)
 			UCPCtrlReg tmp(val);
 			m_CPCtrlReg.Hex = tmp.Hex;
 			SetCpControlRegister();
-			if (!IsOnThread())
-				RunGpu();
+			RunGpu();
 		})
 	);
 
@@ -231,8 +238,7 @@ void RegisterMMIO(MMIO::Mapping* mmio, u32 base)
 			UCPClearReg tmp(val);
 			m_CPClearReg.Hex = tmp.Hex;
 			SetCpClearRegister();
-			if (!IsOnThread())
-				RunGpu();
+			RunGpu();
 		})
 	);
 
@@ -264,6 +270,7 @@ void RegisterMMIO(MMIO::Mapping* mmio, u32 base)
 			: MMIO::DirectRead<u16>(MMIO::Utils::HighPart(&fifo.CPReadWriteDistance)),
 		MMIO::ComplexWrite<u16>([](u32, u16 val) {
 			WriteHigh(fifo.CPReadWriteDistance, val);
+			SyncGPU(SYNC_GPU_OTHER);
 			if (fifo.CPReadWriteDistance == 0)
 			{
 				GPFifo::ResetGatherPipe();
@@ -273,8 +280,7 @@ void RegisterMMIO(MMIO::Mapping* mmio, u32 base)
 			{
 				ResetVideoBuffer();
 			}
-			if (!IsOnThread())
-				RunGpu();
+			RunGpu();
 		})
 	);
 	mmio->Register(base | FIFO_READ_POINTER_LO,
@@ -296,17 +302,16 @@ void RegisterMMIO(MMIO::Mapping* mmio, u32 base)
 	);
 }
 
-void STACKALIGN GatherPipeBursted()
+void GatherPipeBursted()
 {
+	if (IsOnThread())
+		SetCPStatusFromCPU();
+
 	ProcessFifoEvents();
 	// if we aren't linked, we don't care about gather pipe data
 	if (!m_CPCtrlReg.GPLinkEnable)
 	{
-		if (!IsOnThread())
-		{
-			RunGpu();
-		}
-		else
+		if (IsOnThread() && !g_use_deterministic_gpu_thread)
 		{
 			// In multibuffer mode is not allowed write in the same FIFO attached to the GPU.
 			// Fix Pokemon XD in DC mode.
@@ -317,22 +322,33 @@ void STACKALIGN GatherPipeBursted()
 				ProcessFifoAllDistance();
 			}
 		}
+		else
+		{
+			RunGpu();
+		}
 		return;
 	}
 
-	if (IsOnThread())
-		SetCpStatus(true);
-
 	// update the fifo pointer
-	if (fifo.CPWritePointer >= fifo.CPEnd)
+	if (fifo.CPWritePointer == fifo.CPEnd)
 		fifo.CPWritePointer = fifo.CPBase;
 	else
 		fifo.CPWritePointer += GATHER_PIPE_SIZE;
 
+	if (m_CPCtrlReg.GPReadEnable && m_CPCtrlReg.GPLinkEnable)
+	{
+		ProcessorInterface::Fifo_CPUWritePointer = fifo.CPWritePointer;
+		ProcessorInterface::Fifo_CPUBase = fifo.CPBase;
+		ProcessorInterface::Fifo_CPUEnd = fifo.CPEnd;
+	}
+
+	// If the game is running close to overflowing, make the exception checking more frequent.
+	if (fifo.bFF_HiWatermark)
+		CoreTiming::ForceExceptionCheck(0);
+
 	Common::AtomicAdd(fifo.CPReadWriteDistance, GATHER_PIPE_SIZE);
 
-	if (!IsOnThread())
-		RunGpu();
+	RunGpu();
 
 	_assert_msg_(COMMANDPROCESSOR, fifo.CPReadWriteDistance <= fifo.CPEnd - fifo.CPBase,
 	"FIFO is overflowed by GatherPipe !\nCPU thread is too fast!");
@@ -357,44 +373,27 @@ void UpdateInterrupts(u64 userdata)
 		INFO_LOG(COMMANDPROCESSOR,"Interrupt cleared");
 		ProcessorInterface::SetInterrupt(INT_CAUSE_CP, false);
 	}
+	CoreTiming::ForceExceptionCheck(0);
 	interruptWaiting = false;
 }
 
 void UpdateInterruptsFromVideoBackend(u64 userdata)
 {
-	CoreTiming::ScheduleEvent_Threadsafe(0, et_UpdateInterrupts, userdata);
+	if (!g_use_deterministic_gpu_thread)
+		CoreTiming::ScheduleEvent_Threadsafe(0, et_UpdateInterrupts, userdata);
 }
 
-// This is called by the ProcessorInterface when PI_FIFO_RESET is written to.
-void AbortFrame()
+void SetCPStatusFromGPU()
 {
-
-}
-
-void SetCpStatus(bool isCPUThread)
-{
-	// overflow & underflow check
-	fifo.bFF_HiWatermark = (fifo.CPReadWriteDistance > fifo.CPHiWatermark);
-	fifo.bFF_LoWatermark = (fifo.CPReadWriteDistance < fifo.CPLoWatermark);
-
 	// breakpoint
-	if (!isCPUThread)
+	if (fifo.bFF_BPEnable)
 	{
-		if (fifo.bFF_BPEnable)
+		if (fifo.CPBreakpoint == fifo.CPReadPointer)
 		{
-			if (fifo.CPBreakpoint == fifo.CPReadPointer)
+			if (!fifo.bFF_Breakpoint)
 			{
-				if (!fifo.bFF_Breakpoint)
-				{
-					INFO_LOG(COMMANDPROCESSOR, "Hit breakpoint at %i", fifo.CPReadPointer);
-					fifo.bFF_Breakpoint = true;
-				}
-			}
-			else
-			{
-				if (fifo.bFF_Breakpoint)
-					INFO_LOG(COMMANDPROCESSOR, "Cleared breakpoint at %i", fifo.CPReadPointer);
-				fifo.bFF_Breakpoint = false;
+				INFO_LOG(COMMANDPROCESSOR, "Hit breakpoint at %i", fifo.CPReadPointer);
+				fifo.bFF_Breakpoint = true;
 			}
 		}
 		else
@@ -404,6 +403,16 @@ void SetCpStatus(bool isCPUThread)
 			fifo.bFF_Breakpoint = false;
 		}
 	}
+	else
+	{
+		if (fifo.bFF_Breakpoint)
+			INFO_LOG(COMMANDPROCESSOR, "Cleared breakpoint at %i", fifo.CPReadPointer);
+		fifo.bFF_Breakpoint = false;
+	}
+
+	// overflow & underflow check
+	fifo.bFF_HiWatermark = (fifo.CPReadWriteDistance > fifo.CPHiWatermark);
+	fifo.bFF_LoWatermark = (fifo.CPReadWriteDistance < fifo.CPLoWatermark);
 
 	bool bpInt = fifo.bFF_Breakpoint && fifo.bFF_BPInt;
 	bool ovfInt = fifo.bFF_HiWatermark && fifo.bFF_HiWatermarkInt;
@@ -411,29 +420,16 @@ void SetCpStatus(bool isCPUThread)
 
 	bool interrupt = (bpInt || ovfInt || undfInt) && m_CPCtrlReg.GPReadEnable;
 
-	isHiWatermarkActive = ovfInt && m_CPCtrlReg.GPReadEnable;
-	isLoWatermarkActive = undfInt && m_CPCtrlReg.GPReadEnable;
-
 	if (interrupt != interruptSet && !interruptWaiting)
 	{
-		u64 userdata = interrupt?1:0;
+		u64 userdata = interrupt ? 1 : 0;
 		if (IsOnThread())
 		{
 			if (!interrupt || bpInt || undfInt || ovfInt)
 			{
-				if (!isCPUThread)
-				{
-					// GPU thread:
-					interruptWaiting = true;
-					CommandProcessor::UpdateInterruptsFromVideoBackend(userdata);
-				}
-				else
-				{
-					// CPU thread:
-					interruptSet = interrupt;
-					INFO_LOG(COMMANDPROCESSOR,"Interrupt set");
-					ProcessorInterface::SetInterrupt(INT_CAUSE_CP, interrupt);
-				}
+				// Schedule the interrupt asynchronously
+				interruptWaiting = true;
+				CommandProcessor::UpdateInterruptsFromVideoBackend(userdata);
 			}
 		}
 		else
@@ -443,26 +439,44 @@ void SetCpStatus(bool isCPUThread)
 	}
 }
 
-void ProcessFifoToLoWatermark()
+void SetCPStatusFromCPU()
 {
-	if (IsOnThread())
+	// overflow & underflow check
+	fifo.bFF_HiWatermark = (fifo.CPReadWriteDistance > fifo.CPHiWatermark);
+	fifo.bFF_LoWatermark = (fifo.CPReadWriteDistance < fifo.CPLoWatermark);
+
+	bool bpInt = fifo.bFF_Breakpoint && fifo.bFF_BPInt;
+	bool ovfInt = fifo.bFF_HiWatermark && fifo.bFF_HiWatermarkInt;
+	bool undfInt = fifo.bFF_LoWatermark && fifo.bFF_LoWatermarkInt;
+
+	bool interrupt = (bpInt || ovfInt || undfInt) && m_CPCtrlReg.GPReadEnable;
+
+	if (interrupt != interruptSet && !interruptWaiting)
 	{
-		while (!CommandProcessor::interruptWaiting && fifo.bFF_GPReadEnable &&
-			fifo.CPReadWriteDistance > fifo.CPLoWatermark && !AtBreakpoint())
-			Common::YieldCPU();
+		u64 userdata = interrupt ? 1 : 0;
+		if (IsOnThread())
+		{
+			if (!interrupt || bpInt || undfInt || ovfInt)
+			{
+				interruptSet = interrupt;
+				INFO_LOG(COMMANDPROCESSOR,"Interrupt set");
+				ProcessorInterface::SetInterrupt(INT_CAUSE_CP, interrupt);
+			}
+		}
+		else
+		{
+			CommandProcessor::UpdateInterrupts(userdata);
+		}
 	}
-	bProcessFifoToLoWatermark = false;
 }
 
 void ProcessFifoAllDistance()
 {
 	if (IsOnThread())
 	{
-		while (!CommandProcessor::interruptWaiting && fifo.bFF_GPReadEnable &&
-			fifo.CPReadWriteDistance && !AtBreakpoint())
+		while (!interruptWaiting && fifo.bFF_GPReadEnable && fifo.CPReadWriteDistance && !AtBreakpoint())
 			Common::YieldCPU();
 	}
-	bProcessFifoAllDistance = false;
 }
 
 void ProcessFifoEvents()
@@ -480,7 +494,7 @@ void SetCpStatusRegister()
 {
 	// Here always there is one fifo attached to the GPU
 	m_CPStatusReg.Breakpoint = fifo.bFF_Breakpoint;
-	m_CPStatusReg.ReadIdle = !fifo.CPReadWriteDistance ||  AtBreakpoint() || (fifo.CPReadPointer == fifo.CPWritePointer);
+	m_CPStatusReg.ReadIdle = !fifo.CPReadWriteDistance || (fifo.CPReadPointer == fifo.CPWritePointer);
 	m_CPStatusReg.CommandIdle = !fifo.CPReadWriteDistance || AtBreakpoint() || !fifo.bFF_GPReadEnable;
 	m_CPStatusReg.UnderflowLoWatermark = fifo.bFF_LoWatermark;
 	m_CPStatusReg.OverflowHiWatermark = fifo.bFF_HiWatermark;
@@ -497,25 +511,11 @@ void SetCpStatusRegister()
 
 void SetCpControlRegister()
 {
-	// If the new fifo is being attached, force an exception check
-	// This fixes the hang while booting Eternal Darkness
-	if (!fifo.bFF_GPReadEnable && m_CPCtrlReg.GPReadEnable && !m_CPCtrlReg.BPEnable)
-	{
-		CoreTiming::ForceExceptionCheck(0);
-	}
-
 	fifo.bFF_BPInt = m_CPCtrlReg.BPInt;
 	fifo.bFF_BPEnable = m_CPCtrlReg.BPEnable;
 	fifo.bFF_HiWatermarkInt = m_CPCtrlReg.FifoOverflowIntEnable;
 	fifo.bFF_LoWatermarkInt = m_CPCtrlReg.FifoUnderflowIntEnable;
 	fifo.bFF_GPLinkEnable = m_CPCtrlReg.GPLinkEnable;
-
-	if (m_CPCtrlReg.GPReadEnable && m_CPCtrlReg.GPLinkEnable)
-	{
-		ProcessorInterface::Fifo_CPUWritePointer = fifo.CPWritePointer;
-		ProcessorInterface::Fifo_CPUBase = fifo.CPBase;
-		ProcessorInterface::Fifo_CPUEnd = fifo.CPEnd;
-	}
 
 	if (fifo.bFF_GPReadEnable && !m_CPCtrlReg.GPReadEnable)
 	{
@@ -538,15 +538,10 @@ void SetCpControlRegister()
 
 }
 
-// NOTE: The implementation of this function should be correct, but we intentionally aren't using it at the moment.
-// We don't emulate proper GP timing anyway at the moment, so this code would just slow down emulation.
+// NOTE: We intentionally don't emulate this function at the moment.
+// We don't emulate proper GP timing anyway at the moment, so it would just slow down emulation.
 void SetCpClearRegister()
 {
-	// if (IsOnThread())
-	// {
-	//     if (!m_CPClearReg.ClearFifoUnderflow && m_CPClearReg.ClearFifoOverflow)
-	//         bProcessFifoToLoWatermark = true;
-	// }
 }
 
 void Update()

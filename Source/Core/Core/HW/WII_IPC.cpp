@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "Common/ChunkFile.h"
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 
 #include "Core/CoreTiming.h"
 #include "Core/HW/CPU.h"
@@ -70,7 +70,8 @@ struct CtrlRegister
 	inline u8 ppc() { return (IY2<<5)|(IY1<<4)|(X2<<3)|(Y1<<2)|(Y2<<1)|X1; }
 	inline u8 arm() { return (IX2<<5)|(IX1<<4)|(Y2<<3)|(X1<<2)|(X2<<1)|Y1; }
 
-	inline void ppc(u32 v) {
+	inline void ppc(u32 v)
+	{
 		X1 = v & 1;
 		X2 = (v >> 3) & 1;
 		if ((v >> 2) & 1) Y1 = 0;
@@ -79,7 +80,8 @@ struct CtrlRegister
 		IY2 = (v >> 5) & 1;
 	}
 
-	inline void arm(u32 v) {
+	inline void arm(u32 v)
+	{
 		Y1 = v & 1;
 		Y2 = (v >> 3) & 1;
 		if ((v >> 2) & 1) X1 = 0;
@@ -101,7 +103,7 @@ static u32 arm_irq_masks;
 
 static u32 sensorbar_power; // do we need to care about this?
 
-int updateInterrupts;
+static int updateInterrupts;
 
 void DoState(PointerWrap &p)
 {
@@ -158,7 +160,7 @@ void RegisterMMIO(MMIO::Mapping* mmio, u32 base)
 		MMIO::ComplexWrite<u32>([](u32, u32 val) {
 			ctrl.ppc(val);
 			if (ctrl.X1)
-				WII_IPC_HLE_Interface::EnqRequest(ppc_msg);
+				WII_IPC_HLE_Interface::EnqueueRequest(ppc_msg);
 			WII_IPC_HLE_Interface::Update();
 			CoreTiming::ScheduleEvent_Threadsafe(0, updateInterrupts, 0);
 		})

@@ -23,6 +23,7 @@
 
 #include "Common/CommonTypes.h"
 #include "Common/Event.h"
+#include "Core/HW/WiimoteEmu/WiimoteEmu.h"
 #include "DolphinWX/Globals.h"
 #include "InputCommon/GCPadStatus.h"
 
@@ -44,29 +45,9 @@ class wxAuiManager;
 class wxAuiManagerEvent;
 class wxAuiNotebook;
 class wxAuiNotebookEvent;
-class wxAuiToolBar;
-class wxAuiToolBarEvent;
 class wxListEvent;
 class wxMenuItem;
 class wxWindow;
-
-// The CPanel class to receive MSWWindowProc messages from the video backend.
-class CPanel : public wxPanel
-{
-	public:
-		CPanel(
-			wxWindow* parent,
-			wxWindowID id = wxID_ANY
-			);
-
-	private:
-		DECLARE_EVENT_TABLE();
-
-		#ifdef _WIN32
-			// Receive WndProc messages
-			WXLRESULT MSWWindowProc(WXUINT nMsg, WXWPARAM wParam, WXLPARAM lParam);
-		#endif
-};
 
 class CRenderFrame : public wxFrame
 {
@@ -78,8 +59,11 @@ class CRenderFrame : public wxFrame
 			const wxSize& size = wxDefaultSize,
 			long style = wxDEFAULT_FRAME_STYLE | wxNO_FULL_REPAINT_ON_RESIZE);
 
+		bool ShowFullScreen(bool show, long style = wxFULLSCREEN_ALL) override;
+
 	private:
 		void OnDropFiles(wxDropFilesEvent& event);
+		static bool IsValidSavestateDropped(const std::string& filepath);
 		#ifdef _WIN32
 			// Receive WndProc messages
 			WXLRESULT MSWWindowProc(WXUINT nMsg, WXWPARAM wParam, WXLPARAM lParam);
@@ -104,12 +88,10 @@ public:
 
 	void* GetRenderHandle()
 	{
-		#ifdef _WIN32
-			return (void *)m_RenderParent->GetHandle();
-		#elif defined(HAVE_X11) && HAVE_X11
-			return (void *)X11Utils::XWindowFromHandle(m_RenderParent->GetHandle());
+		#if defined(HAVE_X11) && HAVE_X11
+			return reinterpret_cast<void*>(X11Utils::XWindowFromHandle(m_RenderParent->GetHandle()));
 		#else
-			return m_RenderParent;
+			return reinterpret_cast<void*>(m_RenderParent->GetHandle());
 		#endif
 	}
 
@@ -117,11 +99,12 @@ public:
 	CCodeWindow* g_pCodeWindow;
 	NetPlaySetupDiag* g_NetPlaySetupDiag;
 	wxCheatsWindow* g_CheatsWindow;
-	TASInputDlg* g_TASInputDlg[4];
+	TASInputDlg* g_TASInputDlg[8];
 
 	void InitBitmaps();
 	void DoPause();
 	void DoStop();
+	void OnStopped();
 	void DoRecordingSave();
 	void UpdateGUI();
 	void UpdateGameList();
@@ -130,18 +113,22 @@ public:
 	void PostEvent(wxCommandEvent& event);
 	void StatusBarMessage(const char * Text, ...);
 	void ClearStatusBar();
-	void GetRenderWindowSize(int& x, int& y, int& width, int& height);
 	void OnRenderWindowSizeRequest(int width, int height);
 	void BootGame(const std::string& filename);
 	void OnRenderParentClose(wxCloseEvent& event);
 	void OnRenderParentMove(wxMoveEvent& event);
 	bool RendererHasFocus();
+	bool UIHasFocus();
+	bool RendererIsFullscreen();
 	void DoFullscreen(bool bF);
 	void ToggleDisplayMode (bool bFullscreen);
 	void UpdateWiiMenuChoice(wxMenuItem *WiiMenuItem=nullptr);
+	void PopulateSavedPerspectives();
 	static void ConnectWiimote(int wm_idx, bool connect);
+	void UpdateTitle(const std::string &str);
 
 	const CGameListCtrl *GetGameListCtrl() const;
+	virtual wxMenuBar* GetMenuBar() const override;
 
 #ifdef __WXGTK__
 	Common::Event panic_event;
@@ -153,10 +140,12 @@ public:
 	X11Utils::XRRConfiguration *m_XRRConfig;
 #endif
 
+	wxMenu* m_SavedPerspectives;
+
+	wxToolBar *m_ToolBar;
 	// AUI
 	wxAuiManager *m_Mgr;
-	wxAuiToolBar *m_ToolBar, *m_ToolBarDebug, *m_ToolBarAui;
-	bool bFloatWindow[IDM_CODEWINDOW - IDM_LOGWINDOW + 1];
+	bool bFloatWindow[IDM_CODE_WINDOW - IDM_LOG_WINDOW + 1];
 
 	// Perspectives (Should find a way to make all of this private)
 	void DoAddPage(wxWindow *Win, int i, bool Float);
@@ -174,7 +163,7 @@ private:
 	CGameListCtrl* m_GameListCtrl;
 	wxPanel* m_Panel;
 	CRenderFrame* m_RenderFrame;
-	wxPanel* m_RenderParent;
+	wxWindow* m_RenderParent;
 	CLogWindow* m_LogWindow;
 	LogConfigWindow* m_LogConfigWindow;
 	FifoPlayerDlg* m_FifoPlayerDlg;
@@ -184,6 +173,8 @@ private:
 	bool m_bTabSplit;
 	bool m_bNoDocking;
 	bool m_bGameLoading;
+	bool m_bClosing;
+	bool m_confirmStop;
 
 	std::vector<std::string> drives;
 
@@ -199,19 +190,19 @@ private:
 		Toolbar_FullScreen,
 		Toolbar_ConfigMain,
 		Toolbar_ConfigGFX,
-		Toolbar_ConfigDSP,
-		Toolbar_ConfigPAD,
-		Toolbar_Wiimote,
+		Toolbar_ConfigAudio,
+		Toolbar_Controller,
 		EToolbar_Max
 	};
 
 	wxBitmap m_Bitmaps[EToolbar_Max];
 	wxBitmap m_BitmapsMenu[EToolbar_Max];
 
-	void PopulateToolbar(wxAuiToolBar* toolBar);
-	void PopulateToolbarAui(wxAuiToolBar* toolBar);
+	wxMenuBar* m_menubar_shadow;
+
+	void PopulateToolbar(wxToolBar* toolBar);
 	void RecreateToolbar();
-	void CreateMenu();
+	wxMenuBar* CreateMenu();
 
 	// Utility
 	wxString GetMenuLabel(int Id);
@@ -234,7 +225,6 @@ private:
 	void ShowResizePane();
 	void TogglePane();
 	void SetPaneSize();
-	void ResetToolbarStyle();
 	void TogglePaneStyle(bool On, int EventId);
 	void ToggleNotebookStyle(bool On, long Style);
 	// Float window
@@ -253,9 +243,7 @@ private:
 	void OnPaneClose(wxAuiManagerEvent& evt);
 	void ReloadPanes();
 	void DoLoadPerspective();
-	void OnDropDownToolbarSelect(wxCommandEvent& event);
-	void OnDropDownSettingsToolbar(wxAuiToolBarEvent& event);
-	void OnDropDownToolbarItem(wxAuiToolBarEvent& event);
+	void OnPerspectiveMenu(wxCommandEvent& event);
 	void OnSelectPerspective(wxCommandEvent& event);
 
 #ifdef _WIN32
@@ -265,8 +253,6 @@ private:
 	// Event functions
 	void OnQuit(wxCommandEvent& event);
 	void OnHelp(wxCommandEvent& event);
-	void OnToolBar(wxCommandEvent& event);
-	void OnAuiToolBar(wxAuiToolBarEvent& event);
 
 	void OnOpen(wxCommandEvent& event); // File menu
 	void DoOpen(bool Boot);
@@ -283,7 +269,11 @@ private:
 	void OnRecordReadOnly(wxCommandEvent& event);
 	void OnTASInput(wxCommandEvent& event);
 	void OnTogglePauseMovie(wxCommandEvent& event);
+	void OnToggleDumpFrames(wxCommandEvent& event);
+	void OnToggleDumpAudio(wxCommandEvent& event);
 	void OnShowLag(wxCommandEvent& event);
+	void OnShowFrameCount(wxCommandEvent& event);
+	void OnShowInputDisplay(wxCommandEvent& event);
 	void OnChangeDisc(wxCommandEvent& event);
 	void OnScreenshot(wxCommandEvent& event);
 	void OnActive(wxActivateEvent& event);
@@ -302,9 +292,8 @@ private:
 
 	void OnConfigMain(wxCommandEvent& event); // Options
 	void OnConfigGFX(wxCommandEvent& event);
-	void OnConfigDSP(wxCommandEvent& event);
-	void OnConfigPAD(wxCommandEvent& event);
-	void OnConfigWiimote(wxCommandEvent& event);
+	void OnConfigAudio(wxCommandEvent& event);
+	void OnConfigControllers(wxCommandEvent& event);
 	void OnConfigHotkey(wxCommandEvent& event);
 
 	void OnToggleFullscreen(wxCommandEvent& event);
@@ -341,9 +330,12 @@ private:
 
 	void OnGameListCtrl_ItemActivated(wxListEvent& event);
 	void OnRenderParentResize(wxSizeEvent& event);
-	bool RendererIsFullscreen();
 	void StartGame(const std::string& filename);
 	void OnChangeColumnsVisible(wxCommandEvent& event);
+
+	void OnSelectSlot(wxCommandEvent& event);
+	void OnSaveCurrentSlot(wxCommandEvent& event);
+	void OnLoadCurrentSlot(wxCommandEvent& event);
 
 	// Event table
 	DECLARE_EVENT_TABLE();
@@ -352,7 +344,10 @@ private:
 int GetCmdForHotkey(unsigned int key);
 
 void OnAfterLoadCallback();
+void OnStoppedCallback();
 
 // For TASInputDlg
-void TASManipFunction(SPADStatus *PadStatus, int controllerID);
+void GCTASManipFunction(GCPadStatus* PadStatus, int controllerID);
+void WiiTASManipFunction(u8* data, WiimoteEmu::ReportFeatures rptf, int controllerID, int ext, const wiimote_key key);
 bool TASInputHasFocus();
+extern int g_saveSlot;

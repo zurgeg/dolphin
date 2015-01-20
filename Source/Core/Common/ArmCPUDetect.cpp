@@ -6,7 +6,7 @@
 #include <sstream>
 #include <string>
 
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 #include "Common/CPUDetect.h"
 #include "Common/StringUtil.h"
 
@@ -14,7 +14,7 @@
 #if !defined(BLACKBERRY) && !defined(IOS) && !defined(__SYMBIAN32__)
 const char procfile[] = "/proc/cpuinfo";
 
-std::string GetCPUString()
+static std::string GetCPUString()
 {
 	const std::string marker = "Hardware\t: ";
 	std::string cpu_string = "Unknown";
@@ -30,7 +30,6 @@ std::string GetCPUString()
 		if (line.find(marker) != std::string::npos)
 		{
 			cpu_string = line.substr(marker.length());
-			cpu_string.pop_back(); // Drop the new-line character
 			break;
 		}
 	}
@@ -38,7 +37,7 @@ std::string GetCPUString()
 	return cpu_string;
 }
 
-unsigned char GetCPUImplementer()
+static unsigned char GetCPUImplementer()
 {
 	const std::string marker = "CPU implementer\t: ";
 	unsigned char implementer = 0;
@@ -62,7 +61,7 @@ unsigned char GetCPUImplementer()
 	return implementer;
 }
 
-unsigned short GetCPUPart()
+static unsigned short GetCPUPart()
 {
 	const std::string marker = "CPU part\t: ";
 	unsigned short part = 0;
@@ -86,7 +85,7 @@ unsigned short GetCPUPart()
 	return part;
 }
 
-bool CheckCPUFeature(const std::string& feature)
+static bool CheckCPUFeature(const std::string& feature)
 {
 	const std::string marker = "Features\t: ";
 
@@ -115,7 +114,7 @@ bool CheckCPUFeature(const std::string& feature)
 }
 #endif
 
-int GetCoreCount()
+static int GetCoreCount()
 {
 #ifdef __SYMBIAN32__
 	return 1;
@@ -280,9 +279,4 @@ std::string CPUInfo::Summarize()
 	if (CPU64bit) sum += ", 64-bit";
 
 	return sum;
-}
-
-bool CPUInfo::IsUnsafe()
-{
-	return false;
 }

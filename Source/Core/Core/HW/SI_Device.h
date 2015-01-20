@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 
 class PointerWrap;
 
@@ -84,15 +84,15 @@ public:
 	virtual void DoState(PointerWrap& p) {}
 
 
-	int GetDeviceNumber()
+	int GetDeviceNumber() const
 	{
 		return m_iDeviceNumber;
 	}
 
-	SIDevices GetDeviceType()
+	SIDevices GetDeviceType() const
 	{
 		return m_deviceType;
 	}
 };
 
-extern ISIDevice* SIDevice_Create(const SIDevices device, const int port_number);
+ISIDevice* SIDevice_Create(const SIDevices device, const int port_number);

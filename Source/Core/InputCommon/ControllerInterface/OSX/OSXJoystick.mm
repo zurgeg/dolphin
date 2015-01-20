@@ -22,13 +22,10 @@ Joystick::Joystick(IOHIDDeviceRef device, std::string name, int index)
 	, m_ff_device(nullptr)
 {
 	// Buttons
-	NSDictionary *buttonDict =
-	 [NSDictionary dictionaryWithObjectsAndKeys:
-	  [NSNumber numberWithInteger: kIOHIDElementTypeInput_Button],
-		@kIOHIDElementTypeKey,
-	  [NSNumber numberWithInteger: kHIDPage_Button],
-		@kIOHIDElementUsagePageKey,
-	  nil];
+	NSDictionary *buttonDict = @{
+		@kIOHIDElementTypeKey      : [NSNumber numberWithInteger: kIOHIDElementTypeInput_Button],
+		@kIOHIDElementUsagePageKey : [NSNumber numberWithInteger: kHIDPage_Button]
+	};
 
 	CFArrayRef buttons = IOHIDDeviceCopyMatchingElements(m_device,
 		(CFDictionaryRef)buttonDict, kIOHIDOptionsTypeNone);
@@ -47,11 +44,9 @@ Joystick::Joystick(IOHIDDeviceRef device, std::string name, int index)
 	}
 
 	// Axes
-	NSDictionary *axisDict =
-	[NSDictionary dictionaryWithObjectsAndKeys:
-	 [NSNumber numberWithInteger: kIOHIDElementTypeInput_Misc],
-		@kIOHIDElementTypeKey,
-	 nil];
+	NSDictionary *axisDict = @{
+		@kIOHIDElementTypeKey : [NSNumber numberWithInteger: kIOHIDElementTypeInput_Misc]
+	};
 
 	CFArrayRef axes = IOHIDDeviceCopyMatchingElements(m_device,
 		(CFDictionaryRef)axisDict, kIOHIDOptionsTypeNone);
@@ -64,12 +59,15 @@ Joystick::Joystick(IOHIDDeviceRef device, std::string name, int index)
 			(IOHIDElementRef)CFArrayGetValueAtIndex(axes, i);
 			//DeviceElementDebugPrint(e, nullptr);
 
-			if (IOHIDElementGetUsage(e) == kHIDUsage_GD_Hatswitch) {
+			if (IOHIDElementGetUsage(e) == kHIDUsage_GD_Hatswitch)
+			{
 				AddInput(new Hat(e, m_device, Hat::up));
 				AddInput(new Hat(e, m_device, Hat::right));
 				AddInput(new Hat(e, m_device, Hat::down));
 				AddInput(new Hat(e, m_device, Hat::left));
-			} else {
+			}
+			else
+			{
 				AddAnalogInputs(new Axis(e, m_device, Axis::negative),
 					new Axis(e, m_device, Axis::positive));
 			}
@@ -90,11 +88,6 @@ Joystick::~Joystick()
 {
 	if (m_ff_device)
 		m_ff_device->Release();
-}
-
-bool Joystick::UpdateInput()
-{
-	return true;
 }
 
 std::string Joystick::GetName() const
@@ -212,7 +205,8 @@ Joystick::Hat::Hat(IOHIDElementRef element, IOHIDDeviceRef device, direction dir
 	, m_device(device)
 	, m_direction(dir)
 {
-	switch (dir) {
+	switch (dir)
+	{
 	case up:
 		m_name = "Up";
 		break;
@@ -239,7 +233,8 @@ ControlState Joystick::Hat::GetState() const
 	{
 		position = IOHIDValueGetIntegerValue(value);
 
-		switch (position) {
+		switch (position)
+		{
 		case 0:
 			if (m_direction == up)
 				return 1;

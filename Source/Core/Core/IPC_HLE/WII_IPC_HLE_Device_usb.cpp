@@ -24,7 +24,7 @@ void CWII_IPC_HLE_Device_usb_oh1_57e_305::EnqueueReply(u32 CommandAddress)
 	// The original hardware overwrites the command type with the async reply type.
 	Memory::Write_U32(IPC_REP_ASYNC, CommandAddress);
 
-	WII_IPC_HLE_Interface::EnqReply(CommandAddress);
+	WII_IPC_HLE_Interface::EnqueueReply(CommandAddress);
 }
 
 // The device class
@@ -129,7 +129,7 @@ bool CWII_IPC_HLE_Device_usb_oh1_57e_305::RemoteDisconnect(u16 _connectionHandle
 	return SendEventDisconnect(_connectionHandle, 0x13);
 }
 
-bool CWII_IPC_HLE_Device_usb_oh1_57e_305::Open(u32 _CommandAddress, u32 _Mode)
+IPCCommandResult CWII_IPC_HLE_Device_usb_oh1_57e_305::Open(u32 _CommandAddress, u32 _Mode)
 {
 	m_ScanEnable = 0;
 
@@ -141,10 +141,10 @@ bool CWII_IPC_HLE_Device_usb_oh1_57e_305::Open(u32 _CommandAddress, u32 _Mode)
 
 	Memory::Write_U32(GetDeviceID(), _CommandAddress + 4);
 	m_Active = true;
-	return true;
+	return IPC_DEFAULT_REPLY;
 }
 
-bool CWII_IPC_HLE_Device_usb_oh1_57e_305::Close(u32 _CommandAddress, bool _bForce)
+IPCCommandResult CWII_IPC_HLE_Device_usb_oh1_57e_305::Close(u32 _CommandAddress, bool _bForce)
 {
 	m_ScanEnable = 0;
 
@@ -157,16 +157,16 @@ bool CWII_IPC_HLE_Device_usb_oh1_57e_305::Close(u32 _CommandAddress, bool _bForc
 	if (!_bForce)
 		Memory::Write_U32(0, _CommandAddress + 4);
 	m_Active = false;
-	return true;
+	return IPC_DEFAULT_REPLY;
 }
 
-bool CWII_IPC_HLE_Device_usb_oh1_57e_305::IOCtl(u32 _CommandAddress)
+IPCCommandResult CWII_IPC_HLE_Device_usb_oh1_57e_305::IOCtl(u32 _CommandAddress)
 {
 	//ERROR_LOG(WII_IPC_WIIMOTE, "Passing ioctl to ioctlv");
 	return IOCtlV(_CommandAddress); // FIXME: Hack
 }
 
-bool CWII_IPC_HLE_Device_usb_oh1_57e_305::IOCtlV(u32 _CommandAddress)
+IPCCommandResult CWII_IPC_HLE_Device_usb_oh1_57e_305::IOCtlV(u32 _CommandAddress)
 {
 /*
 	Memory::Write_U8(255, 0x80149950);  // BTM LOG  // 3 logs L2Cap  // 4 logs l2_csm$
@@ -304,7 +304,7 @@ bool CWII_IPC_HLE_Device_usb_oh1_57e_305::IOCtlV(u32 _CommandAddress)
 
 	// write return value
 	Memory::Write_U32(0, _CommandAddress + 4);
-	return _SendReply;
+	return { _SendReply, IPC_DEFAULT_DELAY };
 }
 
 
@@ -1512,6 +1512,7 @@ void CWII_IPC_HLE_Device_usb_oh1_57e_305::CommandReadStoredLinkKey(u8* _Input)
 
 	hci_read_stored_link_key_rp Reply;
 	Reply.status = 0x00;
+	Reply.num_keys_read = 0;
 	Reply.max_num_keys = 255;
 
 	if (ReadStoredLinkKey->read_all == 1)

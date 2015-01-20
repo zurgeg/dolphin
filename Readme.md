@@ -1,17 +1,17 @@
-# Dolphin - A Gamecube / Triforce / Wii Emulator
+# Dolphin - A GameCube / Triforce / Wii Emulator
 
-[Homepage](https://dolphin-emu.org/) | [Project Site](https://github.com/dolphin-emu/dolphin) | [Forums](https://forums.dolphin-emu.org/) | [Wiki](https://wiki.dolphin-emu.org/) | [Issue Tracker](https://code.google.com/p/dolphin-emu/issues/list)
+[Homepage](https://dolphin-emu.org/) | [Project Site](https://github.com/dolphin-emu/dolphin) | [Forums](https://forums.dolphin-emu.org/) | [Wiki](https://wiki.dolphin-emu.org/) | [Issue Tracker](https://code.google.com/p/dolphin-emu/issues/list) | [Coding Style](https://github.com/dolphin-emu/dolphin/blob/master/Contributing.md) | [Transifex Page](https://www.transifex.com/projects/p/dolphin-emu/)
 
-Dolphin is an emulator for running Gamecube, Triforce and Wii games on
+Dolphin is an emulator for running GameCube, Triforce and Wii games on
 Windows/Linux/OS X systems and recent Android devices. It's licensed under
 the terms of the GNU General Public License, version 2 (GPLv2).
 
-Please read the [FAQ](http://dolphin-emu.org/docs/faq/) before use.
+Please read the [FAQ](https://dolphin-emu.org/docs/faq/) before using Dolphin.
 
 ## System Requirements
 * OS
     * Microsoft Windows (Vista or higher).
-    * Linux or Apple Mac OS X (10.7 or higher).
+    * Linux or Apple Mac OS X (10.9 or higher).
     * Unix-like systems other than Linux might work but are not officially supported.
 * Processor
     * A CPU with SSE2 support.
@@ -101,6 +101,7 @@ These folders are installed read-only and should not be changed:
 * `Maps`: symbol tables (dev only)
 * `Shaders`: post-processing shaders
 * `Themes`: icon themes for GUI
+* `Resources`: icons that are theme-agnostic
 * `Wii`: default Wii NAND contents
 
 ## User folder structure
@@ -114,21 +115,21 @@ folder by default, but there are various way to override this behavior:
   store the user directory in a local directory called "User" next to the
   Dolphin executable.
 * If the registry string value `LocalUserConfig` exists in
-  `HKEY_CURRENT_USER/Dolphin Emulator` and has the value **1**, Dolphin will
-  always start in portable mode.
+  `HKEY_CURRENT_USER/Software/Dolphin Emulator` and has the value **1**,
+  Dolphin will always start in portable mode.
 * If the registry string value `UserConfigPath` exists in
-  `HKEY_CURRENT_USER/Dolphin Emulator`, the user folders will be stored in the
-  directory given by that string. The other two methods will be prioritized
-  over this setting.
+  `HKEY_CURRENT_USER/Software/Dolphin Emulator`, the user folders will be
+  stored in the directory given by that string. The other two methods will be
+  prioritized over this setting.
 
 
 List of user folders:
 
 * `Cache`: used to cache the ISO list
 * `Config`: configuration files
-* `Dump`: anything dumped from dolphin
+* `Dump`: anything dumped from Dolphin
 * `GameConfig`: additional settings to be applied per-game
-* `GC`: memory cards
+* `GC`: memory cards and system BIOS
 * `Load`: custom textures
 * `Logs`: logs, if enabled
 * `ScreenShots`: screenshots taken via Dolphin

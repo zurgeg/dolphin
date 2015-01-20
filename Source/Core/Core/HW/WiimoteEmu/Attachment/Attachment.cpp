@@ -2,11 +2,14 @@
 // Licensed under GPLv2
 // Refer to the license.txt file included.
 
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 #include "Core/HW/WiimoteEmu/Attachment/Attachment.h"
 
 namespace WiimoteEmu
 {
+
+// TODO: Move to header when VS supports constexpr.
+const ControlState Attachment::DEFAULT_ATTACHMENT_STICK_RADIUS = 1.0f;
 
 // Extension device IDs to be written to the last bytes of the extension reg
 // The id for nothing inserted
@@ -42,7 +45,7 @@ void Attachment::Reset()
 
 }
 
-void ControllerEmu::Extension::GetState(u8* const data, const bool focus)
+void ControllerEmu::Extension::GetState(u8* const data)
 {
-	((WiimoteEmu::Attachment*)attachments[active_extension].get())->GetState(data, focus);
+	((WiimoteEmu::Attachment*)attachments[active_extension].get())->GetState(data);
 }

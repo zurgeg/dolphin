@@ -39,6 +39,7 @@
   <ImportGroup Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
     <Import Project="..\..\..\Source\VSProps\Base.props" />
+    <Import Project="..\..\..\Source\VSProps\ClDisableAllWarnings.props" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <ItemGroup>
@@ -51,6 +52,7 @@
     <ClCompile Include="..\library\bignum.c" />
     <ClCompile Include="..\library\blowfish.c" />
     <ClCompile Include="..\library\camellia.c" />
+    <ClCompile Include="..\library\ccm.c" />
     <ClCompile Include="..\library\certs.c" />
     <ClCompile Include="..\library\cipher.c" />
     <ClCompile Include="..\library\cipher_wrap.c" />
@@ -67,12 +69,12 @@
     <ClCompile Include="..\library\error.c" />
     <ClCompile Include="..\library\gcm.c" />
     <ClCompile Include="..\library\havege.c" />
+    <ClCompile Include="..\library\hmac_drbg.c" />
     <ClCompile Include="..\library\md.c" />
     <ClCompile Include="..\library\md2.c" />
     <ClCompile Include="..\library\md4.c" />
     <ClCompile Include="..\library\md5.c" />
     <ClCompile Include="..\library\md_wrap.c" />
-    <ClCompile Include="..\library\memory.c" />
     <ClCompile Include="..\library\memory_buffer_alloc.c" />
     <ClCompile Include="..\library\net.c" />
     <ClCompile Include="..\library\oid.c" />
@@ -86,6 +88,7 @@
     <ClCompile Include="..\library\pkcs5.c" />
     <ClCompile Include="..\library\pkparse.c" />
     <ClCompile Include="..\library\pkwrite.c" />
+    <ClCompile Include="..\library\platform.c" />
     <ClCompile Include="..\library\ripemd160.c" />
     <ClCompile Include="..\library\rsa.c" />
     <ClCompile Include="..\library\sha1.c" />
@@ -99,6 +102,7 @@
     <ClCompile Include="..\library\threading.c" />
     <ClCompile Include="..\library\timing.c" />
     <ClCompile Include="..\library\version.c" />
+    <ClCompile Include="..\library\version_features.c" />
     <ClCompile Include="..\library\x509.c" />
     <ClCompile Include="..\library\x509_create.c" />
     <ClCompile Include="..\library\x509_crl.c" />

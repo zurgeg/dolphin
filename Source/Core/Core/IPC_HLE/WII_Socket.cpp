@@ -4,8 +4,7 @@
 
 #include <algorithm>
 
-#include "Core/Movie.h"
-#include "Core/NetPlayProto.h"
+#include "Core/Core.h"
 #include "Core/IPC_HLE/WII_IPC_HLE.h"
 #include "Core/IPC_HLE/WII_IPC_HLE_Device.h"
 #include "Core/IPC_HLE/WII_Socket.h" // No Wii socket support while using NetPlay or TAS
@@ -34,7 +33,7 @@ char* WiiSockMan::DecodeError(s32 ErrorCode)
 #endif
 }
 
-s32 TranslateErrorCode(s32 native_error, bool isRW)
+static s32 TranslateErrorCode(s32 native_error, bool isRW)
 {
 	switch (native_error)
 	{
@@ -64,9 +63,12 @@ s32 TranslateErrorCode(s32 native_error, bool isRW)
 	case ERRORCODE(EHOSTUNREACH):
 		return -SO_EHOSTUNREACH;
 	case EITHER(WSAEWOULDBLOCK, EAGAIN):
-		if (isRW){
+		if (isRW)
+		{
 			return -SO_EAGAIN;  // EAGAIN
-		}else{
+		}
+		else
+		{
 			return -SO_EINPROGRESS; // EINPROGRESS
 		}
 	default:
@@ -421,7 +423,9 @@ void WiiSocket::Update(bool read, bool write, bool except)
 
 					u32 flags = Memory::Read_U32(BufferIn2 + 0x04);
 					u32 has_destaddr = Memory::Read_U32(BufferIn2 + 0x08);
-					char * data = (char*)Memory::GetPointer(BufferIn);
+
+                                        // Not a string, windows requires a const char* for sendto
+					const char* data = (const char*)Memory::GetPointer(BufferIn);
 
 					// Act as non blocking when SO_MSG_NONBLOCK is specified
 					forceNonBlock = ((flags & SO_MSG_NONBLOCK) == SO_MSG_NONBLOCK);
@@ -455,7 +459,8 @@ void WiiSocket::Update(bool read, bool write, bool except)
 				case IOCTLV_SO_RECVFROM:
 				{
 					u32 flags = Memory::Read_U32(BufferIn + 0x04);
-					char * data = (char *)Memory::GetPointer(BufferOut);
+					// Not a string, windows requires a char* for recvfrom
+					char* data = (char*)Memory::GetPointer(BufferOut);
 					int data_len = BufferOutSize;
 
 					sockaddr_in local_name;
@@ -473,7 +478,8 @@ void WiiSocket::Update(bool read, bool write, bool except)
 					// recv/recvfrom only handles PEEK/OOB
 					flags &= SO_MSG_PEEK | SO_MSG_OOB;
 #ifdef _WIN32
-					if (flags & SO_MSG_PEEK){
+					if (flags & SO_MSG_PEEK)
+					{
 						unsigned long totallen = 0;
 						ioctlsocket(fd, FIONREAD, &totallen);
 						ReturnValue = totallen;
@@ -555,9 +561,7 @@ void WiiSockMan::AddSocket(s32 fd)
 
 s32 WiiSockMan::NewSocket(s32 af, s32 type, s32 protocol)
 {
-	if (NetPlay::IsNetPlayRunning() ||
-	    Movie::IsRecordingInput() ||
-	    Movie::IsPlayingInput())
+	if (Core::g_want_determinism)
 	{
 		return SO_ENOMEM;
 	}
@@ -570,8 +574,9 @@ s32 WiiSockMan::NewSocket(s32 af, s32 type, s32 protocol)
 
 s32 WiiSockMan::DeleteSocket(s32 s)
 {
-	s32 ReturnValue = WiiSockets[s].CloseFd();
-	WiiSockets.erase(s);
+	auto socket_entry = WiiSockets.find(s);
+	s32 ReturnValue = socket_entry->second.CloseFd();
+	WiiSockets.erase(socket_entry);
 	return ReturnValue;
 }
 
@@ -583,20 +588,25 @@ void WiiSockMan::Update()
 	FD_ZERO(&read_fds);
 	FD_ZERO(&write_fds);
 	FD_ZERO(&except_fds);
-	for (auto& entry : WiiSockets)
+
+	auto socket_iter = WiiSockets.begin();
+	auto end_socks = WiiSockets.end();
+
+	while (socket_iter != end_socks)
 	{
-		WiiSocket& sock = entry.second;
+		WiiSocket& sock = socket_iter->second;
 		if (sock.IsValid())
 		{
 			FD_SET(sock.fd, &read_fds);
 			FD_SET(sock.fd, &write_fds);
 			FD_SET(sock.fd, &except_fds);
 			nfds = std::max(nfds, sock.fd+1);
+			++socket_iter;
 		}
 		else
 		{
 			// Good time to clean up invalid sockets.
-			WiiSockets.erase(sock.fd);
+			socket_iter = WiiSockets.erase(socket_iter);
 		}
 	}
 	s32 ret = select(nfds, &read_fds, &write_fds, &except_fds, &t);
@@ -632,7 +642,7 @@ void WiiSockMan::EnqueueReply(u32 CommandAddress, s32 ReturnValue, IPCCommandTyp
 	// Return value
 	Memory::Write_U32(ReturnValue, CommandAddress + 4);
 
-	WII_IPC_HLE_Interface::EnqReply(CommandAddress);
+	WII_IPC_HLE_Interface::EnqueueReply(CommandAddress);
 }
 
 
@@ -652,6 +662,13 @@ void WiiSockMan::Convert(sockaddr_in const & from, WiiSockAddrIn& to, s32 addrle
 		to.len = sizeof(WiiSockAddrIn);
 	else
 		to.len = addrlen;
+}
+
+void WiiSockMan::UpdateWantDeterminism(bool want)
+{
+	// If we switched into movie recording, kill existing sockets.
+	if (want)
+		Clean();
 }
 
 #undef ERRORCODE

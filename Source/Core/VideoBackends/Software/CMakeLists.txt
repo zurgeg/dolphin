@@ -21,15 +21,9 @@ set(SRCS BPMemLoader.cpp
 	   SWVideoConfig.cpp
 	   XFMemLoader.cpp)
 
-if(wxWidgets_FOUND)
-	set(SRCS ${SRCS} VideoConfigDialog.cpp)
-endif(wxWidgets_FOUND)
-
-set(LIBS	videocommon
-			SOIL
-			common
-			${X11_LIBRARIES}
-			${OPENGL_LIBRARIES}
-			${wxWidgets_LIBRARIES})
+set(LIBS videocommon
+         SOIL
+         common
+         ${X11_LIBRARIES})
 
 add_dolphin_library(videosoftware "${SRCS}" "${LIBS}")

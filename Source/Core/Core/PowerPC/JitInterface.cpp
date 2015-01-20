@@ -8,6 +8,8 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#else
+#include "Common/PerformanceCounter.h"
 #endif
 
 #include "Core/ConfigManager.h"
@@ -27,11 +29,14 @@
 #if _M_ARM_32
 #include "Core/PowerPC/JitArm32/Jit.h"
 #include "Core/PowerPC/JitArm32/JitArm_Tables.h"
-#include "Core/PowerPC/JitArmIL/JitIL.h"
-#include "Core/PowerPC/JitArmIL/JitIL_Tables.h"
 #endif
 
-bool bFakeVMEM = false;
+#if _M_ARM_64
+#include "Core/PowerPC/JitArm64/Jit.h"
+#include "Core/PowerPC/JitArm64/JitArm64_Tables.h"
+#endif
+
+static bool bFakeVMEM = false;
 bool bMMU = false;
 
 namespace JitInterface
@@ -43,8 +48,8 @@ namespace JitInterface
 	}
 	CPUCoreBase *InitJitCore(int core)
 	{
-		bFakeVMEM = SConfig::GetInstance().m_LocalCoreStartupParameter.bTLBHack == true;
 		bMMU = SConfig::GetInstance().m_LocalCoreStartupParameter.bMMU;
+		bFakeVMEM = !bMMU;
 
 		CPUCoreBase *ptr = nullptr;
 		switch (core)
@@ -67,9 +72,11 @@ namespace JitInterface
 				ptr = new JitArm();
 				break;
 			}
+			#endif
+			#if _M_ARM_64
 			case 4:
 			{
-				ptr = new JitArmIL();
+				ptr = new JitArm64();
 				break;
 			}
 			#endif
@@ -106,9 +113,11 @@ namespace JitInterface
 				JitArmTables::InitTables();
 				break;
 			}
+			#endif
+			#if _M_ARM_64
 			case 4:
 			{
-				JitArmILTables::InitTables();
+				JitArm64Tables::InitTables();
 				break;
 			}
 			#endif
@@ -127,31 +136,26 @@ namespace JitInterface
 	void WriteProfileResults(const std::string& filename)
 	{
 		// Can't really do this with no jit core available
-		#if _M_X86
+		if (!jit)
+			return;
 
 		std::vector<BlockStat> stats;
 		stats.reserve(jit->GetBlockCache()->GetNumBlocks());
 		u64 cost_sum = 0;
-	#ifdef _WIN32
 		u64 timecost_sum = 0;
 		u64 countsPerSec;
-		QueryPerformanceFrequency((LARGE_INTEGER *)&countsPerSec);
-	#endif
+		QueryPerformanceFrequency((LARGE_INTEGER*)&countsPerSec);
 		for (int i = 0; i < jit->GetBlockCache()->GetNumBlocks(); i++)
 		{
 			const JitBlock *block = jit->GetBlockCache()->GetBlock(i);
 			// Rough heuristic.  Mem instructions should cost more.
 			u64 cost = block->originalSize * (block->runCount / 4);
-	#ifdef _WIN32
 			u64 timecost = block->ticCounter;
-	#endif
 			// Todo: tweak.
 			if (block->runCount >= 1)
 				stats.push_back(BlockStat(i, cost));
 			cost_sum += cost;
-	#ifdef _WIN32
 			timecost_sum += timecost;
-	#endif
 		}
 
 		sort(stats.begin(), stats.end());
@@ -169,27 +173,17 @@ namespace JitInterface
 			{
 				std::string name = g_symbolDB.GetDescription(block->originalAddress);
 				double percent = 100.0 * (double)stat.cost / (double)cost_sum;
-	#ifdef _WIN32
 				double timePercent = 100.0 * (double)block->ticCounter / (double)timecost_sum;
-				fprintf(f.GetHandle(), "%08x\t%s\t%" PRIu64 "\t%" PRIu64 "\t%.2lf\t%llf\t%lf\t%i\n",
+				fprintf(f.GetHandle(), "%08x\t%s\t%" PRIu64 "\t%" PRIu64 "\t%.2f\t%.2f\t%.2f\t%i\n",
 						block->originalAddress, name.c_str(), stat.cost,
 						block->ticCounter, percent, timePercent,
 						(double)block->ticCounter*1000.0/(double)countsPerSec, block->codeSize);
-	#else
-				fprintf(f.GetHandle(), "%08x\t%s\t%" PRIu64 "\t???\t%.2lf\t???\t???\t%i\n",
-						block->originalAddress, name.c_str(), stat.cost,  percent, block->codeSize);
-	#endif
 			}
 		}
-		#endif
 	}
-	bool IsInCodeSpace(u8 *ptr)
+	bool HandleFault(uintptr_t access_address, SContext* ctx)
 	{
-		return jit->IsInCodeSpace(ptr);
-	}
-	const u8 *BackPatch(u8 *codePtr, u32 em_address, void *ctx)
-	{
-		return jit->BackPatch(codePtr, em_address, ctx);
+		return jit->HandleFault(access_address, ctx);
 	}
 
 	void ClearCache()
@@ -207,17 +201,17 @@ namespace JitInterface
 			jit->GetBlockCache()->Clear();
 	}
 
-	void InvalidateICache(u32 address, u32 size)
+	void InvalidateICache(u32 address, u32 size, bool forced)
 	{
 		if (jit)
-			jit->GetBlockCache()->InvalidateICache(address, size);
+			jit->GetBlockCache()->InvalidateICache(address, size, forced);
 	}
 
-	u32 Read_Opcode_JIT(u32 _Address)
+	u32 ReadOpcodeJIT(u32 _Address)
 	{
 		if (bMMU && !bFakeVMEM && (_Address & Memory::ADDR_MASK_MEM1))
 		{
-			_Address = Memory::TranslateAddress(_Address, Memory::FLAG_OPCODE);
+			_Address = Memory::TranslateAddress<Memory::FLAG_OPCODE>(_Address);
 			if (_Address == 0)
 			{
 				return 0;
@@ -232,6 +226,39 @@ namespace JitInterface
 		else
 			inst = PowerPC::ppcState.iCache.ReadInstruction(_Address);
 		return inst;
+	}
+
+	void CompileExceptionCheck(ExceptionType type)
+	{
+		if (!jit)
+			return;
+
+		std::unordered_set<u32>* exception_addresses = nullptr;
+
+		switch (type)
+		{
+		case ExceptionType::EXCEPTIONS_FIFO_WRITE:
+			exception_addresses = &jit->js.fifoWriteAddresses;
+			break;
+		case ExceptionType::EXCEPTIONS_PAIRED_QUANTIZE:
+			exception_addresses = &jit->js.pairedQuantizeAddresses;
+			break;
+		}
+
+		if (PC != 0 && (exception_addresses->find(PC)) == (exception_addresses->end()))
+		{
+			if (type == ExceptionType::EXCEPTIONS_FIFO_WRITE)
+			{
+				// Check in case the code has been replaced since: do we need to do this?
+				int optype = GetOpInfo(Memory::ReadUnchecked_U32(PC))->type;
+				if (optype != OPTYPE_STORE && optype != OPTYPE_STOREFP && (optype != OPTYPE_STOREPS))
+					return;
+			}
+			exception_addresses->insert(PC);
+
+			// Invalidate the JIT block so that it gets recompiled with the external exception check included.
+			jit->GetBlockCache()->InvalidateICache(PC, 4, true);
+		}
 	}
 
 	void Shutdown()

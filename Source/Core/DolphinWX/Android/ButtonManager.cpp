@@ -4,8 +4,10 @@
 
 #include <unordered_map>
 
+#include "Common/FileUtil.h"
+#include "Common/IniFile.h"
+#include "Common/Thread.h"
 #include "DolphinWX/Android/ButtonManager.h"
-#include "DolphinWX/GLInterface/GLInterface.h"
 
 namespace ButtonManager
 {
@@ -56,7 +58,7 @@ namespace ButtonManager
 		TRIGGER_R
 	};
 
-	void AddBind(std::string dev, sBind *bind)
+	static void AddBind(std::string dev, sBind *bind)
 	{
 		auto it = m_controllers.find(dev);
 		if (it != m_controllers.end())
@@ -110,20 +112,20 @@ namespace ButtonManager
 				bool hasbind = false;
 				char modifier = '+';
 				std::string value;
-				ini.Get("Android", config.str(), &value, "None");
+				ini.GetOrCreateSection("Android")->Get(config.str(), &value, "None");
 				if (value == "None")
 					continue;
 				if (std::string::npos != value.find("Axis"))
 				{
 					hasbind = true;
 					type = BIND_AXIS;
-					sscanf(value.c_str(), "Device '%[^\']'-Axis %d%c", dev, &bindnum, &modifier);
+					sscanf(value.c_str(), "Device '%127[^\']'-Axis %d%c", dev, &bindnum, &modifier);
 				}
 				else if (std::string::npos != value.find("Button"))
 				{
 					hasbind = true;
 					type = BIND_BUTTON;
-					sscanf(value.c_str(), "Device '%[^\']'-Button %d", dev, &bindnum);
+					sscanf(value.c_str(), "Device '%127[^\']'-Button %d", dev, &bindnum);
 				}
 				if (hasbind)
 					AddBind(std::string(dev), new sBind(padID, configTypes[a], type, bindnum, modifier == '-' ? -1.0f : 1.0f));

@@ -7,14 +7,14 @@
 #include "Core/HW/Wiimote.h"
 #include "InputCommon/InputConfig.h"
 
-InputPlugin::~InputPlugin()
+InputConfig::~InputConfig()
 {
 	// delete pads
 	for (ControllerEmu* pad : controllers)
 		delete pad;
 }
 
-bool InputPlugin::LoadConfig(bool isGC)
+bool InputConfig::LoadConfig(bool isGC)
 {
 	IniFile inifile;
 	IniFile game_ini;
@@ -36,16 +36,21 @@ bool InputPlugin::LoadConfig(bool isGC)
 			type = "Wiimote";
 			path = "Profiles/Wiimote/";
 		}
+
 		game_ini.Load(File::GetSysDirectory() + GAMESETTINGS_DIR DIR_SEP + SConfig::GetInstance().m_LocalCoreStartupParameter.GetUniqueID() + ".ini");
 		game_ini.Load(File::GetUserPath(D_GAMESETTINGS_IDX) + SConfig::GetInstance().m_LocalCoreStartupParameter.GetUniqueID() + ".ini", true);
+		IniFile::Section* control_section = game_ini.GetOrCreateSection("Controls");
+
 		for (int i = 0; i < 4; i++)
 		{
-			if (game_ini.Exists("Controls", type + "Profile" + num[i]))
+			if (control_section->Exists(type + "Profile" + num[i]))
 			{
-				if (game_ini.Get("Controls", type + "Profile" + num[i], &profile[i]))
+				if (control_section->Get(type + "Profile" + num[i], &profile[i]))
 				{
 					if (File::Exists(File::GetUserPath(D_CONFIG_IDX) + path + profile[i] + ".ini"))
+					{
 						useProfile[i] = true;
+					}
 					else
 					{
 						// TODO: Having a PanicAlert for this is dumb.
@@ -89,7 +94,7 @@ bool InputPlugin::LoadConfig(bool isGC)
 	}
 }
 
-void InputPlugin::SaveConfig()
+void InputConfig::SaveConfig()
 {
 	std::string ini_filename = File::GetUserPath(D_CONFIG_IDX) + ini_name + ".ini";
 

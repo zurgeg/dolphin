@@ -14,9 +14,6 @@
 #include "VideoCommon/VertexShaderGen.h"
 #include "VideoCommon/VideoConfig.h"
 
-//void UpdateFPSDisplay(const char *text);
-extern NativeVertexFormat *g_nativeVertexFmt;
-
 GFXDebuggerBase *g_pdebugger = nullptr;
 volatile bool GFXDebuggerPauseFlag = false; // if true, the GFX thread will be spin locked until it's false again
 volatile PauseEvent GFXDebuggerToPauseAtNext = NOT_PAUSE; // Event which will trigger spin locking the GFX thread
@@ -58,8 +55,6 @@ void GFXDebuggerCheckAndPause(bool update)
 		g_pdebugger->OnPause();
 		while ( GFXDebuggerPauseFlag )
 		{
-			g_video_backend->UpdateFPSDisplay("Paused by Video Debugger");
-
 			if (update) GFXDebuggerUpdateScreen();
 			SLEEP(5);
 		}

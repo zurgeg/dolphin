@@ -2,7 +2,8 @@
 // Licensed under GPLv2
 // Refer to the license.txt file included.
 
-#include "Common/Common.h"
+#include "Common/ChunkFile.h"
+#include "Common/CommonTypes.h"
 #include "Common/StringUtil.h"
 
 #include "Core/ConfigManager.h"
@@ -700,7 +701,7 @@ static u32 ParseCont(u8* pCont)
 }
 
 
-int ParseAttribList(u8* pAttribIDList, u16& _startID, u16& _endID)
+static int ParseAttribList(u8* pAttribIDList, u16& _startID, u16& _endID)
 {
 	u32 attribOffset = 0;
 	CBigEndianBuffer attribList(pAttribIDList);
@@ -709,12 +710,11 @@ int ParseAttribList(u8* pAttribIDList, u16& _startID, u16& _endID)
 	u8 seqSize  = attribList.Read8(attribOffset); attribOffset++;
 	u8 typeID   = attribList.Read8(attribOffset); attribOffset++;
 
-#if MAX_LOGLEVEL >= DEBUG_LEVEL
-	_dbg_assert_(WII_IPC_WIIMOTE, sequence == SDP_SEQ8);
-	(void)seqSize;
-#else
-	(void)sequence, (void)seqSize;
-#endif
+	if (MAX_LOGLEVEL >= LogTypes::LOG_LEVELS::LDEBUG)
+	{
+		_dbg_assert_(WII_IPC_WIIMOTE, sequence == SDP_SEQ8);
+		(void)seqSize;
+	}
 
 	if (typeID == SDP_UINT32)
 	{

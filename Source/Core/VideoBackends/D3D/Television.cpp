@@ -7,6 +7,7 @@
 #include "Core/HW/Memmap.h"
 #include "VideoBackends/D3D/D3DBase.h"
 #include "VideoBackends/D3D/D3DShader.h"
+#include "VideoBackends/D3D/D3DState.h"
 #include "VideoBackends/D3D/D3DUtil.h"
 #include "VideoBackends/D3D/Television.h"
 #include "VideoBackends/D3D/VertexShaderCache.h"
@@ -98,7 +99,7 @@ void Television::Init()
 
 	// Create YUYV-decoding pixel shader
 
-	m_pShader = D3D::CompileAndCreatePixelShader(YUYV_DECODER_PS, sizeof(YUYV_DECODER_PS));
+	m_pShader = D3D::CompileAndCreatePixelShader(YUYV_DECODER_PS);
 	CHECK(m_pShader != nullptr, "compile and create yuyv decoder pixel shader");
 	D3D::SetDebugObjectName(m_pShader, "yuyv decoder pixel shader");
 
@@ -126,7 +127,7 @@ void Television::Shutdown()
 	SAFE_RELEASE(m_samplerState);
 }
 
-void Television::Submit(u32 xfbAddr, u32 width, u32 height)
+void Television::Submit(u32 xfbAddr, u32 stride, u32 width, u32 height)
 {
 	m_curAddr = xfbAddr;
 	m_curWidth = width;
@@ -134,8 +135,8 @@ void Television::Submit(u32 xfbAddr, u32 width, u32 height)
 
 	// Load data from GameCube RAM to YUYV texture
 	u8* yuyvSrc = Memory::GetPointer(xfbAddr);
-	D3D11_BOX box = CD3D11_BOX(0, 0, 0, width, height, 1);
-	D3D::context->UpdateSubresource(m_yuyvTexture, 0, &box, yuyvSrc, 2*width, 2*width*height);
+	D3D11_BOX box = CD3D11_BOX(0, 0, 0, stride, height, 1);
+	D3D::context->UpdateSubresource(m_yuyvTexture, 0, &box, yuyvSrc, 2*stride, 2*stride*height);
 }
 
 void Television::Render()
@@ -150,7 +151,7 @@ void Television::Render()
 		MathUtil::Rectangle<int> sourceRc(0, 0, int(m_curWidth), int(m_curHeight));
 		MathUtil::Rectangle<float> destRc(-1.f, 1.f, 1.f, -1.f);
 
-		D3D::context->PSSetSamplers(0, 1, &m_samplerState);
+		D3D::stateman->SetSampler(0, m_samplerState);
 
 		D3D::drawShadedTexSubQuad(
 			m_yuyvTextureSRV, &sourceRc,

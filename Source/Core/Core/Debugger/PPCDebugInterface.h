@@ -14,7 +14,7 @@ class PPCDebugInterface final : public DebugInterface
 {
 public:
 	PPCDebugInterface(){}
-	virtual void Disassemble(unsigned int address, char *dest, int max_size) override;
+	virtual std::string Disassemble(unsigned int address) override;
 	virtual void GetRawMemoryString(int memory, unsigned int address, char *dest, int max_size) override;
 	virtual int GetInstructionSize(int /*instruction*/) override {return 4;}
 	virtual bool IsAlive() override;
@@ -22,15 +22,18 @@ public:
 	virtual void SetBreakpoint(unsigned int address) override;
 	virtual void ClearBreakpoint(unsigned int address) override;
 	virtual void ClearAllBreakpoints() override;
+	virtual void AddWatch(unsigned int address) override;
 	virtual void ToggleBreakpoint(unsigned int address) override;
 	virtual void ClearAllMemChecks() override;
 	virtual bool IsMemCheck(unsigned int address) override;
 	virtual void ToggleMemCheck(unsigned int address) override;
 	virtual unsigned int ReadMemory(unsigned int address) override;
 
-	enum {
+	enum
+	{
 		EXTRAMEM_ARAM = 1,
 	};
+
 	virtual unsigned int ReadExtraMemory(int memory, unsigned int address) override;
 	virtual unsigned int ReadInstruction(unsigned int address) override;
 	virtual unsigned int GetPC() override;
@@ -41,5 +44,4 @@ public:
 	virtual void InsertBLR(unsigned int address, unsigned int value) override;
 	virtual int GetColor(unsigned int address) override;
 	virtual std::string GetDescription(unsigned int address) override;
-	virtual void ShowJitResults(u32 address) override;
 };

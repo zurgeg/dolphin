@@ -2,10 +2,13 @@
 // Licensed under GPLv2
 // Refer to the license.txt file included.
 
+#include "Common/ChunkFile.h"
+#include "VideoCommon/BoundingBox.h"
 #include "VideoCommon/BPMemory.h"
 #include "VideoCommon/CommandProcessor.h"
 #include "VideoCommon/CPMemory.h"
 #include "VideoCommon/Fifo.h"
+#include "VideoCommon/GeometryShaderManager.h"
 #include "VideoCommon/PixelEngine.h"
 #include "VideoCommon/PixelShaderManager.h"
 #include "VideoCommon/TextureDecoder.h"
@@ -21,13 +24,7 @@ static void DoState(PointerWrap &p)
 	p.DoMarker("BP Memory");
 
 	// CP Memory
-	p.DoArray(arraybases, 16);
-	p.DoArray(arraystrides, 16);
-	p.Do(MatrixIndexA);
-	p.Do(MatrixIndexB);
-	p.Do(g_VtxDesc.Hex);
-	p.DoArray(g_VtxAttr, 8);
-	p.DoMarker("CP Memory");
+	DoCPState(p);
 
 	// XF Memory
 	p.Do(xfmem);
@@ -54,8 +51,15 @@ static void DoState(PointerWrap &p)
 	VertexShaderManager::DoState(p);
 	p.DoMarker("VertexShaderManager");
 
+	GeometryShaderManager::DoState(p);
+	p.DoMarker("GeometryShaderManager");
+
 	VertexManager::DoState(p);
 	p.DoMarker("VertexManager");
+
+	BoundingBox::DoState(p);
+	p.DoMarker("BoundingBox");
+
 
 	// TODO: search for more data that should be saved and add it here
 }
@@ -72,11 +76,7 @@ void VideoCommon_RunLoop(bool enable)
 
 void VideoCommon_Init()
 {
-	memset(arraybases, 0, sizeof(arraybases));
-	memset(arraystrides, 0, sizeof(arraystrides));
-	memset(&MatrixIndexA, 0, sizeof(MatrixIndexA));
-	memset(&MatrixIndexB, 0, sizeof(MatrixIndexB));
-	memset(&g_VtxDesc, 0, sizeof(g_VtxDesc));
-	memset(g_VtxAttr, 0, sizeof(g_VtxAttr));
+	memset(&g_main_cp_state, 0, sizeof(g_main_cp_state));
+	memset(&g_preprocess_cp_state, 0, sizeof(g_preprocess_cp_state));
 	memset(texMem, 0, TMEM_SIZE);
 }

@@ -12,10 +12,9 @@
 // A copy of the GPL 2.0 should have been included with the program.
 // If not, see http://www.gnu.org/licenses/
 
-// Official SVN repository and contact information can be found at
-// http://code.google.com/p/dolphin-emu/
+// Official Git repository and contact information can be found at
+// https://github.com/dolphin-emu/dolphin
 
-#include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
 #include <jni.h>
@@ -24,12 +23,12 @@
 #include <EGL/egl.h>
 
 #include "Android/ButtonManager.h"
-#include "Common/Common.h"
 #include "Common/CommonPaths.h"
+#include "Common/CommonTypes.h"
 #include "Common/CPUDetect.h"
 #include "Common/Event.h"
 #include "Common/FileUtil.h"
-#include "Common/LogManager.h"
+#include "Common/Logging/LogManager.h"
 #include "Core/BootManager.h"
 #include "Core/ConfigManager.h"
 #include "Core/Core.h"
@@ -43,20 +42,18 @@
 #include "DiscIO/Filesystem.h"
 #include "DiscIO/VolumeCreator.h"
 
+#include "UICommon/UICommon.h"
+
 #include "VideoCommon/OnScreenDisplay.h"
 #include "VideoCommon/VideoBackendBase.h"
 
 ANativeWindow* surf;
-int g_width, g_height;
 std::string g_filename;
-static std::thread g_run_thread;
 
 #define DOLPHIN_TAG "Dolphinemu"
 
 void Host_NotifyMapLoaded() {}
 void Host_RefreshDSPDebuggerWindow() {}
-
-void Host_ShowJitResults(unsigned int address){}
 
 Common::Event updateMainFrameEvent;
 void Host_Message(int Id)
@@ -68,14 +65,10 @@ void* Host_GetRenderHandle()
 	return surf;
 }
 
-void* Host_GetInstance() { return nullptr; }
-
 void Host_UpdateTitle(const std::string& title)
 {
 	__android_log_write(ANDROID_LOG_INFO, DOLPHIN_TAG, title.c_str());
 }
-
-void Host_UpdateLogDisplay(){}
 
 void Host_UpdateDisasmDialog(){}
 
@@ -83,19 +76,17 @@ void Host_UpdateMainFrame()
 {
 }
 
-void Host_UpdateBreakPointView(){}
-
-void Host_GetRenderWindowSize(int& x, int& y, int& width, int& height)
-{
-	x = SConfig::GetInstance().m_LocalCoreStartupParameter.iRenderWindowXPos;
-	y = SConfig::GetInstance().m_LocalCoreStartupParameter.iRenderWindowYPos;
-	width = g_width;
-	height = g_height;
-}
-
 void Host_RequestRenderWindowSize(int width, int height) {}
+
+void Host_RequestFullscreen(bool enable_fullscreen) {}
+
 void Host_SetStartupDebuggingParameters()
 {
+}
+
+bool Host_UIHasFocus()
+{
+	return true;
 }
 
 bool Host_RendererHasFocus()
@@ -103,22 +94,16 @@ bool Host_RendererHasFocus()
 	return true;
 }
 
-void Host_ConnectWiimote(int wm_idx, bool connect) {}
-
-void Host_SetWaitCursor(bool enable){}
-
-void Host_UpdateStatusBar(const std::string& text, int filed){}
-
-void Host_SysMessage(const char *fmt, ...)
+bool Host_RendererIsFullscreen()
 {
-	va_list args;
-
-	va_start(args, fmt);
-	__android_log_vprint(ANDROID_LOG_INFO, DOLPHIN_TAG, fmt, args);
-	va_end(args);
+	return false;
 }
 
+void Host_ConnectWiimote(int wm_idx, bool connect) {}
+
 void Host_SetWiiMoteConnectionState(int _State) {}
+
+void Host_ShowVideoConfig(void*, const std::string&, const std::string&) {}
 
 #define DVD_BANNER_WIDTH 96
 #define DVD_BANNER_HEIGHT 32
@@ -136,7 +121,7 @@ static inline u32 GetPixel(u32 *buffer, unsigned int x, unsigned int y) {
 	return buffer[y * 192 + x];
 }
 
-bool LoadBanner(std::string filename, u32 *Banner)
+static bool LoadBanner(std::string filename, u32 *Banner)
 {
 	DiscIO::IVolume* pVolume = DiscIO::CreateVolumeFromFilename(filename);
 
@@ -191,7 +176,8 @@ bool LoadBanner(std::string filename, u32 *Banner)
 
 	return false;
 }
-std::string GetName(std::string filename)
+
+static std::string GetName(std::string filename)
 {
 	if (!m_names.empty())
 		return m_names[0];
@@ -205,7 +191,7 @@ std::string GetName(std::string filename)
 	return name;
 }
 
-std::string GetJString(JNIEnv *env, jstring jstr)
+static std::string GetJString(JNIEnv *env, jstring jstr)
 {
 	std::string result = "";
 	if (!jstr)
@@ -274,7 +260,7 @@ JNIEXPORT jstring JNICALL Java_org_dolphinemu_dolphinemu_NativeLibrary_GetVersio
 
 JNIEXPORT jboolean JNICALL Java_org_dolphinemu_dolphinemu_NativeLibrary_SupportsNEON(JNIEnv *env, jobject obj)
 {
-	return cpu_info.bNEON;
+	return cpu_info.bNEON || cpu_info.bASIMD;
 }
 
 JNIEXPORT void JNICALL Java_org_dolphinemu_dolphinemu_NativeLibrary_SaveScreenShot(JNIEnv *env, jobject obj)
@@ -298,7 +284,7 @@ JNIEXPORT jstring JNICALL Java_org_dolphinemu_dolphinemu_NativeLibrary_GetConfig
 	ini.Load(File::GetUserPath(D_CONFIG_IDX) + std::string(file));
 	std::string value;
 
-	ini.Get(section, key, &value, defaultValue);
+	ini.GetOrCreateSection(section)->Get(key, &value, defaultValue);
 
 	return env->NewStringUTF(value.c_str());
 }
@@ -313,18 +299,13 @@ jstring jValue)
 
 	ini.Load(File::GetUserPath(D_CONFIG_IDX) + std::string(file));
 
-	ini.Set(section, key, value);
+	ini.GetOrCreateSection(section)->Set(key, value);
 	ini.Save(File::GetUserPath(D_CONFIG_IDX) + std::string(file));
 }
 
 JNIEXPORT void JNICALL Java_org_dolphinemu_dolphinemu_NativeLibrary_SetFilename(JNIEnv *env, jobject obj, jstring jFile)
 {
 	g_filename = GetJString(env, jFile);
-}
-JNIEXPORT void JNICALL Java_org_dolphinemu_dolphinemu_NativeLibrary_SetDimensions(JNIEnv *env, jobject obj, jint _width, jint _height)
-{
-	g_width = (int)_width;
-	g_height = (int)_height;
 }
 
 JNIEXPORT void JNICALL Java_org_dolphinemu_dolphinemu_NativeLibrary_SaveState(JNIEnv *env, jobject obj, jint slot)
@@ -358,25 +339,19 @@ JNIEXPORT void JNICALL Java_org_dolphinemu_dolphinemu_NativeLibrary_CreateUserFo
 JNIEXPORT void JNICALL Java_org_dolphinemu_dolphinemu_NativeLibrary_Run(JNIEnv *env, jobject obj, jobject _surf)
 {
 	surf = ANativeWindow_fromSurface(env, _surf);
+
 	// Install our callbacks
 	OSD::AddCallback(OSD::OSD_INIT, ButtonManager::Init);
 	OSD::AddCallback(OSD::OSD_SHUTDOWN, ButtonManager::Shutdown);
 
-	LogManager::Init();
-	SConfig::Init();
-	VideoBackend::PopulateList();
-	VideoBackend::ActivateBackend(SConfig::GetInstance().m_LocalCoreStartupParameter.m_strVideoBackend);
-	WiimoteReal::LoadSettings();
+	UICommon::Init();
 
 	// No use running the loop when booting fails
 	if ( BootManager::BootCore( g_filename.c_str() ) )
 		while (PowerPC::GetState() != PowerPC::CPU_POWERDOWN)
 			updateMainFrameEvent.Wait();
 
-	WiimoteReal::Shutdown();
-	VideoBackend::ClearList();
-	SConfig::Shutdown();
-	LogManager::Shutdown();
+	UICommon::Shutdown();
 	ANativeWindow_release(surf);
 }
 

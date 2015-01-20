@@ -24,11 +24,11 @@ public:
 
 	virtual void DoState(PointerWrap& p) override;
 
-	virtual bool Open(u32 _CommandAddress, u32 _Mode) override;
+	virtual IPCCommandResult Open(u32 _CommandAddress, u32 _Mode) override;
+	virtual IPCCommandResult Close(u32 _CommandAddress, bool _bForce) override;
 
-	virtual bool Close(u32 _CommandAddress, bool _bForce) override;
+	virtual IPCCommandResult IOCtlV(u32 _CommandAddress) override;
 
-	virtual bool IOCtlV(u32 _CommandAddress) override;
 	static u32 ES_DIVerify(u8 *_pTMD, u32 _sz);
 
 	// This should only be cleared on power reset
@@ -143,7 +143,7 @@ private:
 
 	bool IsValid(u64 _TitleID) const;
 
-	typedef struct ecc_cert_t
+	struct ecc_cert_t
 	{
 		u32 sig_type          ;
 		 u8 sig         [0x3c];
@@ -154,5 +154,5 @@ private:
 		u32 ng_key_id         ;
 		 u8 ecc_pubkey  [0x3c];
 		 u8 padding     [0x3c];
-	} ecc_cert_t;
+	};
 };

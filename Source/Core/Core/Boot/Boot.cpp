@@ -3,8 +3,8 @@
 // Refer to the license.txt file included.
 
 
-#include "Common/Common.h"
 #include "Common/CommonPaths.h"
+#include "Common/CommonTypes.h"
 #include "Common/FileUtil.h"
 #include "Common/Hash.h"
 #include "Common/MathUtil.h"
@@ -39,7 +39,7 @@ void CBoot::Load_FST(bool _bIsWii)
 		return;
 
 	// copy first 20 bytes of disc to start of Mem 1
-	VolumeHandler::ReadToPtr(Memory::GetPointer(0x80000000), 0, 0x20);
+	VolumeHandler::ReadToPtr(Memory::GetPointer(0x80000000), 0, 0x20, false);
 
 	// copy of game id
 	Memory::Write_U32(Memory::Read_U32(0x80000000), 0x80003180);
@@ -48,15 +48,15 @@ void CBoot::Load_FST(bool _bIsWii)
 	if (_bIsWii)
 		shift = 2;
 
-	u32 fstOffset  = VolumeHandler::Read32(0x0424) << shift;
-	u32 fstSize    = VolumeHandler::Read32(0x0428) << shift;
-	u32 maxFstSize = VolumeHandler::Read32(0x042c) << shift;
+	u32 fstOffset  = VolumeHandler::Read32(0x0424, _bIsWii) << shift;
+	u32 fstSize    = VolumeHandler::Read32(0x0428, _bIsWii) << shift;
+	u32 maxFstSize = VolumeHandler::Read32(0x042c, _bIsWii) << shift;
 
 	u32 arenaHigh = ROUND_DOWN(0x817FFFFF - maxFstSize, 0x20);
 	Memory::Write_U32(arenaHigh, 0x00000034);
 
 	// load FST
-	VolumeHandler::ReadToPtr(Memory::GetPointer(arenaHigh), fstOffset, fstSize);
+	VolumeHandler::ReadToPtr(Memory::GetPointer(arenaHigh), fstOffset, fstSize, _bIsWii);
 	Memory::Write_U32(arenaHigh, 0x00000038);
 	Memory::Write_U32(maxFstSize, 0x0000003c);
 }
@@ -67,9 +67,11 @@ void CBoot::UpdateDebugger_MapLoaded()
 }
 
 bool CBoot::FindMapFile(std::string* existing_map_file,
-                        std::string* writable_map_file)
+                        std::string* writable_map_file,
+                        std::string* title_id)
 {
 	std::string title_id_str;
+	size_t name_begin_index;
 
 	SCoreStartupParameter& _StartupPara = SConfig::GetInstance().m_LocalCoreStartupParameter;
 	switch (_StartupPara.m_BootType)
@@ -90,9 +92,14 @@ bool CBoot::FindMapFile(std::string* existing_map_file,
 
 	case SCoreStartupParameter::BOOT_ELF:
 	case SCoreStartupParameter::BOOT_DOL:
-		// Strip the .elf/.dol file extension
+		// Strip the .elf/.dol file extension and directories before the name
+		name_begin_index = _StartupPara.m_strFilename.find_last_of("/") + 1;
+		if ((_StartupPara.m_strFilename.find_last_of("\\") + 1) > name_begin_index)
+		{
+			name_begin_index = _StartupPara.m_strFilename.find_last_of("\\") + 1;
+		}
 		title_id_str = _StartupPara.m_strFilename.substr(
-				0, _StartupPara.m_strFilename.size() - 4);
+				name_begin_index, _StartupPara.m_strFilename.size() - 4 - name_begin_index);
 		break;
 
 	default:
@@ -102,6 +109,9 @@ bool CBoot::FindMapFile(std::string* existing_map_file,
 
 	if (writable_map_file)
 		*writable_map_file = File::GetUserPath(D_MAPS_IDX) + title_id_str + ".map";
+
+	if (title_id)
+		*title_id = title_id_str;
 
 	bool found = false;
 	static const std::string maps_directories[] = {
@@ -178,8 +188,8 @@ bool CBoot::Load_BS2(const std::string& _rBootROMFilename)
 	// Run the descrambler over the encrypted section containing BS1/BS2
 	CEXIIPL::Descrambler((u8*)data.data()+0x100, 0x1AFE00);
 
-	Memory::WriteBigEData((const u8*)data.data() + 0x100, 0x81200000, 0x700);
-	Memory::WriteBigEData((const u8*)data.data() + 0x820, 0x81300000, 0x1AFE00);
+	Memory::CopyToEmu(0x81200000, data.data() + 0x100, 0x700);
+	Memory::CopyToEmu(0x81300000, data.data() + 0x820, 0x1AFE00);
 	PC = 0x81200000;
 	return true;
 }
@@ -219,14 +229,12 @@ bool CBoot::BootUp()
 
 		DVDInterface::SetDiscInside(VolumeHandler::IsValid());
 
-		u32 _TMDsz = 0x208;
-		u8* _pTMD = new u8[_TMDsz];
-		pVolume->GetTMD(_pTMD, &_TMDsz);
-		if (_TMDsz)
+		u32 tmd_size;
+		std::unique_ptr<u8[]> tmd_buf = pVolume->GetTMD(&tmd_size);
+		if (tmd_size)
 		{
-			WII_IPC_HLE_Interface::ES_DIVerify(_pTMD, _TMDsz);
+			WII_IPC_HLE_Interface::ES_DIVerify(tmd_buf.get(), tmd_size);
 		}
-		delete []_pTMD;
 
 
 		_StartupPara.bWii = VolumeHandler::IsWii();
@@ -240,6 +248,11 @@ bool CBoot::BootUp()
 		{
 			// If we can't load the bootrom file we HLE it instead
 			EmulatedBS2(_StartupPara.bWii);
+		}
+		else
+		{
+			// Load patches if they weren't already
+			PatchEngine::LoadPatches();
 		}
 
 		// Scan for common HLE functions
@@ -282,9 +295,9 @@ bool CBoot::BootUp()
 		{
 			BS2Success = EmulatedBS2(dolWii);
 		}
-		else if (!VolumeHandler::IsWii() && !_StartupPara.m_strDefaultGCM.empty())
+		else if (!VolumeHandler::IsWii() && !_StartupPara.m_strDefaultISO.empty())
 		{
-			VolumeHandler::SetVolumeName(_StartupPara.m_strDefaultGCM);
+			VolumeHandler::SetVolumeName(_StartupPara.m_strDefaultISO);
 			BS2Success = EmulatedBS2(dolWii);
 		}
 
@@ -334,9 +347,9 @@ bool CBoot::BootUp()
 		{
 			BS2Success = EmulatedBS2(elfWii);
 		}
-		else if (!VolumeHandler::IsWii() && !_StartupPara.m_strDefaultGCM.empty())
+		else if (!VolumeHandler::IsWii() && !_StartupPara.m_strDefaultISO.empty())
 		{
-			VolumeHandler::SetVolumeName(_StartupPara.m_strDefaultGCM);
+			VolumeHandler::SetVolumeName(_StartupPara.m_strDefaultISO);
 			BS2Success = EmulatedBS2(elfWii);
 		}
 
@@ -348,10 +361,10 @@ bool CBoot::BootUp()
 			VolumeHandler::SetVolumeDirectory(_StartupPara.m_strDVDRoot, elfWii);
 			BS2Success = EmulatedBS2(elfWii);
 		}
-		else if (!_StartupPara.m_strDefaultGCM.empty())
+		else if (!_StartupPara.m_strDefaultISO.empty())
 		{
-			NOTICE_LOG(BOOT, "Loading default ISO %s", _StartupPara.m_strDefaultGCM.c_str());
-			VolumeHandler::SetVolumeName(_StartupPara.m_strDefaultGCM);
+			NOTICE_LOG(BOOT, "Loading default ISO %s", _StartupPara.m_strDefaultISO.c_str());
+			VolumeHandler::SetVolumeName(_StartupPara.m_strDefaultISO);
 		}
 		else VolumeHandler::SetVolumeDirectory(_StartupPara.m_strFilename, elfWii);
 
@@ -381,8 +394,8 @@ bool CBoot::BootUp()
 		// load default image or create virtual drive from directory
 		if (!_StartupPara.m_strDVDRoot.empty())
 			VolumeHandler::SetVolumeDirectory(_StartupPara.m_strDVDRoot, true);
-		else if (!_StartupPara.m_strDefaultGCM.empty())
-			VolumeHandler::SetVolumeName(_StartupPara.m_strDefaultGCM);
+		else if (!_StartupPara.m_strDefaultISO.empty())
+			VolumeHandler::SetVolumeName(_StartupPara.m_strDefaultISO);
 
 		DVDInterface::SetDiscInside(VolumeHandler::IsValid());
 		break;
@@ -419,14 +432,11 @@ bool CBoot::BootUp()
 	if (!SConfig::GetInstance().m_LocalCoreStartupParameter.bEnableCheats)
 	{
 		HLE::Patch(0x80001800, "HBReload");
-		const u8 stubstr[] = { 'S', 'T', 'U', 'B', 'H', 'A', 'X', 'X' };
-		Memory::WriteBigEData(stubstr, 0x80001804, 8);
+		Memory::CopyToEmu(0x80001804, "STUBHAXX", 8);
 	}
 
 	// Not part of the binary itself, but either we or Gecko OS might insert
 	// this, and it doesn't clear the icache properly.
 	HLE::Patch(0x800018a8, "GeckoCodehandler");
-
-	Host_UpdateLogDisplay();
 	return true;
 }

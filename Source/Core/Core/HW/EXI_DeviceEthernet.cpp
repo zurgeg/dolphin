@@ -4,6 +4,7 @@
 
 #include "Common/Network.h"
 #include "Core/ConfigManager.h"
+#include "Core/HW/EXI.h"
 #include "Core/HW/EXI_Device.h"
 #include "Core/HW/EXI_DeviceEthernet.h"
 #include "Core/HW/Memmap.h"
@@ -53,9 +54,9 @@ CEXIETHERNET::~CEXIETHERNET()
 {
 	Deactivate();
 
-	delete tx_fifo;
-	delete mBbaMem;
-	delete mRecvBuffer;
+	delete[] tx_fifo;
+	delete[] mBbaMem;
+	delete[] mRecvBuffer;
 }
 
 void CEXIETHERNET::SetCS(int cs)
@@ -123,6 +124,7 @@ void CEXIETHERNET::ImmWrite(u32 data,  u32 size)
 			exi_status.interrupt_mask = data;
 			break;
 		}
+		ExpansionInterface::UpdateInterrupts();
 	}
 	else
 	{
@@ -192,7 +194,7 @@ void CEXIETHERNET::DMARead(u32 addr, u32 size)
 {
 	DEBUG_LOG(SP1, "DMA read: %08x %x", addr, size);
 
-	memcpy(Memory::GetPointer(addr), &mBbaMem[transfer.address], size);
+	Memory::CopyToEmu(addr, &mBbaMem[transfer.address], size);
 
 	transfer.address += size;
 }
@@ -401,6 +403,7 @@ void CEXIETHERNET::SendComplete()
 		mBbaMem[BBA_IR] |= INT_T;
 
 		exi_status.interrupt |= exi_status.TRANSFER;
+		ExpansionInterface::ScheduleUpdateInterrupts_Threadsafe(0);
 	}
 
 	mBbaMem[BBA_LTPS] = 0;
@@ -571,6 +574,7 @@ bool CEXIETHERNET::RecvHandlePacket()
 		mBbaMem[BBA_IR] |= INT_R;
 
 		exi_status.interrupt |= exi_status.TRANSFER;
+		ExpansionInterface::ScheduleUpdateInterrupts_Threadsafe(0);
 	}
 	else
 	{

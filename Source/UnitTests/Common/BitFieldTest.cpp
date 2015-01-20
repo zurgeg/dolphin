@@ -24,7 +24,7 @@ union TestUnion
 };
 
 // table of raw numbers to test with
-u64 table[] =
+static u64 table[] =
 {
 	0x0000000000000000ull, // all zero
 	0xffffffffffffffffull, // all one
@@ -139,7 +139,8 @@ TEST(BitField, Alignment)
 
 	GC_ALIGNED16(OddlyAlignedTestStruct test_struct);
 	TestUnion& object = test_struct.obj;
-	static_assert(alignof(test_struct.obj.signed_1bit) == 1, "Incorrect variable alignment");
+	static_assert(alignof(decltype(test_struct.obj.signed_1bit)) == 1,
+		"Incorrect variable alignment");
 
 	for (u64 val : table)
 	{

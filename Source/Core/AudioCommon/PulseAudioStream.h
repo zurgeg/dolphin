@@ -11,7 +11,7 @@
 #include <atomic>
 
 #include "AudioCommon/SoundStream.h"
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 #include "Common/Thread.h"
 
 class PulseAudio final : public SoundStream
@@ -44,6 +44,10 @@ private:
 
 	std::thread m_thread;
 	std::atomic<bool> m_run_thread;
+
+	bool m_stereo; // stereo, else surround
+	int m_bytespersample;
+	int m_channels;
 
 	int m_pa_error;
 	int m_pa_connected;

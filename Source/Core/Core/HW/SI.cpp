@@ -5,7 +5,7 @@
 #include <algorithm>
 
 #include "Common/ChunkFile.h"
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 
 #include "Core/ConfigManager.h"
 #include "Core/CoreTiming.h"
@@ -230,8 +230,7 @@ void DoState(PointerWrap &p)
 			// if we had to create a temporary device, discard it if we're not loading.
 			// also, if no movie is active, we'll assume the user wants to keep their current devices
 			// instead of the ones they had when the savestate was created.
-			if (p.GetMode() != PointerWrap::MODE_READ ||
-				(!Movie::IsRecordingInput() && !Movie::IsPlayingInput()))
+			if (p.GetMode() != PointerWrap::MODE_READ || !Movie::IsMovieActive())
 			{
 				delete pSaveDevice;
 			}
@@ -257,7 +256,7 @@ void Init()
 		g_Channel[i].m_InHi.Hex = 0;
 		g_Channel[i].m_InLo.Hex = 0;
 
-		if (Movie::IsRecordingInput() || Movie::IsPlayingInput())
+		if (Movie::IsMovieActive())
 			AddDevice(Movie::IsUsingPad(i) ?  (Movie::IsUsingBongo(i) ? SIDEVICE_GC_TARUKONGA : SIDEVICE_GC_CONTROLLER) : SIDEVICE_NONE, i);
 		else if (!NetPlay::IsNetPlayRunning())
 			AddDevice(SConfig::GetInstance().m_SIDevice[i], i);
@@ -271,7 +270,7 @@ void Init()
 	g_StatusReg.Hex = 0;
 
 	g_EXIClockCount.Hex = 0;
-	//g_EXIClockCount.LOCK = 1; // Supposedly set on reset, but logs from real wii don't look like it is...
+	//g_EXIClockCount.LOCK = 1; // Supposedly set on reset, but logs from real Wii don't look like it is...
 	memset(g_SIBuffer, 0, 128);
 
 	changeDevice = CoreTiming::RegisterEvent("ChangeSIDevice", ChangeDeviceCallback);
@@ -458,7 +457,7 @@ void AddDevice(const SIDevices _device, int _iDeviceNumber)
 	AddDevice(pDevice);
 }
 
-void SetNoResponse(u32 channel)
+static void SetNoResponse(u32 channel)
 {
 	// raise the NO RESPONSE error
 	switch (channel)
@@ -474,22 +473,30 @@ void SetNoResponse(u32 channel)
 void ChangeDeviceCallback(u64 userdata, int cyclesLate)
 {
 	u8 channel = (u8)(userdata >> 32);
+	SIDevices device = (SIDevices)(u32)userdata;
 
-	g_Channel[channel].m_Out.Hex = 0;
-	g_Channel[channel].m_InHi.Hex = 0;
-	g_Channel[channel].m_InLo.Hex = 0;
+	// Skip redundant (spammed) device changes
+	if (GetDeviceType(channel) != device)
+	{
+		g_Channel[channel].m_Out.Hex = 0;
+		g_Channel[channel].m_InHi.Hex = 0;
+		g_Channel[channel].m_InLo.Hex = 0;
 
-	SetNoResponse(channel);
+		SetNoResponse(channel);
 
-	AddDevice((SIDevices)(u32)userdata, channel);
+		AddDevice(device, channel);
+	}
 }
 
 void ChangeDevice(SIDevices device, int channel)
 {
 	// Called from GUI, so we need to make it thread safe.
 	// Let the hardware see no device for .5b cycles
-	CoreTiming::ScheduleEvent_Threadsafe(0, changeDevice, ((u64)channel << 32) | SIDEVICE_NONE);
-	CoreTiming::ScheduleEvent_Threadsafe(500000000, changeDevice, ((u64)channel << 32) | device);
+	if (GetDeviceType(channel) != device)
+	{
+		CoreTiming::ScheduleEvent_Threadsafe(0, changeDevice, ((u64)channel << 32) | SIDEVICE_NONE);
+		CoreTiming::ScheduleEvent_Threadsafe(500000000, changeDevice, ((u64)channel << 32) | device);
+	}
 }
 
 void UpdateDevices()
@@ -501,6 +508,14 @@ void UpdateDevices()
 	g_StatusReg.RDST3 = !!g_Channel[3].m_pDevice->GetData(g_Channel[3].m_InHi.Hex, g_Channel[3].m_InLo.Hex);
 
 	UpdateInterrupts();
+}
+
+SIDevices GetDeviceType(int channel)
+{
+	if (channel < 0 || channel > 3)
+		return SIDEVICE_NONE;
+	else
+		return g_Channel[channel].m_pDevice->GetDeviceType();
 }
 
 void RunSIBuffer()
@@ -531,7 +546,7 @@ void RunSIBuffer()
 int GetTicksToNextSIPoll()
 {
 	// Poll for input at regular intervals (once per frame) when playing or recording a movie
-	if (Movie::IsPlayingInput() || Movie::IsRecordingInput())
+	if (Movie::IsMovieActive())
 	{
 		if (Movie::IsNetPlayRecording())
 			return SystemTimers::GetTicksPerSecond() / VideoInterface::TargetRefreshRate / 2;

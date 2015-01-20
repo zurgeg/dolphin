@@ -4,10 +4,11 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
 #include <vector>
 
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 
 namespace DiscIO
 {
@@ -17,10 +18,15 @@ public:
 	IVolume() {}
 	virtual ~IVolume() {}
 
-	virtual bool Read(u64 _Offset, u64 _Length, u8* _pBuffer) const = 0;
-	virtual bool RAWRead(u64 _Offset, u64 _Length, u8* _pBuffer) const = 0;
+	// decrypt parameter must be false if not reading a Wii disc
+	virtual bool Read(u64 _Offset, u64 _Length, u8* _pBuffer, bool decrypt) const = 0;
+
 	virtual bool GetTitleID(u8*) const { return false; }
-	virtual void GetTMD(u8*, u32 *_sz) const { *_sz=0; }
+	virtual std::unique_ptr<u8[]> GetTMD(u32 *_sz) const
+	{
+		*_sz = 0;
+		return std::unique_ptr<u8[]>();
+	}
 	virtual std::string GetUniqueID() const = 0;
 	virtual std::string GetRevisionSpecificUniqueID() const { return ""; }
 	virtual std::string GetMakerID() const = 0;
@@ -34,19 +40,25 @@ public:
 	virtual bool CheckIntegrity() const { return false; }
 	virtual bool IsDiscTwo() const { return false; }
 
+	virtual bool ChangePartition(u64 offset) { return false; }
+
+	// Increment CACHE_REVISION if the code below is modified (ISOFile.cpp & GameFile.cpp)
 	enum ECountry
 	{
 		COUNTRY_EUROPE = 0,
-		COUNTRY_FRANCE,
-		COUNTRY_RUSSIA,
-		COUNTRY_USA,
 		COUNTRY_JAPAN,
-		COUNTRY_KOREA,
-		COUNTRY_ITALY,
-		COUNTRY_TAIWAN,
-		COUNTRY_SDK,
-		COUNTRY_UNKNOWN,
+		COUNTRY_USA,
+		COUNTRY_AUSTRALIA,
+		COUNTRY_FRANCE,
 		COUNTRY_GERMANY,
+		COUNTRY_INTERNATIONAL,
+		COUNTRY_ITALY,
+		COUNTRY_KOREA,
+		COUNTRY_NETHERLANDS,
+		COUNTRY_RUSSIA,
+		COUNTRY_SPAIN,
+		COUNTRY_TAIWAN,
+		COUNTRY_UNKNOWN,
 		NUMBER_OF_COUNTRIES
 	};
 

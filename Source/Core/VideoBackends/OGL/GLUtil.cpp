@@ -8,14 +8,16 @@
 #include "Core/ConfigManager.h"
 #include "Core/Core.h"
 
+#include "VideoBackends/OGL/GLInterfaceBase.h"
 #include "VideoBackends/OGL/GLUtil.h"
 #include "VideoBackends/OGL/Render.h"
 #include "VideoBackends/OGL/VideoBackend.h"
 
 #include "VideoCommon/VideoConfig.h"
 
-GLWindow GLWin;
 cInterfaceBase *GLInterface;
+static GLuint attributelessVAO = 0;
+static GLuint attributelessVBO = 0;
 
 namespace OGL
 {
@@ -26,24 +28,10 @@ unsigned int VideoBackend::PeekMessages()
 	return GLInterface->PeekMessages();
 }
 
-// Show the current FPS
-void VideoBackend::UpdateFPSDisplay(const std::string& text)
-{
-	return GLInterface->UpdateFPSDisplay(StringFromFormat("%s | %s | %s", scm_rev_str, GetDisplayName().c_str(), text.c_str()));
-}
-
 }
 void InitInterface()
 {
-	#if defined(USE_EGL) && USE_EGL
-		GLInterface = new cInterfaceEGL;
-	#elif defined(__APPLE__)
-		GLInterface = new cInterfaceAGL;
-	#elif defined(_WIN32)
-		GLInterface = new cInterfaceWGL;
-	#elif defined(HAVE_X11) && HAVE_X11
-		GLInterface = new cInterfaceGLX;
-	#endif
+	GLInterface = HostGL_CreateGLInterface();
 }
 
 GLuint OpenGL_CompileProgram(const char* vertexShader, const char* fragmentShader)
@@ -62,13 +50,20 @@ GLuint OpenGL_CompileProgram(const char* vertexShader, const char* fragmentShade
 	GLsizei stringBufferUsage = 0;
 	glGetShaderiv(vertexShaderID, GL_COMPILE_STATUS, &Result);
 	glGetShaderInfoLog(vertexShaderID, 1024, &stringBufferUsage, stringBuffer);
-	if (Result && stringBufferUsage) {
+
+	if (Result && stringBufferUsage)
+	{
 		ERROR_LOG(VIDEO, "GLSL vertex shader warnings:\n%s%s", stringBuffer, vertexShader);
-	} else if (!Result) {
+	}
+	else if (!Result)
+	{
 		ERROR_LOG(VIDEO, "GLSL vertex shader error:\n%s%s", stringBuffer, vertexShader);
-	} else {
+	}
+	else
+	{
 		DEBUG_LOG(VIDEO, "GLSL vertex shader compiled:\n%s", vertexShader);
 	}
+
 	bool shader_errors = !Result;
 #endif
 
@@ -78,13 +73,20 @@ GLuint OpenGL_CompileProgram(const char* vertexShader, const char* fragmentShade
 #if defined(_DEBUG) || defined(DEBUGFAST) || defined(DEBUG_GLSL)
 	glGetShaderiv(fragmentShaderID, GL_COMPILE_STATUS, &Result);
 	glGetShaderInfoLog(fragmentShaderID, 1024, &stringBufferUsage, stringBuffer);
-	if (Result && stringBufferUsage) {
+
+	if (Result && stringBufferUsage)
+	{
 		ERROR_LOG(VIDEO, "GLSL fragment shader warnings:\n%s%s", stringBuffer, fragmentShader);
-	} else if (!Result) {
+	}
+	else if (!Result)
+	{
 		ERROR_LOG(VIDEO, "GLSL fragment shader error:\n%s%s", stringBuffer, fragmentShader);
-	} else {
+	}
+	else
+	{
 		DEBUG_LOG(VIDEO, "GLSL fragment shader compiled:\n%s", fragmentShader);
 	}
+
 	shader_errors |= !Result;
 #endif
 
@@ -95,9 +97,13 @@ GLuint OpenGL_CompileProgram(const char* vertexShader, const char* fragmentShade
 #if defined(_DEBUG) || defined(DEBUGFAST) || defined(DEBUG_GLSL)
 	glGetProgramiv(programID, GL_LINK_STATUS, &Result);
 	glGetProgramInfoLog(programID, 1024, &stringBufferUsage, stringBuffer);
-	if (Result && stringBufferUsage) {
+
+	if (Result && stringBufferUsage)
+	{
 		ERROR_LOG(VIDEO, "GLSL linker warnings:\n%s%s%s", stringBuffer, vertexShader, fragmentShader);
-	} else if (!Result && !shader_errors) {
+	}
+	else if (!Result && !shader_errors)
+	{
 		ERROR_LOG(VIDEO, "GLSL linker error:\n%s%s%s", stringBuffer, vertexShader, fragmentShader);
 	}
 #endif
@@ -109,46 +115,40 @@ GLuint OpenGL_CompileProgram(const char* vertexShader, const char* fragmentShade
 	return programID;
 }
 
-
-GLuint OpenGL_ReportGLError(const char *function, const char *file, int line)
+void OpenGL_CreateAttributelessVAO()
 {
-	GLint err = glGetError();
-	if (err != GL_NO_ERROR)
-	{
-		ERROR_LOG(VIDEO, "%s:%d: (%s) OpenGL error 0x%x\n",
-				file, line, function, err);
-	}
-	return err;
+	glGenVertexArrays(1, &attributelessVAO);
+	_dbg_assert_msg_(VIDEO, attributelessVAO != 0, "Attributeless VAO should have been created successfully.")
+
+	// In a compatibility context, we require a valid, bound array buffer.
+	glGenBuffers(1, &attributelessVBO);
+	_dbg_assert_msg_(VIDEO, attributelessVBO != 0, "Attributeless VBO should have been created successfully.")
+
+	// Initialize the buffer with nothing.  16 floats is an arbitrary size that may work around driver issues.
+	glBindBuffer(GL_ARRAY_BUFFER, attributelessVBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * 16, nullptr, GL_STATIC_DRAW);
+
+	// We must also define vertex attribute 0.
+	glBindVertexArray(attributelessVAO);
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+	glEnableVertexAttribArray(0);
 }
 
-bool OpenGL_ReportFBOError(const char *function, const char *file, int line)
+void OpenGL_BindAttributelessVAO()
 {
-	unsigned int fbo_status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-	if (fbo_status != GL_FRAMEBUFFER_COMPLETE)
-	{
-		const char *error = "unknown error";
-		switch (fbo_status)
-		{
-			case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
-				error = "INCOMPLETE_ATTACHMENT";
-				break;
-			case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
-				error = "INCOMPLETE_MISSING_ATTACHMENT";
-				break;
-			case GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER:
-				error = "INCOMPLETE_DRAW_BUFFER";
-				break;
-			case GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER:
-				error = "INCOMPLETE_READ_BUFFER";
-				break;
-			case GL_FRAMEBUFFER_UNSUPPORTED:
-				error = "UNSUPPORTED";
-				break;
-		}
-		ERROR_LOG(VIDEO, "%s:%d: (%s) OpenGL FBO error - %s\n",
-				file, line, function, error);
-		return false;
-	}
-	return true;
+	_dbg_assert_msg_(VIDEO, attributelessVAO != 0, "Attributeless VAO should have already been created.")
+	glBindVertexArray(attributelessVAO);
 }
 
+void OpenGL_DeleteAttributelessVAO()
+{
+	_dbg_assert_msg_(VIDEO, attributelessVAO != 0, "Attributeless VAO should have already been created.")
+	if (attributelessVAO != 0)
+	{
+		glDeleteVertexArrays(1, &attributelessVAO);
+		glDeleteBuffers(1, &attributelessVBO);
+
+		attributelessVAO = 0;
+		attributelessVBO = 0;
+	}
+}

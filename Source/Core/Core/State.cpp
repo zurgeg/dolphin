@@ -2,12 +2,12 @@
 // Licensed under GPLv2
 // Refer to the license.txt file included.
 
+#include <mutex>
+#include <thread>
 #include <lzo/lzo1x.h>
 
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 #include "Common/Event.h"
-#include "Common/StdMutex.h"
-#include "Common/StdThread.h"
 #include "Common/StringUtil.h"
 #include "Common/Timer.h"
 
@@ -25,6 +25,7 @@
 #include "Core/HW/Wiimote.h"
 #include "Core/PowerPC/JitCommon/JitBase.h"
 
+#include "VideoCommon/AVIDump.h"
 #include "VideoCommon/VideoBackendBase.h"
 
 namespace State
@@ -63,7 +64,7 @@ static Common::Event g_compressAndDumpStateSyncEvent;
 static std::thread g_save_thread;
 
 // Don't forget to increase this after doing changes on the savestate system
-static const u32 STATE_VERSION = 22;
+static const u32 STATE_VERSION = 38;
 
 enum
 {
@@ -79,7 +80,7 @@ void EnableCompression(bool compression)
 	g_use_compression = compression;
 }
 
-void DoState(PointerWrap &p)
+static void DoState(PointerWrap &p)
 {
 	u32 version = STATE_VERSION;
 	{
@@ -104,7 +105,7 @@ void DoState(PointerWrap &p)
 	g_video_backend->DoState(p);
 	p.DoMarker("video_backend");
 
-	if (Core::g_CoreStartupParameter.bWii)
+	if (SConfig::GetInstance().m_LocalCoreStartupParameter.bWii)
 		Wiimote::DoState(p.GetPPtr(), p.GetMode());
 	p.DoMarker("Wiimote");
 
@@ -116,6 +117,9 @@ void DoState(PointerWrap &p)
 	p.DoMarker("CoreTiming");
 	Movie::DoState(p);
 	p.DoMarker("Movie");
+#if defined(HAVE_LIBAV) || defined (WIN32)
+	AVIDump::DoState();
+#endif
 }
 
 void LoadFromBuffer(std::vector<u8>& buffer)
@@ -159,7 +163,7 @@ void VerifyBuffer(std::vector<u8>& buffer)
 }
 
 // return state number not in map
-int GetEmptySlot(std::map<double, int> m)
+static int GetEmptySlot(std::map<double, int> m)
 {
 	for (int i = 1; i <= (int)NUM_STATES; i++)
 	{
@@ -180,7 +184,7 @@ int GetEmptySlot(std::map<double, int> m)
 static std::string MakeStateFilename(int number);
 
 // read state timestamps
-std::map<double, int> GetSavedStates()
+static std::map<double, int> GetSavedStates()
 {
 	StateHeader header;
 	std::map<double, int> m;
@@ -209,7 +213,7 @@ struct CompressAndDumpState_args
 	bool wait;
 };
 
-void CompressAndDumpState(CompressAndDumpState_args save_args)
+static void CompressAndDumpState(CompressAndDumpState_args save_args)
 {
 	std::lock_guard<std::mutex> lk(*save_args.buffer_mutex);
 	if (!save_args.wait)
@@ -236,9 +240,9 @@ void CompressAndDumpState(CompressAndDumpState_args save_args)
 			File::Rename(filename + ".dtm", File::GetUserPath(D_STATESAVES_IDX) + "lastState.sav.dtm");
 	}
 
-	if ((Movie::IsRecordingInput() || Movie::IsPlayingInput()) && !Movie::IsJustStartingRecordingInputFromSaveState())
+	if ((Movie::IsMovieActive()) && !Movie::IsJustStartingRecordingInputFromSaveState())
 		Movie::SaveRecording(filename + ".dtm");
-	else if (!Movie::IsRecordingInput() && !Movie::IsPlayingInput())
+	else if (!Movie::IsMovieActive())
 		File::Delete(filename + ".dtm");
 
 	File::IOFile f(filename, "wb");
@@ -356,7 +360,7 @@ bool ReadHeader(const std::string& filename, StateHeader& header)
 	return true;
 }
 
-void LoadFileStateData(const std::string& filename, std::vector<u8>& ret_data)
+static void LoadFileStateData(const std::string& filename, std::vector<u8>& ret_data)
 {
 	Flush();
 	File::IOFile f(filename, "rb");
@@ -424,6 +428,9 @@ void LoadFileStateData(const std::string& filename, std::vector<u8>& ret_data)
 
 void LoadAs(const std::string& filename)
 {
+	if (!Core::IsRunning())
+		return;
+
 	// Stop the core while we load the state
 	bool wasUnpaused = Core::PauseAndLock(true);
 
@@ -434,7 +441,7 @@ void LoadAs(const std::string& filename)
 	{
 		std::lock_guard<std::mutex> lk(g_cs_undo_load_buffer);
 		SaveToBuffer(g_undo_load_buffer);
-		if (Movie::IsRecordingInput() || Movie::IsPlayingInput())
+		if (Movie::IsMovieActive())
 			Movie::SaveRecording(File::GetUserPath(D_STATESAVES_IDX) + "undo.dtm");
 		else if (File::Exists(File::GetUserPath(D_STATESAVES_IDX) +"undo.dtm"))
 			File::Delete(File::GetUserPath(D_STATESAVES_IDX) + "undo.dtm");
@@ -604,10 +611,10 @@ void UndoLoadState()
 	std::lock_guard<std::mutex> lk(g_cs_undo_load_buffer);
 	if (!g_undo_load_buffer.empty())
 	{
-		if (File::Exists(File::GetUserPath(D_STATESAVES_IDX) + "undo.dtm") || (!Movie::IsRecordingInput() && !Movie::IsPlayingInput()))
+		if (File::Exists(File::GetUserPath(D_STATESAVES_IDX) + "undo.dtm") || (!Movie::IsMovieActive()))
 		{
 			LoadFromBuffer(g_undo_load_buffer);
-			if (Movie::IsRecordingInput() || Movie::IsPlayingInput())
+			if (Movie::IsMovieActive())
 				Movie::LoadInput(File::GetUserPath(D_STATESAVES_IDX) + "undo.dtm");
 		}
 		else

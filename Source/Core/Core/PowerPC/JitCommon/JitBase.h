@@ -16,6 +16,7 @@
 
 #include "Core/Core.h"
 #include "Core/CoreTiming.h"
+#include "Core/MachineContext.h"
 #include "Core/HW/GPFifo.h"
 #include "Core/HW/Memmap.h"
 #include "Core/PowerPC/CPUCoreBase.h"
@@ -24,58 +25,83 @@
 #include "Core/PowerPC/PPCTables.h"
 #include "Core/PowerPC/JitCommon/Jit_Util.h"
 #include "Core/PowerPC/JitCommon/JitAsmCommon.h"
-#include "Core/PowerPC/JitCommon/JitBackpatch.h"
 #include "Core/PowerPC/JitCommon/JitCache.h"
+#include "Core/PowerPC/JitCommon/TrampolineCache.h"
+
+// TODO: find a better place for x86-specific stuff
+// The following register assignments are common to Jit64 and Jit64IL:
+// RSCRATCH and RSCRATCH2 are always scratch registers and can be used without
+// limitation.
+#define RSCRATCH RAX
+#define RSCRATCH2 RDX
+// RSCRATCH_EXTRA may be in the allocation order, so it has to be flushed
+// before use.
+#define RSCRATCH_EXTRA RCX
+// RMEM points to the start of emulated memory.
+#define RMEM RBX
+// RPPCSTATE points to ppcState + 0x80.  It's offset because we want to be able
+// to address as much as possible in a one-byte offset form.
+#define RPPCSTATE RBP
 
 // Use these to control the instruction selection
 // #define INSTRUCTION_START FallBackToInterpreter(inst); return;
 // #define INSTRUCTION_START PPCTables::CountInstruction(inst);
 #define INSTRUCTION_START
 
-#define JITDISABLE(setting)                     \
-	if (Core::g_CoreStartupParameter.bJITOff || \
-		Core::g_CoreStartupParameter.setting)   \
-	{ FallBackToInterpreter(inst); return; }
+#define FALLBACK_IF(cond) do { if (cond) { FallBackToInterpreter(inst); return; } } while (0)
+
+#define JITDISABLE(setting) FALLBACK_IF(SConfig::GetInstance().m_LocalCoreStartupParameter.bJITOff || \
+                                        SConfig::GetInstance().m_LocalCoreStartupParameter.setting)
 
 class JitBase : public CPUCoreBase
 {
 protected:
 	struct JitOptions
 	{
-		bool optimizeStack;
 		bool enableBlocklink;
-		bool fpAccurateFcmp;
 		bool optimizeGatherPipe;
-		bool fastInterrupts;
 		bool accurateSinglePrecision;
 	};
 	struct JitState
 	{
 		u32 compilerPC;
-		u32 next_compilerPC;
 		u32 blockStart;
-		UGeckoInstruction next_inst;  // for easy peephole opt.
 		int instructionNumber;
+		int instructionsLeft;
 		int downcountAmount;
 		u32 numLoadStoreInst;
 		u32 numFloatingPointInst;
+		// If this is set, we need to generate an exception handler for the fastmem load.
+		u8* fastmemLoadStore;
+		// If this is set, a load or store already prepared a jump to the exception handler for us,
+		// so just fixup that branch instead of testing for a DSI again.
+		bool fixupExceptionHandler;
+		Gen::FixupBranch exceptionHandler;
+		// If these are set, we've stored the old value of a register which will be loaded in revertLoad,
+		// which lets us revert it on the exception path.
+		int revertGprLoad;
+		int revertFprLoad;
 
+		bool assumeNoPairedQuantize;
 		bool firstFPInstructionFound;
 		bool isLastInstruction;
 		bool memcheck;
-		bool skipnext;
+		int skipInstructions;
+		bool carryFlagSet;
+		bool carryFlagInverted;
 
 		int fifoBytesThisBlock;
 
 		PPCAnalyst::BlockStats st;
 		PPCAnalyst::BlockRegStats gpa;
 		PPCAnalyst::BlockRegStats fpa;
-		PPCAnalyst::CodeOp *op;
+		PPCAnalyst::CodeOp* op;
 		u8* rewriteStart;
 
 		JitBlock *curBlock;
 
 		std::unordered_set<u32> fifoWriteAddresses;
+		std::unordered_set<u32> pairedQuantizeAddresses;
 	};
 
 	PPCAnalyst::CodeBlock code_block;
@@ -90,24 +116,20 @@ public:
 
 	virtual void Jit(u32 em_address) = 0;
 
-	virtual const u8 *BackPatch(u8 *codePtr, u32 em_address, void *ctx) = 0;
-
 	virtual const CommonAsmRoutinesBase *GetAsmRoutines() = 0;
 
-	virtual bool IsInCodeSpace(u8 *ptr) = 0;
+	virtual bool HandleFault(uintptr_t access_address, SContext* ctx) = 0;
 };
 
 class Jitx86Base : public JitBase, public EmuCodeBlock
 {
 protected:
+	bool BackPatch(u32 emAddress, SContext* ctx);
 	JitBlockCache blocks;
 	TrampolineCache trampolines;
 public:
 	JitBlockCache *GetBlockCache() override { return &blocks; }
-
-	const u8 *BackPatch(u8 *codePtr, u32 em_address, void *ctx) override;
-
-	bool IsInCodeSpace(u8 *ptr) override { return IsInSpace(ptr); }
+	bool HandleFault(uintptr_t access_address, SContext* ctx) override;
 };
 
 extern JitBase *jit;

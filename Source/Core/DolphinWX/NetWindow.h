@@ -82,14 +82,14 @@ public:
 	bool IsRecording() override;
 
 private:
-    DECLARE_EVENT_TABLE()
-
 	void OnChat(wxCommandEvent& event);
 	void OnQuit(wxCommandEvent& event);
-	void OnThread(wxCommandEvent& event);
+	void OnThread(wxThreadEvent& event);
 	void OnChangeGame(wxCommandEvent& event);
 	void OnAdjustBuffer(wxCommandEvent& event);
 	void OnConfigPads(wxCommandEvent& event);
+	void OnKick(wxCommandEvent& event);
+	void OnPlayerSelect(wxCommandEvent& event);
 	void GetNetSettings(NetSettings &settings);
 	std::string FindGame();
 
@@ -102,6 +102,7 @@ private:
 	std::string  m_selected_game;
 	wxButton*    m_game_btn;
 	wxButton*    m_start_btn;
+	wxButton*    m_kick_btn;
 
 	std::vector<int> m_playerids;
 

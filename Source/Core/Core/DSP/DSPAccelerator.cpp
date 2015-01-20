@@ -2,20 +2,20 @@
 // Licensed under GPLv2
 // Refer to the license.txt file included.
 
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 #include "Common/MathUtil.h"
 
+#include "Core/DSP/DSPAccelerator.h"
 #include "Core/DSP/DSPCore.h"
 #include "Core/DSP/DSPHost.h"
 #include "Core/DSP/DSPHWInterface.h"
 #include "Core/DSP/DSPInterpreter.h"
-
 // The hardware adpcm decoder :)
 static s16 ADPCM_Step(u32& _rSamplePos)
 {
 	const s16 *pCoefTable = (const s16 *)&g_dsp.ifx_regs[DSP_COEF_A1_0];
 
-	if (((_rSamplePos) & 15) == 0)
+	if ((_rSamplePos & 15) == 0)
 	{
 		g_dsp.ifx_regs[DSP_PRED_SCALE] = DSPHost::ReadHostMemory((_rSamplePos & ~15) >> 1);
 		_rSamplePos += 2;
@@ -63,7 +63,7 @@ u16 dsp_read_aram_d3()
 			Address++;
 			break;
 		case 0x6:   // u16 reads
-			val = (DSPHost::ReadHostMemory(Address*2) << 8) | DSPHost::ReadHostMemory(Address*2 + 1);
+			val = (DSPHost::ReadHostMemory(Address * 2) << 8) | DSPHost::ReadHostMemory(Address * 2 + 1);
 			Address++;
 			break;
 		default:
@@ -93,8 +93,8 @@ void dsp_write_aram_d3(u16 value)
 	switch (g_dsp.ifx_regs[DSP_FORMAT])
 	{
 		case 0xA:   // u16 writes
-			DSPHost::WriteHostMemory(value >> 8, Address*2);
-			DSPHost::WriteHostMemory(value & 0xFF, Address*2 + 1);
+			DSPHost::WriteHostMemory(value >> 8, Address * 2);
+			DSPHost::WriteHostMemory(value & 0xFF, Address * 2 + 1);
 			Address++;
 			break;
 		default:
@@ -111,6 +111,7 @@ u16 dsp_read_accelerator()
 	const u32 EndAddress = (g_dsp.ifx_regs[DSP_ACEAH] << 16) | g_dsp.ifx_regs[DSP_ACEAL];
 	u32 Address = (g_dsp.ifx_regs[DSP_ACCAH] << 16) | g_dsp.ifx_regs[DSP_ACCAL];
 	u16 val;
+	u8 step_size_bytes = 0;
 
 	// let's do the "hardware" decode DSP_FORMAT is interesting - the Zelda
 	// ucode seems to indicate that the bottom two bits specify the "read size"
@@ -121,22 +122,29 @@ u16 dsp_read_accelerator()
 	switch (g_dsp.ifx_regs[DSP_FORMAT])
 	{
 		case 0x00:  // ADPCM audio
+			if ((EndAddress & 15) == 0)
+				step_size_bytes = 1;
+			else
+				step_size_bytes = 2;
 			val = ADPCM_Step(Address);
 			break;
 		case 0x0A:  // 16-bit PCM audio
-			val = (DSPHost::ReadHostMemory(Address*2) << 8) | DSPHost::ReadHostMemory(Address*2 + 1);
+			val = (DSPHost::ReadHostMemory(Address * 2) << 8) | DSPHost::ReadHostMemory(Address * 2 + 1);
 			g_dsp.ifx_regs[DSP_YN2] = g_dsp.ifx_regs[DSP_YN1];
 			g_dsp.ifx_regs[DSP_YN1] = val;
+			step_size_bytes = 2;
 			Address++;
 			break;
 		case 0x19:  // 8-bit PCM audio
 			val = DSPHost::ReadHostMemory(Address) << 8;
 			g_dsp.ifx_regs[DSP_YN2] = g_dsp.ifx_regs[DSP_YN1];
 			g_dsp.ifx_regs[DSP_YN1] = val;
+			step_size_bytes = 2;
 			Address++;
 			break;
 		default:
 			ERROR_LOG(DSPLLE, "dsp_read_accelerator() - unknown format 0x%x", g_dsp.ifx_regs[DSP_FORMAT]);
+			step_size_bytes = 2;
 			Address++;
 			val = 0;
 			break;
@@ -145,13 +153,13 @@ u16 dsp_read_accelerator()
 	// TODO: Take GAIN into account
 	// adpcm = 0, pcm8 = 0x100, pcm16 = 0x800
 	// games using pcm8 : Phoenix Wright Ace Attorney (Wiiware), Megaman 9-10 (WiiWare)
-	// games using pcm16: gc sega games, ...
+	// games using pcm16: GC Sega games, ...
 
 	// Check for loop.
 	// Somehow, YN1 and YN2 must be initialized with their "loop" values,
 	// so yeah, it seems likely that we should raise an exception to let
 	// the DSP program do that, at least if DSP_FORMAT == 0x0A.
-	if ((Address & ~1) == (EndAddress & ~1))
+	if (Address == (EndAddress + step_size_bytes - 1))
 	{
 		// Set address back to start address.
 		Address = (g_dsp.ifx_regs[DSP_ACSAH] << 16) | g_dsp.ifx_regs[DSP_ACSAL];

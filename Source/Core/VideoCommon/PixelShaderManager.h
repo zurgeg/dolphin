@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <array>
+
 #include "VideoCommon/BPMemory.h"
 #include "VideoCommon/ConstantManager.h"
 #include "VideoCommon/PixelShaderGen.h"
@@ -24,8 +26,11 @@ public:
 
 	static void SetConstants(); // sets pixel shader constants
 
-	// constant management, should be called after memory is committed
-	static void SetColorChanged(int type, int index);
+	// constant management
+	// Some of these functions grab the constant values from global state,
+	// so make sure to call them after memory is committed
+	static void SetTevColor(int index, int component, s32 value);
+	static void SetTevKonstColor(int index, int component, s32 value);
 	static void SetAlpha();
 	static void SetDestAlpha();
 	static void SetTexDims(int texmapid, u32 width, u32 height, u32 wraps, u32 wrapt);
@@ -39,9 +44,15 @@ public:
 	static void SetFogColorChanged();
 	static void SetFogParamChanged();
 	static void SetFogRangeAdjustChanged();
-	static void InvalidateXFRange(int start, int end);
-	static void SetMaterialColorChanged(int index, u32 color);
 
 	static PixelShaderConstants constants;
 	static bool dirty;
+
+	static bool s_bFogRangeAdjustChanged;
+	static bool s_bViewPortChanged;
+
+	// These colors aren't available from global BP state,
+	// hence we keep a copy of them around.
+	static std::array<int4,4> s_tev_color;
+	static std::array<int4,4> s_tev_konst_color;
 };

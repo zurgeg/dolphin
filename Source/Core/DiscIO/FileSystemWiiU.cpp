@@ -77,7 +77,7 @@ u64 CFileSystemWiiU::ReadFile(const std::string& _rFullPath, u8* _pBuffer, size_
 	DEBUG_LOG(DISCIO, "Filename: %s. Offset: %" PRIx64 ". Size: %" PRIx64, _rFullPath.c_str(),
 		pFileInfo->m_Offset, pFileInfo->m_FileSize);
 
-	m_rVolume->Read(pFileInfo->m_Offset, pFileInfo->m_FileSize, _pBuffer);
+	m_rVolume->Read(pFileInfo->m_Offset, pFileInfo->m_FileSize, _pBuffer, true);
 	return pFileInfo->m_FileSize;
 }
 
@@ -107,7 +107,7 @@ bool CFileSystemWiiU::ExportFile(const std::string& _rFullPath, const std::strin
 
 		std::vector<u8> buffer(readSize);
 
-		result = m_rVolume->Read(fileOffset, readSize, &buffer[0]);
+		result = m_rVolume->Read(fileOffset, readSize, &buffer[0], true);
 
 		if (!result)
 			break;
@@ -144,7 +144,7 @@ bool CFileSystemWiiU::ExportDOL(const std::string& _rExportFolder) const
 u32 CFileSystemWiiU::Read32(u64 _Offset) const
 {
 	u32 Temp = 0;
-	m_rVolume->Read(_Offset, 4, (u8*)&Temp);
+	m_rVolume->Read(_Offset, 4, (u8*)&Temp, true);
 	return Common::swap32(Temp);
 }
 
@@ -153,7 +153,7 @@ std::string CFileSystemWiiU::GetStringFromOffset(u64 _Offset) const
 {
 	std::string data;
 	data.resize(255);
-	m_rVolume->Read(_Offset, data.size(), (u8*)&data[0]);
+	m_rVolume->Read(_Offset, data.size(), (u8*)&data[0], true);
 	data.erase(std::find(data.begin(), data.end(), 0x00), data.end());
 
 	// TODO: Should we really always use SHIFT-JIS?

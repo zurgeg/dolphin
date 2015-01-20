@@ -4,8 +4,10 @@
 
 #pragma once
 
+#include <tuple>
+
 #include "Common/BreakPoints.h"
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 
 #include "Core/Debugger/PPCDebugInterface.h"
 #include "Core/PowerPC/CPUCoreBase.h"
@@ -25,20 +27,47 @@ enum CoreMode
 	MODE_JIT,
 };
 
+// TLB cache
+#define TLB_SIZE 128
+#define NUM_TLBS 2
+#define TLB_WAYS 2
+
+#define HW_PAGE_INDEX_SHIFT 12
+#define HW_PAGE_INDEX_MASK 0x3f
+#define HW_PAGE_TAG_SHIFT 18
+
+#define TLB_TAG_INVALID 0xffffffff
+
+struct tlb_entry
+{
+	u32 tag[TLB_WAYS];
+	u32 paddr[TLB_WAYS];
+	u32 pte[TLB_WAYS];
+	u8 recent;
+};
+
 // This contains the entire state of the emulated PowerPC "Gekko" CPU.
 struct GC_ALIGNED64(PowerPCState)
 {
 	u32 gpr[32];    // General purpose registers. r1 = stack pointer.
 
-	// The paired singles are strange : PS0 is stored in the full 64 bits of each FPR
-	// but ps calculations are only done in 32-bit precision, and PS1 is only 32 bits.
-	// Since we want to use SIMD, SSE2 is the only viable alternative - 2x double.
-	u64 ps[32][2];
-
 	u32 pc;     // program counter
 	u32 npc;
 
-	u8 cr_fast[8];     // Possibly reorder to 0, 2, 4, 8, 1, 3, 5, 7 so that we can make Compact and Expand super fast?
+	// Optimized CR implementation. Instead of storing CR in its PowerPC format
+	// (4 bit value, SO/EQ/LT/GT), we store instead a 64 bit value for each of
+	// the 8 CR register parts. This 64 bit value follows this format:
+	//   - SO iff. bit 61 is set
+	//   - EQ iff. lower 32 bits == 0
+	//   - GT iff. (s64)cr_val > 0
+	//   - LT iff. bit 62 is set
+	//
+	// This has the interesting property that sign-extending the result of an
+	// operation from 32 to 64 bits results in a 64 bit value that works as a
+	// CR value. Checking each part of CR is also fast, as it is equivalent to
+	// testing one bit or the low 32 bit part of a register. And CR can still
+	// be manipulated bit by bit fairly easily.
+	u64 cr_val[8];
 
 	u32 msr;    // machine specific register
 	u32 fpscr;  // floating point flags/status bits
@@ -46,27 +75,48 @@ struct GC_ALIGNED64(PowerPCState)
 	// Exception management.
 	volatile u32 Exceptions;
 
-	u32 sr[16];  // Segment registers.
+	// Downcount for determining when we need to do timing
+	// This isn't quite the right location for it, but it is here to accelerate the ARM JIT
+	// This variable should be inside of the CoreTiming namespace if we wanted to be correct.
+	int downcount;
 
-	u32 DebugCount;
+	// XER, reformatted into byte fields for easier access.
+	u8 xer_ca;
+	u8 xer_so_ov; // format: (SO << 1) | OV
+	// The Broadway CPU implements bits 16-23 of the XER register... even though it doesn't support lscbx
+	u16 xer_stringctrl;
+
+#if _M_X86_64
+	// This member exists for the purpose of an assertion in x86 JitBase.cpp
+	// that its offset <= 0x100.  To minimize code size on x86, we want as much
+	// useful stuff in the one-byte offset range as possible - which is why ps
+	// is sitting down here.  It currently doesn't make a difference on other
+	// supported architectures.
+	std::tuple<> above_fits_in_first_0x100;
+#endif
+
+	// The paired singles are strange : PS0 is stored in the full 64 bits of each FPR
+	// but ps calculations are only done in 32-bit precision, and PS1 is only 32 bits.
+	// Since we want to use SIMD, SSE2 is the only viable alternative - 2x double.
+	GC_ALIGNED16(u64 ps[32][2]);
+
+	u32 sr[16];  // Segment registers.
 
 	// special purpose registers - controls quantizers, DMA, and lots of other misc extensions.
 	// also for power management, but we don't care about that.
 	u32 spr[1024];
 
-	u32 dtlb_last;
-	u32 dtlb_va[128];
-	u32 dtlb_pa[128];
-
-	u32 itlb_last;
-	u32 itlb_va[128];
-	u32 itlb_pa[128];
+	tlb_entry tlb[NUM_TLBS][TLB_SIZE / TLB_WAYS];
 
 	u32 pagetable_base;
 	u32 pagetable_hashmask;
 
 	InstructionCache iCache;
 };
+
+#if _M_X86_64
+static_assert(offsetof(PowerPC::PowerPCState, above_fits_in_first_0x100) <= 0x100, "top of PowerPCState too big");
+#endif
 
 enum CPUState
 {
@@ -77,6 +127,7 @@ enum CPUState
 
 extern PowerPCState ppcState;
 
+extern Watches watches;
 extern BreakPoints breakpoints;
 extern MemChecks memchecks;
 extern PPCDebugInterface debug_interface;
@@ -144,61 +195,117 @@ void UpdatePerformanceMonitor(u32 cycles, u32 num_load_stores, u32 num_fp_inst);
 
 }  // namespace
 
-// Fast CR system - store them in single bytes instead of nibbles to not have to
-// mask/shift them out.
+enum CRBits
+{
+	CR_SO = 1,
+	CR_EQ = 2,
+	CR_GT = 4,
+	CR_LT = 8,
 
-// These are intended to stay fast, probably become faster, and are not likely to slow down much if at all.
-inline void SetCRField(int cr_field, int value) {
-	PowerPC::ppcState.cr_fast[cr_field] = value;
+	CR_SO_BIT = 0,
+	CR_EQ_BIT = 1,
+	CR_GT_BIT = 2,
+	CR_LT_BIT = 3,
+};
+
+// Convert between PPC and internal representation of CR.
+inline u64 PPCCRToInternal(u8 value)
+{
+	u64 cr_val = 0x100000000;
+	cr_val |= (u64)!!(value & CR_SO) << 61;
+	cr_val |= (u64)!(value & CR_EQ);
+	cr_val |= (u64)!(value & CR_GT) << 63;
+	cr_val |= (u64)!!(value & CR_LT) << 62;
+
+	return cr_val;
 }
 
-inline u32 GetCRField(int cr_field) {
-	return PowerPC::ppcState.cr_fast[cr_field];
+// convert flags into 64-bit CR values with a lookup table
+extern const u64 m_crTable[16];
+
+// Warning: these CR operations are fairly slow since they need to convert from
+// PowerPC format (4 bit) to our internal 64 bit format. See the definition of
+// ppcState.cr_val for more explanations.
+inline void SetCRField(int cr_field, int value)
+{
+	PowerPC::ppcState.cr_val[cr_field] = m_crTable[value];
 }
 
-inline u32 GetCRBit(int bit) {
-	return (PowerPC::ppcState.cr_fast[bit >> 2] >> (3 - (bit & 3))) & 1;
+inline u32 GetCRField(int cr_field)
+{
+	u64 cr_val = PowerPC::ppcState.cr_val[cr_field];
+	u32 ppc_cr = 0;
+
+	// SO
+	ppc_cr |= !!(cr_val & (1ull << 61));
+	// EQ
+	ppc_cr |= ((cr_val & 0xFFFFFFFF) == 0) << 1;
+	// GT
+	ppc_cr |= ((s64)cr_val > 0) << 2;
+	// LT
+	ppc_cr |= !!(cr_val & (1ull << 62)) << 3;
+
+	return ppc_cr;
 }
 
-inline void SetCRBit(int bit, int value) {
+inline u32 GetCRBit(int bit)
+{
+	return (GetCRField(bit >> 2) >> (3 - (bit & 3))) & 1;
+}
+
+inline void SetCRBit(int bit, int value)
+{
 	if (value & 1)
-		PowerPC::ppcState.cr_fast[bit >> 2] |= 0x8 >> (bit & 3);
+		SetCRField(bit >> 2, GetCRField(bit >> 2) | (0x8 >> (bit & 3)));
 	else
-		PowerPC::ppcState.cr_fast[bit >> 2] &= ~(0x8 >> (bit & 3));
+		SetCRField(bit >> 2, GetCRField(bit >> 2) & ~(0x8 >> (bit & 3)));
 }
 
 // SetCR and GetCR are fairly slow. Should be avoided if possible.
-inline void SetCR(u32 new_cr) {
+inline void SetCR(u32 new_cr)
+{
 	PowerPC::ExpandCR(new_cr);
 }
 
-inline u32 GetCR() {
+inline u32 GetCR()
+{
 	return PowerPC::CompactCR();
 }
 
-// SetCarry/GetCarry may speed up soon.
-inline void SetCarry(int ca) {
-	((UReg_XER&)PowerPC::ppcState.spr[SPR_XER]).CA = ca;
+inline void SetCarry(int ca)
+{
+	PowerPC::ppcState.xer_ca = ca;
 }
 
-inline int GetCarry() {
-	return ((UReg_XER&)PowerPC::ppcState.spr[SPR_XER]).CA;
+inline int GetCarry()
+{
+	return PowerPC::ppcState.xer_ca;
 }
 
-inline UReg_XER GetXER() {
-	return ((UReg_XER&)PowerPC::ppcState.spr[SPR_XER]);
+inline UReg_XER GetXER()
+{
+	u32 xer = 0;
+	xer |= PowerPC::ppcState.xer_stringctrl;
+	xer |= PowerPC::ppcState.xer_ca << XER_CA_SHIFT;
+	xer |= PowerPC::ppcState.xer_so_ov << XER_OV_SHIFT;
+	return xer;
 }
 
-inline void SetXER(UReg_XER new_xer) {
-	((UReg_XER&)PowerPC::ppcState.spr[SPR_XER]) = new_xer;
+inline void SetXER(UReg_XER new_xer)
+{
+	PowerPC::ppcState.xer_stringctrl = new_xer.BYTE_COUNT + (new_xer.BYTE_CMP << 8);
+	PowerPC::ppcState.xer_ca = new_xer.CA;
+	PowerPC::ppcState.xer_so_ov = (new_xer.SO << 1) + new_xer.OV;
 }
 
-inline int GetXER_SO() {
-	return ((UReg_XER&)PowerPC::ppcState.spr[SPR_XER]).SO;
+inline int GetXER_SO()
+{
+	return PowerPC::ppcState.xer_so_ov >> 1;
 }
 
-inline void SetXER_SO(int value) {
-	((UReg_XER&)PowerPC::ppcState.spr[SPR_XER]).SO = value;
+inline void SetXER_SO(int value)
+{
+	PowerPC::ppcState.xer_so_ov |= value << 1;
 }
 
 void UpdateFPRF(double dvalue);

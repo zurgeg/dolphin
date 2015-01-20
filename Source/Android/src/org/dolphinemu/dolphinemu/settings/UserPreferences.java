@@ -21,6 +21,11 @@ import android.preference.PreferenceManager;
  */
 public final class UserPreferences
 {
+	private UserPreferences()
+	{
+		// Disallows instantiation.
+	}
+
 	/**
 	 * Loads the settings stored in the Dolphin ini config files to the shared preferences of this front-end.
 	 * 
@@ -52,9 +57,13 @@ public final class UserPreferences
 		editor.putBoolean("disableFog",            getConfig("gfx_opengl.ini", "Settings", "DisableFog", "False").equals("True"));
 		editor.putBoolean("skipEFBAccess",         getConfig("gfx_opengl.ini", "Hacks", "EFBAccessEnable", "False").equals("True"));
 		editor.putBoolean("ignoreFormatChanges",   getConfig("gfx_opengl.ini", "Hacks", "EFBEmulateFormatChanges", "False").equals("False"));
+		editor.putString("stereoscopyMode", getConfig("gfx_opengl.ini", "Enhancements", "StereoMode", "0"));
+		editor.putBoolean("stereoSwapEyes",        getConfig("gfx_opengl.ini", "Enhancements", "StereoSwapEyes", "False").equals("True"));
+		editor.putString("stereoDepth",            getConfig("gfx_opengl.ini", "Enhancements", "StereoDepth", "20"));
+		editor.putString("stereoConvergence",      getConfig("gfx_opengl.ini", "Enhancements", "StereoConvergence", "20"));
 
-		String efbCopyOn     = getConfig("gfx_opengl.ini", "Hacks", "EFBCopyEnable", "False");
-		String efbToTexture  = getConfig("gfx_opengl.ini", "Hacks", "EFBToTextureEnable", "False");
+		String efbCopyOn     = getConfig("gfx_opengl.ini", "Hacks", "EFBCopyEnable", "True");
+		String efbToTexture  = getConfig("gfx_opengl.ini", "Hacks", "EFBToTextureEnable", "True");
 		String efbCopyCache  = getConfig("gfx_opengl.ini", "Hacks", "EFBCopyCacheEnable", "False");
 
 		if (efbCopyOn.equals("False"))
@@ -96,7 +105,7 @@ public final class UserPreferences
 		editor.putBoolean("fastDepthCalculation",    getConfig("gfx_opengl.ini", "Settings", "FastDepthCalc", "True").equals("True"));
 
 		// Apply the changes.
-		editor.commit();
+		editor.apply();
 	}
 
 	// Small utility method that shortens calls to NativeLibrary.GetConfig.
@@ -177,6 +186,17 @@ public final class UserPreferences
 		// Whether or not fog is disabled.
 		boolean fogIsDisabled = prefs.getBoolean("disableFog", false);
 
+		// Stereoscopy setting
+		String stereoscopyMode = prefs.getString("stereoscopyMode", "0");
+
+		// Stereoscopy swap eyes
+		boolean stereoscopyEyeSwap = prefs.getBoolean("stereoSwapEyes", false);
+
+		// Stereoscopy separation
+		String stereoscopySeparation = prefs.getString("stereoDepth", "20");
+
+		// Stereoscopy convergence
+		String stereoscopyConvergence = prefs.getString("stereoConvergence", "20");
 
 		// CPU related Settings
 		NativeLibrary.SetConfig("Dolphin.ini", "Core", "CPUCore", currentEmuCore);
@@ -246,5 +266,9 @@ public final class UserPreferences
 		NativeLibrary.SetConfig("gfx_opengl.ini", "Settings", "EnablePixelLighting", usingPerPixelLighting ? "True" : "False");
 		NativeLibrary.SetConfig("gfx_opengl.ini", "Enhancements", "ForceFiltering", isForcingTextureFiltering ? "True" : "False");
 		NativeLibrary.SetConfig("gfx_opengl.ini", "Settings", "DisableFog", fogIsDisabled ? "True" : "False");
+		NativeLibrary.SetConfig("gfx_opengl.ini", "Enhancements", "StereoMode", stereoscopyMode);
+		NativeLibrary.SetConfig("gfx_opengl.ini", "Enhancements", "StereoSwapEyes", stereoscopyEyeSwap ? "True" : "False");
+		NativeLibrary.SetConfig("gfx_opengl.ini", "Enhancements", "StereoDepth", stereoscopySeparation);
+		NativeLibrary.SetConfig("gfx_opengl.ini", "Enhancements", "StereoConvergence", stereoscopyConvergence);
 	}
 }

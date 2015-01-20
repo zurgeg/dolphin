@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
 #include <vector>
 #include <polarssl/aes.h>
@@ -23,10 +24,9 @@ class CVolumeWiiCrypted : public IVolume
 public:
 	CVolumeWiiCrypted(IBlobReader* _pReader, u64 _VolumeOffset, const unsigned char* _pVolumeKey);
 	~CVolumeWiiCrypted();
-	bool Read(u64 _Offset, u64 _Length, u8* _pBuffer) const override;
-	bool RAWRead(u64 _Offset, u64 _Length, u8* _pBuffer) const override;
+	bool Read(u64 _Offset, u64 _Length, u8* _pBuffer, bool decrypt) const override;
 	bool GetTitleID(u8* _pBuffer) const override;
-	void GetTMD(u8* _pBuffer, u32* _sz) const override;
+	virtual std::unique_ptr<u8[]> GetTMD(u32 *_sz) const override;
 	std::string GetUniqueID() const override;
 	std::string GetMakerID() const override;
 	std::vector<std::string> GetNames() const override;
@@ -35,18 +35,21 @@ public:
 	ECountry GetCountry() const override;
 	u64 GetSize() const override;
 	u64 GetRawSize() const override;
+	int GetRevision() const override;
 
 	bool SupportsIntegrityCheck() const override { return true; }
 	bool CheckIntegrity() const override;
 
+	bool ChangePartition(u64 offset) override;
+
 private:
-	IBlobReader* m_pReader;
+	std::unique_ptr<IBlobReader> m_pReader;
+	std::unique_ptr<aes_context> m_AES_ctx;
 
 	u8* m_pBuffer;
-	aes_context* m_AES_ctx;
 
 	u64 m_VolumeOffset;
-	u64 dataOffset;
+	u64 m_dataOffset;
 
 	mutable u64 m_LastDecryptedBlockOffset;
 	mutable unsigned char m_LastDecryptedBlock[0x8000];

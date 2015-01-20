@@ -3,7 +3,7 @@
 // Refer to the license.txt file included.
 
 #include "Common/ArmEmitter.h"
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 
 #include "Core/Core.h"
 #include "Core/CoreTiming.h"
@@ -16,20 +16,10 @@
 // The branches are known good, or at least reasonably good.
 // No need for a disable-mechanism.
 
-// If defined, clears CR0 at blr and bl-s. If the assumption that
-// flags never carry over between functions holds, then the task for
-// an optimizer becomes much easier.
-
-// #define ACID_TEST
-
-// Zelda and many more games seem to pass the Acid Test.
-
-
 using namespace ArmGen;
 void JitArm::sc(UGeckoInstruction inst)
 {
 	INSTRUCTION_START
-	JITDISABLE(bJITBranchOff)
 
 	gpr.Flush();
 	fpr.Flush();
@@ -48,7 +38,6 @@ void JitArm::sc(UGeckoInstruction inst)
 void JitArm::rfi(UGeckoInstruction inst)
 {
 	INSTRUCTION_START
-	JITDISABLE(bJITBranchOff)
 
 	gpr.Flush();
 	fpr.Flush();
@@ -95,7 +84,6 @@ void JitArm::rfi(UGeckoInstruction inst)
 void JitArm::bx(UGeckoInstruction inst)
 {
 	INSTRUCTION_START
-	JITDISABLE(bJITBranchOff)
 	// We must always process the following sentence
 	// even if the blocks are merged by PPCAnalyst::Flatten().
 	if (inst.LK)
@@ -106,10 +94,12 @@ void JitArm::bx(UGeckoInstruction inst)
 		STR(rA, R9, PPCSTATE_OFF(spr[SPR_LR]));
 		//ARMABI_MOVI2M((u32)&LR, js.compilerPC + 4);
 	}
+
 	// If this is not the last instruction of a block,
 	// we will skip the rest process.
 	// Because PPCAnalyst::Flatten() merged the blocks.
-	if (!js.isLastInstruction) {
+	if (!js.isLastInstruction)
+	{
 		return;
 	}
 
@@ -121,13 +111,7 @@ void JitArm::bx(UGeckoInstruction inst)
 		destination = SignExt26(inst.LI << 2);
 	else
 		destination = js.compilerPC + SignExt26(inst.LI << 2);
-#ifdef ACID_TEST
-	if (inst.LK)
-	{
-		MOV(R14, 0);
-		STRB(R14, R9, PPCSTATE_OFF(cr_fast[0]));
-	}
-#endif
+
 	if (destination == js.compilerPC)
 	{
 		//PanicAlert("Idle loop detected at %08x", destination);
@@ -146,11 +130,7 @@ void JitArm::bx(UGeckoInstruction inst)
 void JitArm::bcx(UGeckoInstruction inst)
 {
 	INSTRUCTION_START
-	JITDISABLE(bJITBranchOff)
 	// USES_CR
-
-	gpr.Flush();
-	fpr.Flush();
 
 	ARMReg rA = gpr.GetReg();
 	ARMReg rB = gpr.GetReg();
@@ -171,15 +151,10 @@ void JitArm::bcx(UGeckoInstruction inst)
 	FixupBranch pConditionDontBranch;
 	if ((inst.BO & BO_DONT_CHECK_CONDITION) == 0)  // Test a CR bit
 	{
-		LDRB(rA, R9, PPCSTATE_OFF(cr_fast) + (inst.BI >> 2));
-		TST(rA, 8 >> (inst.BI & 3));
-
-		//TEST(8, M(&PowerPC::ppcState.cr_fast[inst.BI >> 2]), Imm8(8 >> (inst.BI & 3)));
-		if (inst.BO & BO_BRANCH_IF_TRUE)  // Conditional branch
-			pConditionDontBranch = B_CC(CC_EQ); // Zero
-		else
-			pConditionDontBranch = B_CC(CC_NEQ); // Not Zero
+		pConditionDontBranch = JumpIfCRFieldBit(inst.BI >> 2, 3 - (inst.BI & 3),
+		                                        !(inst.BO_2 & BO_BRANCH_IF_TRUE));
 	}
+
 	if (inst.LK)
 	{
 		u32 Jumpto = js.compilerPC + 4;
@@ -194,6 +169,9 @@ void JitArm::bcx(UGeckoInstruction inst)
 		destination = SignExt16(inst.BD << 2);
 	else
 		destination = js.compilerPC + SignExt16(inst.BD << 2);
+
+	gpr.Flush(FLUSH_MAINTAIN_STATE);
+	fpr.Flush(FLUSH_MAINTAIN_STATE);
 	WriteExit(destination);
 
 	if ((inst.BO & BO_DONT_CHECK_CONDITION) == 0)
@@ -202,15 +180,15 @@ void JitArm::bcx(UGeckoInstruction inst)
 		SetJumpTarget( pCTRDontBranch );
 
 	if (!analyzer.HasOption(PPCAnalyst::PPCAnalyzer::OPTION_CONDITIONAL_CONTINUE))
+	{
+		gpr.Flush();
+		fpr.Flush();
 		WriteExit(js.compilerPC + 4);
+	}
 }
 void JitArm::bcctrx(UGeckoInstruction inst)
 {
 	INSTRUCTION_START
-	JITDISABLE(bJITBranchOff)
-
-	gpr.Flush();
-	fpr.Flush();
 
 	// bcctrx doesn't decrement and/or test CTR
 	_dbg_assert_msg_(POWERPC, inst.BO_2 & BO_DONT_DECREMENT_FLAG, "bcctrx with decrement and test CTR option is invalid!");
@@ -220,6 +198,9 @@ void JitArm::bcctrx(UGeckoInstruction inst)
 		// BO_2 == 1z1zz -> b always
 
 		//NPC = CTR & 0xfffffffc;
+		gpr.Flush();
+		fpr.Flush();
+
 		ARMReg rA = gpr.GetReg();
 
 		if (inst.LK_3)
@@ -236,46 +217,43 @@ void JitArm::bcctrx(UGeckoInstruction inst)
 	else
 	{
 		// Rare condition seen in (just some versions of?) Nintendo's NES Emulator
-
 		// BO_2 == 001zy -> b if false
 		// BO_2 == 011zy -> b if true
 		ARMReg rA = gpr.GetReg();
 		ARMReg rB = gpr.GetReg();
 
-		LDRB(rA, R9, PPCSTATE_OFF(cr_fast) + (inst.BI >> 2));
-		TST(rA, 8 >> (inst.BI & 3));
-		CCFlags branch;
-		if (inst.BO_2 & BO_BRANCH_IF_TRUE)
-			branch = CC_EQ;
-		else
-			branch = CC_NEQ;
-		FixupBranch b = B_CC(branch);
+		FixupBranch b = JumpIfCRFieldBit(inst.BI >> 2, 3 - (inst.BI & 3),
+		                                 !(inst.BO_2 & BO_BRANCH_IF_TRUE));
 
 		LDR(rA, R9, PPCSTATE_OFF(spr[SPR_CTR]));
 		BIC(rA, rA, 0x3);
 
-		if (inst.LK_3){
+		if (inst.LK_3)
+		{
 			u32 Jumpto = js.compilerPC + 4;
 			MOVI2R(rB, Jumpto);
 			STR(rB, R9, PPCSTATE_OFF(spr[SPR_LR]));
 			//ARMABI_MOVI2M((u32)&LR, js.compilerPC + 4);
 		}
 		gpr.Unlock(rB); // rA gets unlocked in WriteExitDestInR
+		gpr.Flush(FLUSH_MAINTAIN_STATE);
+		fpr.Flush(FLUSH_MAINTAIN_STATE);
+
 		WriteExitDestInR(rA);
 
 		SetJumpTarget(b);
 
 		if (!analyzer.HasOption(PPCAnalyst::PPCAnalyzer::OPTION_CONDITIONAL_CONTINUE))
+		{
+			gpr.Flush();
+			fpr.Flush();
 			WriteExit(js.compilerPC + 4);
+		}
 	}
 }
 void JitArm::bclrx(UGeckoInstruction inst)
 {
 	INSTRUCTION_START
-	JITDISABLE(bJITBranchOff)
-
-	gpr.Flush();
-	fpr.Flush();
 
 	ARMReg rA = gpr.GetReg();
 	ARMReg rB = gpr.GetReg();
@@ -296,36 +274,25 @@ void JitArm::bclrx(UGeckoInstruction inst)
 	FixupBranch pConditionDontBranch;
 	if ((inst.BO & BO_DONT_CHECK_CONDITION) == 0)  // Test a CR bit
 	{
-		LDRB(rA, R9, PPCSTATE_OFF(cr_fast) + (inst.BI >> 2));
-		TST(rA, 8 >> (inst.BI & 3));
-		//TEST(8, M(&PowerPC::ppcState.cr_fast[inst.BI >> 2]), Imm8(8 >> (inst.BI & 3)));
-		if (inst.BO & BO_BRANCH_IF_TRUE)  // Conditional branch
-			pConditionDontBranch = B_CC(CC_EQ); // Zero
-		else
-			pConditionDontBranch = B_CC(CC_NEQ); // Not Zero
+		pConditionDontBranch = JumpIfCRFieldBit(inst.BI >> 2, 3 - (inst.BI & 3),
+		                                        !(inst.BO_2 & BO_BRANCH_IF_TRUE));
 	}
-
-	// This below line can be used to prove that blr "eats flags" in practice.
-	// This observation will let us do a lot of fun observations.
-	#ifdef ACID_TEST
-		if (inst.LK)
-		{
-			MOV(R14, 0);
-			STRB(R14, R9, PPCSTATE_OFF(cr_fast[0]));
-		}
-	#endif
 
 	//MOV(32, R(EAX), M(&LR));
 	//AND(32, R(EAX), Imm32(0xFFFFFFFC));
 	LDR(rA, R9, PPCSTATE_OFF(spr[SPR_LR]));
 	BIC(rA, rA, 0x3);
-	if (inst.LK){
+	if (inst.LK)
+	{
 		u32 Jumpto = js.compilerPC + 4;
 		MOVI2R(rB, Jumpto);
 		STR(rB, R9, PPCSTATE_OFF(spr[SPR_LR]));
 		//ARMABI_MOVI2M((u32)&LR, js.compilerPC + 4);
 	}
 	gpr.Unlock(rB); // rA gets unlocked in WriteExitDestInR
+
+	gpr.Flush(FLUSH_MAINTAIN_STATE);
+	fpr.Flush(FLUSH_MAINTAIN_STATE);
 	WriteExitDestInR(rA);
 
 	if ((inst.BO & BO_DONT_CHECK_CONDITION) == 0)
@@ -334,5 +301,9 @@ void JitArm::bclrx(UGeckoInstruction inst)
 		SetJumpTarget( pCTRDontBranch );
 
 	if (!analyzer.HasOption(PPCAnalyst::PPCAnalyzer::OPTION_CONDITIONAL_CONTINUE))
+	{
+		gpr.Flush();
+		fpr.Flush();
 		WriteExit(js.compilerPC + 4);
+	}
 }

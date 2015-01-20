@@ -17,29 +17,9 @@
 #include "Core/IPC_HLE/WII_IPC_HLE_WiiMote.h"
 
 
-std::mutex crit_netplay_client;
+static std::mutex crit_netplay_client;
 static NetPlayClient * netplay_client = nullptr;
 NetSettings g_NetPlaySettings;
-
-#define RPT_SIZE_HACK  (1 << 16)
-
-NetPad::NetPad()
-{
-	nHi = 0x00808080;
-	nLo = 0x80800000;
-}
-
-NetPad::NetPad(const SPADStatus* const pad_status)
-{
-	nHi = (u32)((u8)pad_status->stickY);
-	nHi |= (u32)((u8)pad_status->stickX << 8);
-	nHi |= (u32)((u16)pad_status->button << 16);
-	nHi |= 0x00800000;
-	nLo = (u8)pad_status->triggerRight;
-	nLo |= (u32)((u8)pad_status->triggerLeft << 8);
-	nLo |= (u32)((u8)pad_status->substickY << 16);
-	nLo |= (u32)((u8)pad_status->substickX << 24);
-}
 
 // called from ---GUI--- thread
 NetPlayClient::~NetPlayClient()
@@ -63,18 +43,18 @@ NetPlayClient::NetPlayClient(const std::string& address, const u16 port, NetPlay
 
 	is_connected = false;
 
-	if (m_socket.Connect(port, address, 5) == sf::Socket::Done)
+	if (m_socket.connect(address, port, sf::seconds(5)) == sf::Socket::Done)
 	{
 		// send connect message
 		sf::Packet spac;
 		spac << NETPLAY_VERSION;
 		spac << netplay_dolphin_ver;
 		spac << name;
-		m_socket.Send(spac);
+		m_socket.send(spac);
 
 		sf::Packet rpac;
 		// TODO: make this not hang
-		m_socket.Receive(rpac);
+		m_socket.receive(rpac);
 		MessageId error;
 		rpac >> error;
 
@@ -96,7 +76,7 @@ NetPlayClient::NetPlayClient(const std::string& address, const u16 port, NetPlay
 				PanicAlertT("The server sent an unknown error message!");
 				break;
 			}
-			m_socket.Close();
+			m_socket.disconnect();
 		}
 		else
 		{
@@ -116,8 +96,8 @@ NetPlayClient::NetPlayClient(const std::string& address, const u16 port, NetPlay
 			//PanicAlertT("Connection successful: assigned player id: %d", m_pid);
 			is_connected = true;
 
-			m_selector.Add(m_socket);
-			m_thread = std::thread(std::mem_fn(&NetPlayClient::ThreadFunc), this);
+			m_selector.add(m_socket);
+			m_thread = std::thread(&NetPlayClient::ThreadFunc, this);
 		}
 	}
 	else
@@ -209,12 +189,12 @@ unsigned int NetPlayClient::OnData(sf::Packet& packet)
 	case NP_MSG_PAD_DATA :
 		{
 			PadMapping map = 0;
-			NetPad np;
-			packet >> map >> np.nHi >> np.nLo;
+			GCPadStatus pad;
+			packet >> map >> pad.button >> pad.analogA >> pad.analogB >> pad.stickX >> pad.stickY >> pad.substickX >> pad.substickY >> pad.triggerLeft >> pad.triggerRight;
 
 			// trusting server for good map value (>=0 && <4)
 			// add to pad buffer
-			m_pad_buffer[map].Push(np);
+			m_pad_buffer[map].Push(pad);
 		}
 		break;
 
@@ -270,6 +250,8 @@ unsigned int NetPlayClient::OnData(sf::Packet& packet)
 			packet >> g_NetPlaySettings.m_DSPEnableJIT;
 			packet >> g_NetPlaySettings.m_DSPHLE;
 			packet >> g_NetPlaySettings.m_WriteToMemcard;
+			packet >> g_NetPlaySettings.m_OCEnable;
+			packet >> g_NetPlaySettings.m_OCFactor;
 			int tmp;
 			packet >> tmp;
 			g_NetPlaySettings.m_EXIDevice[0] = (TEXIDevices) tmp;
@@ -306,7 +288,7 @@ unsigned int NetPlayClient::OnData(sf::Packet& packet)
 			spac << ping_key;
 
 			std::lock_guard<std::recursive_mutex> lks(m_crit.send);
-			m_socket.Send(spac);
+			m_socket.send(spac);
 		}
 		break;
 
@@ -339,10 +321,10 @@ void NetPlayClient::ThreadFunc()
 {
 	while (m_do_loop)
 	{
-		if (m_selector.Wait(0.01f))
+		if (m_selector.wait(sf::milliseconds(10)))
 		{
 			sf::Packet rpac;
-			switch (m_socket.Receive(rpac))
+			switch (m_socket.receive(rpac))
 			{
 			case sf::Socket::Done :
 				OnData(rpac);
@@ -360,7 +342,7 @@ void NetPlayClient::ThreadFunc()
 		}
 	}
 
-	m_socket.Close();
+	m_socket.disconnect();
 
 	return;
 }
@@ -423,20 +405,20 @@ void NetPlayClient::SendChatMessage(const std::string& msg)
 	spac << msg;
 
 	std::lock_guard<std::recursive_mutex> lks(m_crit.send);
-	m_socket.Send(spac);
+	m_socket.send(spac);
 }
 
 // called from ---CPU--- thread
-void NetPlayClient::SendPadState(const PadMapping in_game_pad, const NetPad& np)
+void NetPlayClient::SendPadState(const PadMapping in_game_pad, const GCPadStatus& pad)
 {
 	// send to server
 	sf::Packet spac;
 	spac << (MessageId)NP_MSG_PAD_DATA;
 	spac << in_game_pad;
-	spac << np.nHi << np.nLo;
+	spac << pad.button << pad.analogA << pad.analogB << pad.stickX << pad.stickY << pad.substickX << pad.substickY << pad.triggerLeft << pad.triggerRight;
 
 	std::lock_guard<std::recursive_mutex> lks(m_crit.send);
-	m_socket.Send(spac);
+	m_socket.send(spac);
 }
 
 // called from ---CPU--- thread
@@ -453,7 +435,7 @@ void NetPlayClient::SendWiimoteState(const PadMapping in_game_pad, const NetWiim
 	}
 
 	std::lock_guard<std::recursive_mutex> lks(m_crit.send);
-	m_socket.Send(spac);
+	m_socket.send(spac);
 }
 
 // called from ---GUI--- thread
@@ -468,7 +450,7 @@ bool NetPlayClient::StartGame(const std::string &path)
 	spac << (char *)&g_NetPlaySettings;
 
 	std::lock_guard<std::recursive_mutex> lks(m_crit.send);
-	m_socket.Send(spac);
+	m_socket.send(spac);
 
 	if (m_is_running)
 	{
@@ -558,20 +540,20 @@ void NetPlayClient::ClearBuffers()
 }
 
 // called from ---CPU--- thread
-bool NetPlayClient::GetNetPads(const u8 pad_nb, const SPADStatus* const pad_status, NetPad* const netvalues)
+bool NetPlayClient::GetNetPads(const u8 pad_nb, GCPadStatus* pad_status)
 {
 	// The interface for this is extremely silly.
 	//
-	// Imagine a physical device that links three Gamecubes together
-	// and emulates NetPlay that way. Which Gamecube controls which
+	// Imagine a physical device that links three GameCubes together
+	// and emulates NetPlay that way. Which GameCube controls which
 	// in-game controllers can be configured on the device (m_pad_map)
-	// but which sockets on each individual Gamecube should be used
+	// but which sockets on each individual GameCube should be used
 	// to control which players? The solution that Dolphin uses is
 	// that we hardcode the knowledge that they go in order, so if
-	// you have a 3P game with three gamecubes, then every single
+	// you have a 3P game with three GameCubes, then every single
 	// controller should be plugged into slot 1.
 	//
-	// If you have a 4P game, then one of the Gamecubes will have
+	// If you have a 4P game, then one of the GameCubes will have
 	// a controller plugged into slot 1, and another in slot 2.
 	//
 	// The slot number is the "local" pad number, and what  player
@@ -591,17 +573,15 @@ bool NetPlayClient::GetNetPads(const u8 pad_nb, const SPADStatus* const pad_stat
 	// information given.
 	if (in_game_num < 4)
 	{
-		NetPad np(pad_status);
-
 		// adjust the buffer either up or down
 		// inserting multiple padstates or dropping states
 		while (m_pad_buffer[in_game_num].Size() <= m_target_buffer_size)
 		{
 			// add to buffer
-			m_pad_buffer[in_game_num].Push(np);
+			m_pad_buffer[in_game_num].Push(*pad_status);
 
 			// send
-			SendPadState(in_game_num, np);
+			SendPadState(in_game_num, *pad_status);
 		}
 	}
 
@@ -609,7 +589,7 @@ bool NetPlayClient::GetNetPads(const u8 pad_nb, const SPADStatus* const pad_stat
 	// retrieved from NetPlay. This could be the value we pushed
 	// above if we're configured as P1 and the code is trying
 	// to retrieve data for slot 1.
-	while (!m_pad_buffer[pad_nb].Pop(*netvalues))
+	while (!m_pad_buffer[pad_nb].Pop(*pad_status))
 	{
 		if (!m_is_running)
 			return false;
@@ -618,23 +598,14 @@ bool NetPlayClient::GetNetPads(const u8 pad_nb, const SPADStatus* const pad_stat
 		Common::SleepCurrentThread(1);
 	}
 
-	SPADStatus tmp;
-	tmp.stickY = ((u8*)&netvalues->nHi)[0];
-	tmp.stickX = ((u8*)&netvalues->nHi)[1];
-	tmp.button = ((u16*)&netvalues->nHi)[1];
-
-	tmp.substickX =  ((u8*)&netvalues->nLo)[3];
-	tmp.substickY =  ((u8*)&netvalues->nLo)[2];
-	tmp.triggerLeft = ((u8*)&netvalues->nLo)[1];
-	tmp.triggerRight = ((u8*)&netvalues->nLo)[0];
 	if (Movie::IsRecordingInput())
 	{
-		Movie::RecordInput(&tmp, pad_nb);
+		Movie::RecordInput(pad_status, pad_nb);
 		Movie::InputUpdate();
 	}
 	else
 	{
-		Movie::CheckPadStatus(&tmp, pad_nb);
+		Movie::CheckPadStatus(pad_status, pad_nb);
 	}
 
 	return true;
@@ -782,7 +753,7 @@ void NetPlayClient::Stop()
 	{
 		sf::Packet spac;
 		spac << (MessageId)NP_MSG_STOP_GAME;
-		m_socket.Send(spac);
+		m_socket.send(spac);
 	}
 }
 
@@ -846,12 +817,12 @@ u8 NetPlayClient::LocalWiimoteToInGameWiimote(u8 local_pad)
 
 // called from ---CPU--- thread
 // Actual Core function which is called on every frame
-bool CSIDevice_GCController::NetPlay_GetInput(u8 numPAD, SPADStatus PadStatus, u32 *PADStatus)
+bool CSIDevice_GCController::NetPlay_GetInput(u8 numPAD, GCPadStatus* PadStatus)
 {
 	std::lock_guard<std::mutex> lk(crit_netplay_client);
 
 	if (netplay_client)
-		return netplay_client->GetNetPads(numPAD, &PadStatus, (NetPad*)PADStatus);
+		return netplay_client->GetNetPads(numPAD, PadStatus);
 	else
 		return false;
 }
@@ -864,16 +835,6 @@ bool WiimoteEmu::Wiimote::NetPlay_GetWiimoteData(int wiimote, u8* data, u8 size)
 		return netplay_client->WiimoteUpdate(wiimote, data, size);
 	else
 		return false;
-}
-
-bool CSIDevice_GCSteeringWheel::NetPlay_GetInput(u8 numPAD, SPADStatus PadStatus, u32 *PADStatus)
-{
-	return CSIDevice_GCController::NetPlay_GetInput(numPAD, PadStatus, PADStatus);
-}
-
-bool CSIDevice_DanceMat::NetPlay_GetInput(u8 numPAD, SPADStatus PadStatus, u32 *PADStatus)
-{
-	return CSIDevice_GCController::NetPlay_GetInput(numPAD, PadStatus, PADStatus);
 }
 
 // called from ---CPU--- thread
@@ -898,16 +859,6 @@ u8 CSIDevice_GCController::NetPlay_InGamePadToLocalPad(u8 numPAD)
 		return netplay_client->InGamePadToLocalPad(numPAD);
 	else
 		return numPAD;
-}
-
-u8 CSIDevice_GCSteeringWheel::NetPlay_InGamePadToLocalPad(u8 numPAD)
-{
-	return CSIDevice_GCController::NetPlay_InGamePadToLocalPad(numPAD);
-}
-
-u8 CSIDevice_DanceMat::NetPlay_InGamePadToLocalPad(u8 numPAD)
-{
-	return CSIDevice_GCController::NetPlay_InGamePadToLocalPad(numPAD);
 }
 
 bool NetPlay::IsNetPlayRunning()

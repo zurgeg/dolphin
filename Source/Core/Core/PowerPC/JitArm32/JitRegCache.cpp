@@ -5,9 +5,11 @@
 #include "Core/PowerPC/JitArm32/Jit.h"
 #include "Core/PowerPC/JitArm32/JitRegCache.h"
 
+using namespace ArmGen;
+
 ArmRegCache::ArmRegCache()
 {
-	emit = 0;
+	emit = nullptr;
 }
 
 void ArmRegCache::Init(ARMXEmitter *emitter)
@@ -28,8 +30,22 @@ void ArmRegCache::Init(ARMXEmitter *emitter)
 		ArmRegs[a].free = true;
 	}
 }
+
 void ArmRegCache::Start(PPCAnalyst::BlockRegStats &stats)
 {
+	// Make sure the state is wiped on Start
+	// There is a potential for the state remaining dirty from the previous block
+	// This is due to conditional branches not clearing the register cache state
+	for (u8 a = 0; a < 32; ++a)
+	{
+		if (regs[a].GetType() == REG_REG)
+		{
+			u32 regindex = regs[a].GetRegIndex();
+			ArmCRegs[regindex].PPCReg = 33;
+			ArmCRegs[regindex].LastLoad = 0;
+		}
+		regs[a].Flush();
+	}
 }
 
 ARMReg *ArmRegCache::GetPPCAllocationOrder(int &count)
@@ -38,7 +54,7 @@ ARMReg *ArmRegCache::GetPPCAllocationOrder(int &count)
 	// the ppc side.
 	static ARMReg allocationOrder[] =
 	{
-		R0, R1, R2, R3, R4, R5, R6, R7, R8
+		R0, R1, R2, R3, R4, R5, R6, R7
 	};
 	count = sizeof(allocationOrder) / sizeof(const int);
 	return allocationOrder;
@@ -58,6 +74,7 @@ ARMReg *ArmRegCache::GetAllocationOrder(int &count)
 ARMReg ArmRegCache::GetReg(bool AutoLock)
 {
 	for (u8 a = 0; a < NUMARMREG; ++a)
+	{
 		if (ArmRegs[a].free)
 		{
 			// Alright, this one is free
@@ -65,6 +82,8 @@ ARMReg ArmRegCache::GetReg(bool AutoLock)
 				ArmRegs[a].free = false;
 			return ArmRegs[a].Reg;
 		}
+	}
+
 	// Uh Oh, we have all them locked....
 	_assert_msg_(_DYNA_REC_, false, "All available registers are locked dumb dumb");
 	return R0;
@@ -79,11 +98,18 @@ void ArmRegCache::Unlock(ARMReg R0, ARMReg R1, ARMReg R2, ARMReg R3)
 			_assert_msg_(_DYNA_REC, !ArmRegs[RegNum].free, "This register is already unlocked");
 			ArmRegs[RegNum].free = true;
 		}
-		if ( R1 != INVALID_REG && ArmRegs[RegNum].Reg == R1) ArmRegs[RegNum].free = true;
-		if ( R2 != INVALID_REG && ArmRegs[RegNum].Reg == R2) ArmRegs[RegNum].free = true;
-		if ( R3 != INVALID_REG && ArmRegs[RegNum].Reg == R3) ArmRegs[RegNum].free = true;
+
+		if (R1 != INVALID_REG && ArmRegs[RegNum].Reg == R1)
+			ArmRegs[RegNum].free = true;
+
+		if (R2 != INVALID_REG && ArmRegs[RegNum].Reg == R2)
+			ArmRegs[RegNum].free = true;
+
+		if (R3 != INVALID_REG && ArmRegs[RegNum].Reg == R3)
+			ArmRegs[RegNum].free = true;
 	}
 }
+
 u32 ArmRegCache::GetLeastUsedRegister(bool increment)
 {
 	u32 HighestUsed = 0;
@@ -100,21 +126,24 @@ u32 ArmRegCache::GetLeastUsedRegister(bool increment)
 	}
 	return lastRegIndex;
 }
+
 bool ArmRegCache::FindFreeRegister(u32 &regindex)
 {
 	for (u8 a = 0; a < NUMPPCREG; ++a)
+	{
 		if (ArmCRegs[a].PPCReg == 33)
 		{
 			regindex = a;
 			return true;
 		}
+	}
 	return false;
 }
 
 ARMReg ArmRegCache::R(u32 preg)
 {
 	if (regs[preg].GetType() == REG_IMM)
-		return BindToRegister(preg);
+		return BindToRegister(preg, true, true);
 
 	u32 lastRegIndex = GetLeastUsedRegister(true);
 
@@ -152,31 +181,77 @@ ARMReg ArmRegCache::R(u32 preg)
 	return ArmCRegs[lastRegIndex].Reg;
 }
 
-ARMReg ArmRegCache::BindToRegister(u32 preg)
+void ArmRegCache::BindToRegister(u32 preg, bool doLoad)
 {
-	_assert_msg_(DYNA_REC, regs[preg].GetType() == REG_IMM, "Can't BindToRegister with a REG");
+	BindToRegister(preg, doLoad, false);
+}
+
+ARMReg ArmRegCache::BindToRegister(u32 preg, bool doLoad, bool kill_imm)
+{
 	u32 lastRegIndex = GetLeastUsedRegister(false);
 	u32 freeRegIndex;
-	if (FindFreeRegister(freeRegIndex))
+	bool found_free = FindFreeRegister(freeRegIndex);
+	if (regs[preg].GetType() == REG_IMM)
 	{
-		emit->MOVI2R(ArmCRegs[freeRegIndex].Reg, regs[preg].GetImm());
-		ArmCRegs[freeRegIndex].PPCReg = preg;
-		ArmCRegs[freeRegIndex].LastLoad = 0;
-		regs[preg].LoadToReg(freeRegIndex);
-		return ArmCRegs[freeRegIndex].Reg;
+		if (!kill_imm)
+			return INVALID_REG;
+		if (found_free)
+		{
+			if (doLoad)
+				emit->MOVI2R(ArmCRegs[freeRegIndex].Reg, regs[preg].GetImm());
+			ArmCRegs[freeRegIndex].PPCReg = preg;
+			ArmCRegs[freeRegIndex].LastLoad = 0;
+			regs[preg].LoadToReg(freeRegIndex);
+			return ArmCRegs[freeRegIndex].Reg;
+		}
+		else
+		{
+			emit->STR(ArmCRegs[lastRegIndex].Reg, R9, PPCSTATE_OFF(gpr) + ArmCRegs[lastRegIndex].PPCReg * 4);
+			if (doLoad)
+				emit->MOVI2R(ArmCRegs[lastRegIndex].Reg, regs[preg].GetImm());
+
+			regs[ArmCRegs[lastRegIndex].PPCReg].Flush();
+
+			ArmCRegs[lastRegIndex].PPCReg = preg;
+			ArmCRegs[lastRegIndex].LastLoad = 0;
+
+			regs[preg].LoadToReg(lastRegIndex);
+			return ArmCRegs[lastRegIndex].Reg;
+		}
+	}
+	else if (regs[preg].GetType() == REG_NOTLOADED)
+	{
+		if (found_free)
+		{
+			if (doLoad)
+				emit->LDR(ArmCRegs[freeRegIndex].Reg, R9, PPCSTATE_OFF(gpr) + preg * 4);
+
+			ArmCRegs[freeRegIndex].PPCReg = preg;
+			ArmCRegs[freeRegIndex].LastLoad = 0;
+			regs[preg].LoadToReg(freeRegIndex);
+			return ArmCRegs[freeRegIndex].Reg;
+		}
+		else
+		{
+			emit->STR(ArmCRegs[lastRegIndex].Reg, R9, PPCSTATE_OFF(gpr) + ArmCRegs[lastRegIndex].PPCReg * 4);
+
+			if (doLoad)
+				emit->LDR(ArmCRegs[lastRegIndex].Reg, R9, PPCSTATE_OFF(gpr) + preg * 4);
+
+			regs[ArmCRegs[lastRegIndex].PPCReg].Flush();
+
+			ArmCRegs[lastRegIndex].PPCReg = preg;
+			ArmCRegs[lastRegIndex].LastLoad = 0;
+
+			regs[preg].LoadToReg(lastRegIndex);
+			return ArmCRegs[lastRegIndex].Reg;
+		}
 	}
 	else
 	{
-		emit->STR(ArmCRegs[lastRegIndex].Reg, R9, PPCSTATE_OFF(gpr) + ArmCRegs[lastRegIndex].PPCReg * 4);
-		emit->MOVI2R(ArmCRegs[lastRegIndex].Reg, regs[preg].GetImm());
-
-		regs[ArmCRegs[lastRegIndex].PPCReg].Flush();
-
-		ArmCRegs[lastRegIndex].PPCReg = preg;
-		ArmCRegs[lastRegIndex].LastLoad = 0;
-
-		regs[preg].LoadToReg(lastRegIndex);
-		return ArmCRegs[lastRegIndex].Reg;
+		u8 a = regs[preg].GetRegIndex();
+		ArmCRegs[a].LastLoad = 0;
+		return ArmCRegs[a].Reg;
 	}
 }
 
@@ -192,21 +267,53 @@ void ArmRegCache::SetImmediate(u32 preg, u32 imm)
 	regs[preg].LoadToImm(imm);
 }
 
-void ArmRegCache::Flush()
+void ArmRegCache::Flush(FlushMode mode)
 {
 	for (u8 a = 0; a < 32; ++a)
 	{
 		if (regs[a].GetType() == REG_IMM)
-			BindToRegister(a);
+		{
+			if (mode == FLUSH_ALL)
+			{
+				// This changes the type over to a REG_REG and gets caught below.
+				BindToRegister(a, true, true);
+			}
+			else
+			{
+				ARMReg tmp = GetReg();
+				emit->MOVI2R(tmp, regs[a].GetImm());
+				emit->STR(tmp, R9, PPCSTATE_OFF(gpr) + a * 4);
+				Unlock(tmp);
+			}
+		}
 		if (regs[a].GetType() == REG_REG)
 		{
 			u32 regindex = regs[a].GetRegIndex();
 			emit->STR(ArmCRegs[regindex].Reg, R9, PPCSTATE_OFF(gpr) + a * 4);
-			ArmCRegs[regindex].PPCReg = 33;
-			ArmCRegs[regindex].LastLoad = 0;
+			if (mode == FLUSH_ALL)
+			{
+				ArmCRegs[regindex].PPCReg = 33;
+				ArmCRegs[regindex].LastLoad = 0;
+				regs[a].Flush();
+			}
 		}
-
-		regs[a].Flush();
 	}
 }
 
+void ArmRegCache::StoreFromRegister(u32 preg)
+{
+	if (regs[preg].GetType() == REG_IMM)
+	{
+		// This changes the type over to a REG_REG and gets caught below.
+		BindToRegister(preg, true, true);
+	}
+	if (regs[preg].GetType() == REG_REG)
+	{
+		u32 regindex = regs[preg].GetRegIndex();
+		emit->STR(ArmCRegs[regindex].Reg, R9, PPCSTATE_OFF(gpr) + preg * 4);
+
+		ArmCRegs[regindex].PPCReg = 33;
+		ArmCRegs[regindex].LastLoad = 0;
+		regs[preg].Flush();
+	}
+}

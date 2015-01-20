@@ -22,8 +22,8 @@ class CVolumeWiiU : public IVolume
 public:
 	CVolumeWiiU(IBlobReader* _pReader);
 	~CVolumeWiiU();
-	bool Read(u64 _Offset, u64 _Length, u8* _pBuffer) const override;
-	bool RAWRead(u64 _Offset, u64 _Length, u8* _pBuffer) const override;
+	bool Read(u64 _Offset, u64 _Length, u8* _pBuffer, bool decrypt = false) const override;
+	bool RAWRead(u64 _Offset, u64 _Length, u8* _pBuffer) const;
 	std::string GetUniqueID() const override;
 	std::string GetRevisionSpecificUniqueID() const override;
 	std::string GetMakerID() const override;

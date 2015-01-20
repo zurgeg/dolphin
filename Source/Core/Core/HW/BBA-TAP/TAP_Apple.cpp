@@ -2,6 +2,8 @@
 // Licensed under GPLv2
 // Refer to the license.txt file included.
 
+#include <fcntl.h>
+
 #include "Common/StringUtil.h"
 #include "Core/HW/EXI_Device.h"
 #include "Core/HW/EXI_DeviceEthernet.h"
@@ -59,7 +61,7 @@ bool CEXIETHERNET::SendFrame(u8* frame, u32 size)
 	}
 }
 
-void ReadThreadHandler(CEXIETHERNET* self)
+static void ReadThreadHandler(CEXIETHERNET* self)
 {
 	while (true)
 	{

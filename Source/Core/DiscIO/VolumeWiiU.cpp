@@ -25,7 +25,7 @@ CVolumeWiiU::~CVolumeWiiU()
 	m_pReader = nullptr; // I don't think this makes any difference, but anyway
 }
 
-bool CVolumeWiiU::Read(u64 _Offset, u64 _Length, u8* _pBuffer) const
+bool CVolumeWiiU::Read(u64 _Offset, u64 _Length, u8* _pBuffer, bool decrypt) const
 {
 	if (m_pReader == nullptr)
 		return false;

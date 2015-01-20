@@ -10,11 +10,8 @@
 #include "InputCommon/ControllerInterface/Device.h"
 
 #ifdef _WIN32
-#define DIRECTINPUT_VERSION 0x0800
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
 #include <Windows.h>
-#include <dinput.h>
+#include "InputCommon/ControllerInterface/DInput/DInput8.h"
 #elif __APPLE__
 #include "InputCommon/ControllerInterface/ForceFeedback/OSX/DirectInputAdapter.h"
 #endif
@@ -28,25 +25,19 @@ namespace ForceFeedback
 class ForceFeedbackDevice : public Core::Device
 {
 private:
-	struct EffectState
-	{
-		EffectState(LPDIRECTINPUTEFFECT eff) : iface(eff), params(nullptr), size(0) {}
-
-		LPDIRECTINPUTEFFECT iface;
-		void*               params; // null when force hasn't changed
-		u8                  size;   // zero when force should stop
-	};
-
 	template <typename P>
 	class Force : public Output
 	{
 	public:
 		std::string GetName() const;
-		Force(const std::string& name, EffectState& state);
+		Force(const std::string& name, LPDIRECTINPUTEFFECT iface);
+		~Force();
 		void SetState(ControlState state);
+		void Update();
+		void Stop();
 	private:
 		const std::string m_name;
-		EffectState& m_state;
+		LPDIRECTINPUTEFFECT m_iface;
 		P params;
 	};
 	typedef Force<DICONSTANTFORCE>  ForceConstant;
@@ -55,11 +46,6 @@ private:
 
 public:
 	bool InitForceFeedback(const LPDIRECTINPUTDEVICE8, int cAxes);
-	bool UpdateOutput();
-
-	virtual ~ForceFeedbackDevice();
-private:
-	std::list<EffectState>     m_state_out;
 };
 
 

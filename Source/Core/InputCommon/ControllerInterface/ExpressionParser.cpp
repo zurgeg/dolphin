@@ -136,7 +136,8 @@ public:
 		std::string name;
 		name += c;
 
-		while (it != expr.end()) {
+		while (it != expr.end())
+		{
 			c = *it;
 			if (!isalpha(c))
 				break;
@@ -228,12 +229,12 @@ public:
 
 	virtual ControlState GetValue() override
 	{
-		return control->ToInput()->GetState();
+		return control->ToInput()->GetGatedState();
 	}
 
 	virtual void SetValue(ControlState value) override
 	{
-		control->ToOutput()->SetState(value);
+		control->ToOutput()->SetGatedState(value);
 	}
 
 	virtual int CountNumControls() override
@@ -272,7 +273,7 @@ public:
 		case TOK_OR:
 			return std::max(lhsValue, rhsValue);
 		case TOK_ADD:
-			return std::min(lhsValue + rhsValue, 1.0f);
+			return std::min(lhsValue + rhsValue, 1.0);
 		default:
 			assert(false);
 			return 0;
@@ -316,7 +317,7 @@ public:
 		switch (op)
 		{
 		case TOK_NOT:
-			return 1.0f - value;
+			return 1.0 - value;
 		default:
 			assert(false);
 			return 0;
@@ -328,7 +329,7 @@ public:
 		switch (op)
 		{
 		case TOK_NOT:
-			inner->SetValue(1.0f - value);
+			inner->SetValue(1.0 - value);
 		default:
 			assert(false);
 		}
@@ -535,7 +536,7 @@ Expression::~Expression()
 	delete node;
 }
 
-ExpressionParseStatus ParseExpressionInner(std::string str, ControlFinder &finder, Expression **expr_out)
+static ExpressionParseStatus ParseExpressionInner(std::string str, ControlFinder &finder, Expression **expr_out)
 {
 	ExpressionParseStatus status;
 	Expression *expr;
@@ -569,7 +570,8 @@ ExpressionParseStatus ParseExpression(std::string str, ControlFinder &finder, Ex
 	qualifier.has_device = false;
 
 	Device::Control *control = finder.FindControl(qualifier);
-	if (control) {
+	if (control)
+	{
 		*expr_out = new Expression(new ControlExpression(qualifier, control));
 		return EXPRESSION_PARSE_SUCCESS;
 	}

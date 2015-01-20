@@ -44,7 +44,7 @@ Initial import
 #include <map>
 #include <string>
 
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 #include "Common/FileUtil.h"
 
 #include "Core/DSP/DSPAssembler.h"
@@ -160,14 +160,7 @@ void DSPAssembler::ShowError(err_t err_code, const char *extra_info)
 	last_error = err_code;
 }
 
-char *skip_spaces(char *ptr)
-{
-	while (*ptr == ' ')
-		ptr++;
-	return ptr;
-}
-
-const char *skip_spaces(const char *ptr)
+static char *skip_spaces(char *ptr)
 {
 	while (*ptr == ' ')
 		ptr++;
@@ -510,7 +503,7 @@ const opc_t *DSPAssembler::FindOpcode(const char *opcode, u32 par_count, const o
 }
 
 // weird...
-u16 get_mask_shifted_down(u16 mask)
+static u16 get_mask_shifted_down(u16 mask)
 {
 	while (!(mask & 1))
 		mask >>= 1;
@@ -546,7 +539,9 @@ bool DSPAssembler::VerifyParams(const opc_t *opc, param_t *par, int count, bool 
 					if ((int)par[i].val < value ||
 						(int)par[i].val > value + get_mask_shifted_down(opc->params[i].mask))
 					{
-						if (ext) fprintf(stderr, "(ext) ");
+						if (ext)
+							fprintf(stderr, "(ext) ");
+
 						fprintf(stderr, "%s   (param %i)", cur_line.c_str(), current_param);
 						ShowError(ERR_INVALID_REGISTER);
 					}
@@ -554,7 +549,9 @@ bool DSPAssembler::VerifyParams(const opc_t *opc, param_t *par, int count, bool 
 				case P_PRG:
 					if ((int)par[i].val < 0 || (int)par[i].val > 0x3)
 					{
-						if (ext) fprintf(stderr, "(ext) ");
+						if (ext)
+							fprintf(stderr, "(ext) ");
+
 						fprintf(stderr, "%s   (param %i)", cur_line.c_str(), current_param);
 						ShowError(ERR_INVALID_REGISTER);
 					}
@@ -562,52 +559,71 @@ bool DSPAssembler::VerifyParams(const opc_t *opc, param_t *par, int count, bool 
 				case P_ACC:
 					if ((int)par[i].val < 0x20 || (int)par[i].val > 0x21)
 					{
-						if (ext) fprintf(stderr, "(ext) ");
-						if (par[i].val >= 0x1e && par[i].val <= 0x1f) {
+						if (ext)
+							fprintf(stderr, "(ext) ");
+
+						if (par[i].val >= 0x1e && par[i].val <= 0x1f)
+						{
 							fprintf(stderr, "%i : %s ", code_line, cur_line.c_str());
 							fprintf(stderr, "WARNING: $ACM%d register used instead of $ACC%d register Line: %d Param: %d Ext: %d\n",
 								(par[i].val & 1), (par[i].val & 1), code_line, current_param, ext);
 						}
-						else if (par[i].val >= 0x1c && par[i].val <= 0x1d) {
+						else if (par[i].val >= 0x1c && par[i].val <= 0x1d)
+						{
 							fprintf(stderr, "WARNING: $ACL%d register used instead of $ACC%d register Line: %d Param: %d\n",
 								(par[i].val & 1), (par[i].val & 1), code_line, current_param);
 						}
 						else
+						{
 							ShowError(ERR_WRONG_PARAMETER_ACC);
+						}
 					}
 					break;
 				case P_ACCM:
 					if ((int)par[i].val < 0x1e || (int)par[i].val > 0x1f)
 					{
-						if (ext) fprintf(stderr, "(ext) ");
+						if (ext)
+							fprintf(stderr, "(ext) ");
+
 						if (par[i].val >= 0x1c && par[i].val <= 0x1d)
+						{
 							fprintf(stderr, "WARNING: $ACL%d register used instead of $ACM%d register Line: %d Param: %d\n",
 								(par[i].val & 1), (par[i].val & 1), code_line, current_param);
+						}
 						else if (par[i].val >= 0x20 && par[i].val <= 0x21)
+						{
 							fprintf(stderr, "WARNING: $ACC%d register used instead of $ACM%d register Line: %d Param: %d\n",
 								(par[i].val & 1), (par[i].val & 1), code_line, current_param);
+						}
 						else
+						{
 							ShowError(ERR_WRONG_PARAMETER_ACC);
+						}
 					}
 					break;
 
 				case P_ACCL:
 					if ((int)par[i].val < 0x1c || (int)par[i].val > 0x1d)
 					{
-						if (ext) fprintf(stderr, "(ext) ");
+						if (ext)
+							fprintf(stderr, "(ext) ");
+
 						if (par[i].val >= 0x1e && par[i].val <= 0x1f)
 						{
 							fprintf(stderr, "%s ", cur_line.c_str());
 							fprintf(stderr, "WARNING: $ACM%d register used instead of $ACL%d register Line: %d Param: %d\n",
 								(par[i].val & 1), (par[i].val & 1), code_line, current_param);
 						}
-						else if (par[i].val >= 0x20 && par[i].val <= 0x21) {
+						else if (par[i].val >= 0x20 && par[i].val <= 0x21)
+						{
 							fprintf(stderr, "%s ", cur_line.c_str());
 							fprintf(stderr, "WARNING: $ACC%d register used instead of $ACL%d register Line: %d Param: %d\n",
 								(par[i].val & 1), (par[i].val & 1), code_line, current_param);
 						}
 						else
+						{
 							ShowError(ERR_WRONG_PARAMETER_ACC);
+						}
 					}
 					break;
 /*				case P_ACCM_D: //P_ACC_MID:
@@ -864,9 +880,8 @@ bool DSPAssembler::AssembleFile(const char *fname, int pass)
 			}
 		}
 
-		char *opcode = nullptr;
-		opcode = strtok(ptr, " ");
-		char *opcode_ext = nullptr;
+		char* opcode = strtok(ptr, " ");
+		char* opcode_ext = nullptr;
 
 		u32 params_count = 0;
 		u32 params_count_ext = 0;

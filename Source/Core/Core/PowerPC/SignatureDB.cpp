@@ -4,7 +4,7 @@
 
 #include <string>
 
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 #include "Common/FileUtil.h"
 
 #include "Core/HW/Memmap.h"
@@ -78,7 +78,7 @@ bool SignatureDB::Save(const std::string& filename)
 //Adds a known function to the hash database
 u32 SignatureDB::Add(u32 startAddr, u32 size, const std::string& name)
 {
-	u32 hash = ComputeCodeChecksum(startAddr, startAddr + size);
+	u32 hash = ComputeCodeChecksum(startAddr, startAddr + size - 4);
 
 	DBFunc temp_dbfunc;
 	temp_dbfunc.size = size;
@@ -135,7 +135,8 @@ void SignatureDB::Initialize(PPCSymbolDB *symbol_db, const std::string& prefix)
 {
 	for (const auto& symbol : symbol_db->Symbols())
 	{
-		if ((symbol.second.name.substr(0, prefix.size()) == prefix) || prefix.empty())
+		if ((prefix.empty() && (!symbol.second.name.empty()) && symbol.second.name.substr(0, 3) != "zz_" && symbol.second.name.substr(0, 1) != ".") ||
+			((!prefix.empty()) && symbol.second.name.substr(0, prefix.size()) == prefix))
 		{
 			DBFunc temp_dbfunc;
 			temp_dbfunc.name = symbol.second.name;

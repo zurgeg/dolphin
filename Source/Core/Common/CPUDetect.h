@@ -3,7 +3,7 @@
 // Refer to the license.txt file included.
 
 
-// Detect the cpu, so we'll know which optimizations to use
+// Detect the CPU, so we'll know which optimizations to use
 #pragma once
 
 #include <string>
@@ -20,8 +20,8 @@ struct CPUInfo
 {
 	CPUVendor vendor;
 
-	char cpu_string[0x21];
-	char brand_string[0x41];
+	char cpu_string[0x41];
+	char brand_string[0x21];
 	bool OS64bit;
 	bool CPU64bit;
 	bool Mode64bit;
@@ -40,6 +40,9 @@ struct CPUInfo
 	bool bLZCNT;
 	bool bSSE4A;
 	bool bAVX;
+	bool bAVX2;
+	bool bBMI1;
+	bool bBMI2;
 	bool bFMA;
 	bool bAES;
 	// FXSAVE/FXRSTOR
@@ -47,10 +50,10 @@ struct CPUInfo
 	bool bMOVBE;
 	// This flag indicates that the hardware supports some mode
 	// in which denormal inputs _and_ outputs are automatically set to (signed) zero.
-	// TODO: ARM
 	bool bFlushToZero;
 	bool bLAHFSAHF64;
 	bool bLongMode;
+	bool bAtom;
 
 	// ARM specific CPUInfo
 	bool bSwp;
@@ -75,12 +78,11 @@ struct CPUInfo
 	// Call Detect()
 	explicit CPUInfo();
 
-	// Turn the cpu info into a string we can show
+	// Turn the CPU info into a string we can show
 	std::string Summarize();
-	bool IsUnsafe();
 
 private:
-	// Detects the various cpu features
+	// Detects the various CPU features
 	void Detect();
 };
 

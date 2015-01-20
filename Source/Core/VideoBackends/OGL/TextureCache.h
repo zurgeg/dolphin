@@ -27,16 +27,10 @@ private:
 		GLuint texture;
 		GLuint framebuffer;
 
-		PC_TexFormat pcfmt;
-
-		int gl_format;
-		int gl_iformat;
-		int gl_type;
-
 		//TexMode0 mode; // current filter and clamp modes that texture is set to
 		//TexMode1 mode1; // current filter and clamp modes that texture is set to
 
-		TCacheEntry();
+		TCacheEntry(const TCacheEntryConfig& config);
 		~TCacheEntry();
 
 		void Load(unsigned int width, unsigned int height,
@@ -53,10 +47,10 @@ private:
 
 	~TextureCache();
 
-	TCacheEntryBase* CreateTexture(unsigned int width, unsigned int height,
-		unsigned int expanded_width, unsigned int tex_levels, PC_TexFormat pcfmt) override;
+	TCacheEntryBase* CreateTexture(const TCacheEntryConfig& config) override;
 
-	TCacheEntryBase* CreateRenderTargetTexture(unsigned int scaled_tex_w, unsigned int scaled_tex_h) override;
+	void CompileShaders() override;
+	void DeleteShaders() override;
 };
 
 bool SaveTexture(const std::string& filename, u32 textarget, u32 tex, int virtual_width, int virtual_height, unsigned int level);

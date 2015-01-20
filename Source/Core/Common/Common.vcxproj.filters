@@ -13,6 +13,7 @@
     <ClInclude Include="Atomic_GCC.h" />
     <ClInclude Include="Atomic_Win32.h" />
     <ClInclude Include="BitField.h" />
+    <ClInclude Include="BitSet.h" />
     <ClInclude Include="BreakPoints.h" />
     <ClInclude Include="CDUtils.h" />
     <ClInclude Include="ChunkFile.h" />
@@ -29,6 +30,7 @@
     <ClInclude Include="FileSearch.h" />
     <ClInclude Include="FileUtil.h" />
     <ClInclude Include="FixedSizeQueue.h" />
+    <ClInclude Include="Flag.h" />
     <ClInclude Include="FPURoundMode.h" />
     <ClInclude Include="Hash.h" />
     <ClInclude Include="IniFile.h" />
@@ -39,12 +41,11 @@
     <ClInclude Include="MsgHandler.h" />
     <ClInclude Include="NandPaths.h" />
     <ClInclude Include="Network.h" />
+    <ClInclude Include="PcapFile.h" />
+    <ClInclude Include="Profiler.h" />
     <ClInclude Include="SDCardUtil.h" />
     <ClInclude Include="SettingsHandler.h" />
-    <ClInclude Include="StdConditionVariable.h" />
     <ClInclude Include="StdMakeUnique.h" />
-    <ClInclude Include="StdMutex.h" />
-    <ClInclude Include="StdThread.h" />
     <ClInclude Include="StringUtil.h" />
     <ClInclude Include="SymbolDB.h" />
     <ClInclude Include="SysConf.h" />
@@ -53,22 +54,23 @@
     <ClInclude Include="x64ABI.h" />
     <ClInclude Include="x64Analyzer.h" />
     <ClInclude Include="x64Emitter.h" />
-    <ClInclude Include="ConsoleListener.h">
+    <ClInclude Include="Logging\ConsoleListener.h">
       <Filter>Logging</Filter>
     </ClInclude>
-    <ClInclude Include="Log.h">
+    <ClInclude Include="Logging\Log.h">
       <Filter>Logging</Filter>
     </ClInclude>
-    <ClInclude Include="LogManager.h">
+    <ClInclude Include="Logging\LogManager.h">
       <Filter>Logging</Filter>
     </ClInclude>
-    <ClInclude Include="stdafx.h" />
     <ClInclude Include="Crypto\ec.h">
       <Filter>Crypto</Filter>
     </ClInclude>
     <ClInclude Include="Crypto\bn.h">
       <Filter>Crypto</Filter>
     </ClInclude>
+    <ClInclude Include="GekkoDisassembler.h" />
+    <ClInclude Include="Event.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="BreakPoints.cpp" />
@@ -86,6 +88,8 @@
     <ClCompile Include="MsgHandler.cpp" />
     <ClCompile Include="NandPaths.cpp" />
     <ClCompile Include="Network.cpp" />
+    <ClCompile Include="PcapFile.cpp" />
+    <ClCompile Include="Profiler.cpp" />
     <ClCompile Include="SDCardUtil.cpp" />
     <ClCompile Include="SettingsHandler.cpp" />
     <ClCompile Include="StringUtil.cpp" />
@@ -105,14 +109,14 @@
     <ClCompile Include="Crypto\ec.cpp">
       <Filter>Crypto</Filter>
     </ClCompile>
-    <ClCompile Include="ConsoleListener.cpp">
+    <ClCompile Include="Logging\ConsoleListener.cpp">
       <Filter>Logging</Filter>
     </ClCompile>
-    <ClCompile Include="LogManager.cpp">
+    <ClCompile Include="Logging\LogManager.cpp">
       <Filter>Logging</Filter>
     </ClCompile>
-    <ClCompile Include="stdafx.cpp" />
     <ClCompile Include="XSaveWorkaround.cpp" />
+    <ClCompile Include="GekkoDisassembler.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />

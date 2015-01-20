@@ -5,10 +5,6 @@
 #include "Common/Thread.h"
 #include "InputCommon/ControllerInterface/ControllerInterface.h"
 
-#if USE_EGL
-#include "DolphinWX/GLInterface/GLInterface.h"
-#endif
-
 #ifdef CIFACE_USE_XINPUT
 	#include "InputCommon/ControllerInterface/XInput/XInput.h"
 #endif
@@ -35,7 +31,7 @@ using namespace ciface::ExpressionParser;
 
 namespace
 {
-const float INPUT_DETECT_THRESHOLD = 0.55f;
+const ControlState INPUT_DETECT_THRESHOLD = 0.55;
 }
 
 ControllerInterface g_controller_interface;
@@ -45,31 +41,27 @@ ControllerInterface g_controller_interface;
 //
 // Detect devices and inputs outputs / will make refresh function later
 //
-void ControllerInterface::Initialize()
+void ControllerInterface::Initialize(void* const hwnd)
 {
 	if (m_is_init)
 		return;
 
+	m_hwnd = hwnd;
+
 #ifdef CIFACE_USE_DINPUT
-	ciface::DInput::Init(m_devices, (HWND)m_hwnd);
+	ciface::DInput::Init(m_devices, (HWND)hwnd);
 #endif
 #ifdef CIFACE_USE_XINPUT
 	ciface::XInput::Init(m_devices);
 #endif
 #ifdef CIFACE_USE_XLIB
-#if USE_EGL
-if (GLWin.platform == EGL_PLATFORM_X11) {
-#endif
-	ciface::Xlib::Init(m_devices, m_hwnd);
+	ciface::Xlib::Init(m_devices, hwnd);
 	#ifdef CIFACE_USE_X11_XINPUT2
-		ciface::XInput2::Init(m_devices, m_hwnd);
+	ciface::XInput2::Init(m_devices, hwnd);
 	#endif
-#if USE_EGL
-}
-#endif
 #endif
 #ifdef CIFACE_USE_OSX
-	ciface::OSX::Init(m_devices, m_hwnd);
+	ciface::OSX::Init(m_devices, hwnd);
 #endif
 #ifdef CIFACE_USE_SDL
 	ciface::SDL::Init(m_devices);
@@ -79,6 +71,15 @@ if (GLWin.platform == EGL_PLATFORM_X11) {
 #endif
 
 	m_is_init = true;
+}
+
+void ControllerInterface::Reinitialize()
+{
+	if (!m_is_init)
+		return;
+
+	Shutdown();
+	Initialize(m_hwnd);
 }
 
 //
@@ -91,14 +92,11 @@ void ControllerInterface::Shutdown()
 	if (!m_is_init)
 		return;
 
-	for (Device* d : m_devices)
+	for (ciface::Core::Device* d : m_devices)
 	{
 		// Set outputs to ZERO before destroying device
-		for (Device::Output* o : d->Outputs())
+		for (ciface::Core::Device::Output* o : d->Outputs())
 			o->SetState(0);
-
-		// Update output
-		d->UpdateOutput();
 
 		// Delete device
 		delete d;
@@ -130,66 +128,19 @@ void ControllerInterface::Shutdown()
 }
 
 //
-// SetHwnd
-//
-// Sets the hwnd used for some crap when initializing, use before calling Init
-//
-void ControllerInterface::SetHwnd( void* const hwnd )
-{
-	m_hwnd = hwnd;
-}
-
-//
 // UpdateInput
 //
 // Update input for all devices, return true if all devices returned successful
 //
-bool ControllerInterface::UpdateInput(const bool force)
+void ControllerInterface::UpdateInput()
 {
 	std::unique_lock<std::recursive_mutex> lk(update_lock, std::defer_lock);
 
-	if (force)
-		lk.lock();
-	else if (!lk.try_lock())
-		return false;
+	if (!lk.try_lock())
+		return;
 
-	size_t ok_count = 0;
-
-	for (Device* d : m_devices)
-	{
-		if (d->UpdateInput())
-			++ok_count;
-		//else
-		// disabled. it might be causing problems
-			//(*d)->ClearInputState();
-	}
-
-	return (m_devices.size() == ok_count);
-}
-
-//
-// UpdateOutput
-//
-// Update output for all devices, return true if all devices returned successful
-//
-bool ControllerInterface::UpdateOutput(const bool force)
-{
-	std::unique_lock<std::recursive_mutex> lk(update_lock, std::defer_lock);
-
-	if (force)
-		lk.lock();
-	else if (!lk.try_lock())
-		return false;
-
-	size_t ok_count = 0;
-
-	for (Device* d : m_devices)
-	{
-		if (d->UpdateOutput())
-			++ok_count;
-	}
-
-	return (m_devices.size() == ok_count);
+	for (ciface::Core::Device* d : m_devices)
+		d->UpdateInput();
 }
 
 //
@@ -203,7 +154,7 @@ ControlState ControllerInterface::InputReference::State( const ControlState igno
 	if (parsed_expression)
 		return parsed_expression->GetValue() * range;
 	else
-		return 0.0f;
+		return 0.0;
 }
 
 //
@@ -217,7 +168,7 @@ ControlState ControllerInterface::OutputReference::State(const ControlState stat
 {
 	if (parsed_expression)
 		parsed_expression->SetValue(state);
-	return 0.0f;
+	return 0.0;
 }
 
 //
@@ -227,7 +178,7 @@ ControlState ControllerInterface::OutputReference::State(const ControlState stat
 // need to call this to re-parse a control reference's expression after changing it
 //
 void ControllerInterface::UpdateReference(ControllerInterface::ControlReference* ref
-	, const DeviceQualifier& default_device) const
+	, const ciface::Core::DeviceQualifier& default_device) const
 {
 	delete ref->parsed_expression;
 	ref->parsed_expression = nullptr;
@@ -246,7 +197,7 @@ void ControllerInterface::UpdateReference(ControllerInterface::ControlReference*
 // upon input, return pointer to detected Control
 // else return nullptr
 //
-Device::Control* ControllerInterface::InputReference::Detect(const unsigned int ms, Device* const device)
+ciface::Core::Device::Control* ControllerInterface::InputReference::Detect(const unsigned int ms, ciface::Core::Device* const device)
 {
 	unsigned int time = 0;
 	std::vector<bool> states(device->Inputs().size());
@@ -256,7 +207,7 @@ Device::Control* ControllerInterface::InputReference::Detect(const unsigned int 
 
 	// get starting state of all inputs,
 	// so we can ignore those that were activated at time of Detect start
-	std::vector<Device::Input*>::const_iterator
+	std::vector<ciface::Core::Device::Input*>::const_iterator
 		i = device->Inputs().begin(),
 		e = device->Inputs().end();
 	for (std::vector<bool>::iterator state = states.begin(); i != e; ++i)
@@ -296,7 +247,7 @@ Device::Control* ControllerInterface::InputReference::Detect(const unsigned int 
 //
 // set all binded outputs to <range> power for x milliseconds return false
 //
-Device::Control* ControllerInterface::OutputReference::Detect(const unsigned int ms, Device* const device)
+ciface::Core::Device::Control* ControllerInterface::OutputReference::Detect(const unsigned int ms, ciface::Core::Device* const device)
 {
 	// ignore device
 
@@ -308,14 +259,9 @@ Device::Control* ControllerInterface::OutputReference::Detect(const unsigned int
 
 		// this loop is to make stuff like flashing keyboard LEDs work
 		while (ms > (slept += 10))
-		{
-			// TODO: improve this to update more than just the default device's output
-			device->UpdateOutput();
 			Common::SleepCurrentThread(10);
-		}
 
 		State(0);
-		device->UpdateOutput();
 	}
 	return nullptr;
 }

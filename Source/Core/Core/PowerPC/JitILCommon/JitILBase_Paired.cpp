@@ -2,19 +2,14 @@
 // Licensed under GPLv2
 // Refer to the license.txt file included.
 
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 #include "Core/PowerPC/JitILCommon/JitILBase.h"
 
 void JitILBase::ps_arith(UGeckoInstruction inst)
 {
 	INSTRUCTION_START
-	JITDISABLE(bJITPairedOff)
-
-	if (inst.Rc || (inst.SUBOP5 != 21 && inst.SUBOP5 != 20 && inst.SUBOP5 != 25))
-	{
-		FallBackToInterpreter(inst);
-		return;
-	}
+	JITDISABLE(bJITPairedOff);
+	FALLBACK_IF(inst.Rc || (inst.SUBOP5 != 21 && inst.SUBOP5 != 20 && inst.SUBOP5 != 25));
 
 	IREmitter::InstLoc val = ibuild.EmitLoadFReg(inst.FA);
 	IREmitter::InstLoc rhs;
@@ -47,17 +42,11 @@ void JitILBase::ps_sum(UGeckoInstruction inst)
 	// TODO: This operation strikes me as a bit strange...
 	// perhaps we can optimize it depending on the users?
 	// TODO: ps_sum breaks Sonic Colours (black screen)
-	FallBackToInterpreter(inst);
-	return;
+	FALLBACK_IF(true);
 
 	INSTRUCTION_START
-	JITDISABLE(bJITPairedOff)
-
-	if (inst.Rc || inst.SUBOP5 != 10)
-	{
-		FallBackToInterpreter(inst);
-		return;
-	}
+	JITDISABLE(bJITPairedOff);
+	FALLBACK_IF(inst.Rc || inst.SUBOP5 != 10);
 
 	IREmitter::InstLoc val = ibuild.EmitLoadFReg(inst.FA);
 	IREmitter::InstLoc temp;
@@ -76,13 +65,8 @@ void JitILBase::ps_sum(UGeckoInstruction inst)
 void JitILBase::ps_muls(UGeckoInstruction inst)
 {
 	INSTRUCTION_START
-	JITDISABLE(bJITPairedOff)
-
-	if (inst.Rc)
-	{
-		FallBackToInterpreter(inst);
-		return;
-	}
+	JITDISABLE(bJITPairedOff);
+	FALLBACK_IF(inst.Rc);
 
 	IREmitter::InstLoc val = ibuild.EmitLoadFReg(inst.FA);
 	IREmitter::InstLoc rhs = ibuild.EmitLoadFReg(inst.FC);
@@ -105,13 +89,8 @@ void JitILBase::ps_muls(UGeckoInstruction inst)
 void JitILBase::ps_mergeXX(UGeckoInstruction inst)
 {
 	INSTRUCTION_START
-	JITDISABLE(bJITPairedOff)
-
-	if (inst.Rc)
-	{
-		FallBackToInterpreter(inst);
-		return;
-	}
+	JITDISABLE(bJITPairedOff);
+	FALLBACK_IF(inst.Rc);
 
 	IREmitter::InstLoc val = ibuild.EmitCompactMRegToPacked(ibuild.EmitLoadFReg(inst.FA));
 	IREmitter::InstLoc rhs = ibuild.EmitCompactMRegToPacked(ibuild.EmitLoadFReg(inst.FB));
@@ -142,20 +121,16 @@ void JitILBase::ps_mergeXX(UGeckoInstruction inst)
 void JitILBase::ps_maddXX(UGeckoInstruction inst)
 {
 	INSTRUCTION_START
-	JITDISABLE(bJITPairedOff)
-
-	if (inst.Rc)
-	{
-		FallBackToInterpreter(inst);
-		return;
-	}
+	JITDISABLE(bJITPairedOff);
+	FALLBACK_IF(inst.Rc);
 
 	IREmitter::InstLoc val = ibuild.EmitLoadFReg(inst.FA), op2, op3;
 	val = ibuild.EmitCompactMRegToPacked(val);
 
 	switch (inst.SUBOP5)
 	{
-	case 14: {//madds0
+	case 14: // madds0
+	{
 		op2 = ibuild.EmitCompactMRegToPacked(ibuild.EmitLoadFReg(inst.FC));
 		op2 = ibuild.EmitFPDup0(op2);
 		val = ibuild.EmitFPMul(val, op2);
@@ -163,7 +138,8 @@ void JitILBase::ps_maddXX(UGeckoInstruction inst)
 		val = ibuild.EmitFPAdd(val, op3);
 		break;
 	}
-	case 15: {//madds1
+	case 15: // madds1
+	{
 		op2 = ibuild.EmitCompactMRegToPacked(ibuild.EmitLoadFReg(inst.FC));
 		op2 = ibuild.EmitFPDup1(op2);
 		val = ibuild.EmitFPMul(val, op2);
@@ -171,21 +147,24 @@ void JitILBase::ps_maddXX(UGeckoInstruction inst)
 		val = ibuild.EmitFPAdd(val, op3);
 		break;
 	}
-	case 28: {//msub
+	case 28: // msub
+	{
 		op2 = ibuild.EmitCompactMRegToPacked(ibuild.EmitLoadFReg(inst.FC));
 		val = ibuild.EmitFPMul(val, op2);
 		op3 = ibuild.EmitCompactMRegToPacked(ibuild.EmitLoadFReg(inst.FB));
 		val = ibuild.EmitFPSub(val, op3);
 		break;
 	}
-	case 29: {//madd
+	case 29: // madd
+	{
 		op2 = ibuild.EmitCompactMRegToPacked(ibuild.EmitLoadFReg(inst.FC));
 		val = ibuild.EmitFPMul(val, op2);
 		op3 = ibuild.EmitCompactMRegToPacked(ibuild.EmitLoadFReg(inst.FB));
 		val = ibuild.EmitFPAdd(val, op3);
 		break;
 	}
-	case 30: {//nmsub
+	case 30: // nmsub
+	{
 		op2 = ibuild.EmitCompactMRegToPacked(ibuild.EmitLoadFReg(inst.FC));
 		val = ibuild.EmitFPMul(val, op2);
 		op3 = ibuild.EmitCompactMRegToPacked(ibuild.EmitLoadFReg(inst.FB));
@@ -193,7 +172,8 @@ void JitILBase::ps_maddXX(UGeckoInstruction inst)
 		val = ibuild.EmitFPNeg(val);
 		break;
 	}
-	case 31: {//nmadd
+	case 31: // nmadd
+	{
 		op2 = ibuild.EmitCompactMRegToPacked(ibuild.EmitLoadFReg(inst.FC));
 		val = ibuild.EmitFPMul(val, op2);
 		op3 = ibuild.EmitCompactMRegToPacked(ibuild.EmitLoadFReg(inst.FB));

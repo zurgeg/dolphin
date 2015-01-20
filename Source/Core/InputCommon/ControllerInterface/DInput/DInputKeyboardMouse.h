@@ -4,13 +4,10 @@
 
 #pragma once
 
-#define DIRECTINPUT_VERSION 0x0800
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-#include <dinput.h>
 #include <windows.h>
 
 #include "InputCommon/ControllerInterface/Device.h"
+#include "InputCommon/ControllerInterface/DInput/DInput8.h"
 
 namespace ciface
 {
@@ -28,7 +25,7 @@ private:
 		DIMOUSESTATE2 mouse;
 		struct
 		{
-			float x, y;
+			ControlState x, y;
 		} cursor;
 	};
 
@@ -71,27 +68,16 @@ private:
 	public:
 		std::string GetName() const;
 		bool IsDetectable() { return false; }
-		Cursor(u8 index, const float& axis, const bool positive) : m_index(index), m_axis(axis), m_positive(positive) {}
+		Cursor(u8 index, const ControlState& axis, const bool positive) : m_index(index), m_axis(axis), m_positive(positive) {}
 		ControlState GetState() const;
 	private:
-		const float& m_axis;
+		const ControlState& m_axis;
 		const u8 m_index;
 		const bool m_positive;
 	};
 
-	class Light : public Output
-	{
-	public:
-		std::string GetName() const;
-		Light(u8 index) : m_index(index) {}
-		void SetState(ControlState state);
-	private:
-		const u8 m_index;
-	};
-
 public:
-	bool UpdateInput();
-	bool UpdateOutput();
+	void UpdateInput() override;
 
 	KeyboardMouse(const LPDIRECTINPUTDEVICE8 kb_device, const LPDIRECTINPUTDEVICE8 mo_device);
 	~KeyboardMouse();
@@ -106,8 +92,6 @@ private:
 
 	DWORD         m_last_update;
 	State         m_state_in;
-	unsigned char m_state_out[3];         // NUM CAPS SCROLL
-	bool          m_current_state_out[3]; // NUM CAPS SCROLL
 };
 
 }

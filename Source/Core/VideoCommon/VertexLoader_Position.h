@@ -2,20 +2,20 @@
 // Licensed under GPLv2
 // Refer to the license.txt file included.
 
-#ifndef VERTEXLOADER_POSITION_H
-#define VERTEXLOADER_POSITION_H
+#pragma once
+
+#include "VideoCommon/NativeVertexFormat.h"
 
 class VertexLoader_Position {
 public:
 
 	// Init
-	static void Init(void);
+	static void Init();
 
 	// GetSize
-	static unsigned int GetSize(unsigned int _type, unsigned int _format, unsigned int _elements);
+	static unsigned int GetSize(u64 _type, unsigned int _format, unsigned int _elements);
 
 	// GetFunction
-	static TPipelineFunction GetFunction(unsigned int _type, unsigned int _format, unsigned int _elements);
+	static TPipelineFunction GetFunction(u64 _type, unsigned int _format, unsigned int _elements);
 };
 
-#endif

@@ -8,6 +8,8 @@ Source/Core/Common/scmrev.h
 /[Bb]uild*/
 /[Bb]inary/
 /obj/
+# Android cmake builds to here then copies to Source/Android.
+/libs/
 # Ignore various files created by visual studio/msbuild
 *.ipch
 *.opensdf
@@ -24,3 +26,5 @@ CMakeLists.txt.user
 .tx
 # Ignore kdevelop files/dirs
 *.kdev4
+# Ignore IDEA/Clion files/dirs
+/.idea/

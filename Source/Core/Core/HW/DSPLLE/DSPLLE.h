@@ -14,7 +14,7 @@ class DSPLLE : public DSPEmulator
 public:
 	DSPLLE();
 
-	virtual bool Initialize(void *hWnd, bool bWii, bool bDSPThread) override;
+	virtual bool Initialize(bool bWii, bool bDSPThread) override;
 	virtual void Shutdown() override;
 	virtual bool IsLLE() override { return true; }
 
@@ -32,12 +32,13 @@ public:
 	virtual u32 DSP_UpdateRate() override;
 
 private:
-	static void dsp_thread(DSPLLE* lpParameter);
+	static void DSPThread(DSPLLE* lpParameter);
 
 	std::thread m_hDSPThread;
 	std::mutex m_csDSPThreadActive;
+	std::mutex m_csDSPCycleCountActive;
 	bool m_bWii;
 	bool m_bDSPThread;
-	bool m_bIsRunning;
-	volatile u32 m_cycle_count;
+	Common::Flag m_bIsRunning;
+	u32 m_cycle_count;
 };

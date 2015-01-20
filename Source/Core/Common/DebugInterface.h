@@ -9,7 +9,7 @@ protected:
 	virtual ~DebugInterface() {}
 
 public:
-	virtual void Disassemble(unsigned int /*address*/, char *dest, int /*max_size*/) {strcpy(dest, "NODEBUGGER");}
+	virtual std::string Disassemble(unsigned int /*address*/) { return "NODEBUGGER"; }
 	virtual void GetRawMemoryString(int /*memory*/, unsigned int /*address*/, char *dest, int /*max_size*/) {strcpy(dest, "NODEBUGGER");}
 	virtual int GetInstructionSize(int /*instruction*/) {return 1;}
 	virtual bool IsAlive() {return true;}
@@ -18,6 +18,7 @@ public:
 	virtual void ClearBreakpoint(unsigned int /*address*/){}
 	virtual void ClearAllBreakpoints() {}
 	virtual void ToggleBreakpoint(unsigned int /*address*/){}
+	virtual void AddWatch(unsigned int /*address*/){}
 	virtual void ClearAllMemChecks() {}
 	virtual bool IsMemCheck(unsigned int /*address*/) {return false;}
 	virtual void ToggleMemCheck(unsigned int /*address*/){}
@@ -31,7 +32,6 @@ public:
 	virtual void RunToBreakpoint() {}
 	virtual void BreakNow() {}
 	virtual void InsertBLR(unsigned int /*address*/, unsigned int /*value*/) {}
-	virtual void ShowJitResults(unsigned int /*address*/) {};
 	virtual int GetColor(unsigned int /*address*/){return 0xFFFFFFFF;}
 	virtual std::string GetDescription(unsigned int /*address*/) = 0;
 };

@@ -4,7 +4,8 @@
 
 #include <algorithm>
 
-#include "Common/Common.h"
+#include "Common/CommonFuncs.h"
+#include "Common/CommonTypes.h"
 #include "Core/HW/Memmap.h"
 
 #include "VideoBackends/Software/BPMemLoader.h"
@@ -14,18 +15,18 @@
 #include "VideoCommon/PixelEngine.h"
 
 
-u8 efb[EFB_WIDTH*EFB_HEIGHT*6];
+static u8 efb[EFB_WIDTH*EFB_HEIGHT*6];
 
 namespace EfbInterface
 {
 	u32 perf_values[PQ_NUM_MEMBERS];
 
-	inline u32 GetColorOffset(u16 x, u16 y)
+	static inline u32 GetColorOffset(u16 x, u16 y)
 	{
 		return (x + y * EFB_WIDTH) * 3;
 	}
 
-	inline u32 GetDepthOffset(u16 x, u16 y)
+	static inline u32 GetDepthOffset(u16 x, u16 y)
 	{
 		return (x + y * EFB_WIDTH) * 3 + DEPTH_BUFFER_START;
 	}
@@ -35,7 +36,7 @@ namespace EfbInterface
 		p.DoArray(efb, EFB_WIDTH*EFB_HEIGHT*6);
 	}
 
-	void SetPixelAlphaOnly(u32 offset, u8 a)
+	static void SetPixelAlphaOnly(u32 offset, u8 a)
 	{
 		switch (bpmem.zcontrol.pixel_format)
 		{
@@ -58,7 +59,7 @@ namespace EfbInterface
 		}
 	}
 
-	void SetPixelColorOnly(u32 offset, u8 *rgb)
+	static void SetPixelColorOnly(u32 offset, u8 *rgb)
 	{
 		switch (bpmem.zcontrol.pixel_format)
 		{
@@ -98,7 +99,7 @@ namespace EfbInterface
 		}
 	}
 
-	void SetPixelAlphaColor(u32 offset, u8 *color)
+	static void SetPixelAlphaColor(u32 offset, u8 *color)
 	{
 		switch (bpmem.zcontrol.pixel_format)
 		{
@@ -139,7 +140,7 @@ namespace EfbInterface
 		}
 	}
 
-	void GetPixelColor(u32 offset, u8 *color)
+	static void GetPixelColor(u32 offset, u8 *color)
 	{
 		switch (bpmem.zcontrol.pixel_format)
 		{
@@ -175,7 +176,7 @@ namespace EfbInterface
 		}
 	}
 
-	void SetPixelDepth(u32 offset, u32 depth)
+	static void SetPixelDepth(u32 offset, u32 depth)
 	{
 		switch (bpmem.zcontrol.pixel_format)
 		{
@@ -203,7 +204,7 @@ namespace EfbInterface
 		}
 	}
 
-	u32 GetPixelDepth(u32 offset)
+	static u32 GetPixelDepth(u32 offset)
 	{
 		u32 depth = 0;
 
@@ -229,7 +230,7 @@ namespace EfbInterface
 		return depth;
 	}
 
-	u32 GetSourceFactor(u8 *srcClr, u8 *dstClr, BlendMode::BlendFactor mode)
+	static u32 GetSourceFactor(u8 *srcClr, u8 *dstClr, BlendMode::BlendFactor mode)
 	{
 		switch (mode)
 		{
@@ -270,7 +271,7 @@ namespace EfbInterface
 		return 0;
 	}
 
-	u32 GetDestinationFactor(u8 *srcClr, u8 *dstClr, BlendMode::BlendFactor mode)
+	static u32 GetDestinationFactor(u8 *srcClr, u8 *dstClr, BlendMode::BlendFactor mode)
 	{
 		switch (mode)
 		{
@@ -311,7 +312,7 @@ namespace EfbInterface
 		return 0;
 	}
 
-	void BlendColor(u8 *srcClr, u8 *dstClr)
+	static void BlendColor(u8 *srcClr, u8 *dstClr)
 	{
 		u32 srcFactor = GetSourceFactor(srcClr, dstClr, bpmem.blendmode.srcfactor);
 		u32 dstFactor = GetDestinationFactor(srcClr, dstClr, bpmem.blendmode.dstfactor);
@@ -333,62 +334,62 @@ namespace EfbInterface
 		}
 	}
 
-	void LogicBlend(u32 srcClr, u32 &dstClr, BlendMode::LogicOp op)
+	static void LogicBlend(u32 srcClr, u32* dstClr, BlendMode::LogicOp op)
 	{
 		switch (op)
 		{
 		case BlendMode::CLEAR:
-			dstClr = 0;
+			*dstClr = 0;
 			break;
 		case BlendMode::AND:
-			dstClr = srcClr & dstClr;
+			*dstClr = srcClr & *dstClr;
 			break;
 		case BlendMode::AND_REVERSE:
-			dstClr = srcClr & (~dstClr);
+			*dstClr = srcClr & (~*dstClr);
 			break;
 		case BlendMode::COPY:
-			dstClr = srcClr;
+			*dstClr = srcClr;
 			break;
 		case BlendMode::AND_INVERTED:
-			dstClr = (~srcClr) & dstClr;
+			*dstClr = (~srcClr) & *dstClr;
 			break;
 		case BlendMode::NOOP:
 			// Do nothing
 			break;
 		case BlendMode::XOR:
-			dstClr = srcClr ^ dstClr;
+			*dstClr = srcClr ^ *dstClr;
 			break;
 		case BlendMode::OR:
-			dstClr = srcClr | dstClr;
+			*dstClr = srcClr | *dstClr;
 			break;
 		case BlendMode::NOR:
-			dstClr = ~(srcClr | dstClr);
+			*dstClr = ~(srcClr | *dstClr);
 			break;
 		case BlendMode::EQUIV:
-			dstClr = ~(srcClr ^ dstClr);
+			*dstClr = ~(srcClr ^ *dstClr);
 			break;
 		case BlendMode::INVERT:
-			dstClr = ~dstClr;
+			*dstClr = ~*dstClr;
 			break;
 		case BlendMode::OR_REVERSE:
-			dstClr = srcClr | (~dstClr);
+			*dstClr = srcClr | (~*dstClr);
 			break;
 		case BlendMode::COPY_INVERTED:
-			dstClr = ~srcClr;
+			*dstClr = ~srcClr;
 			break;
 		case BlendMode::OR_INVERTED:
-			dstClr = (~srcClr) | dstClr;
+			*dstClr = (~srcClr) | *dstClr;
 			break;
 		case BlendMode::NAND:
-			dstClr = ~(srcClr & dstClr);
+			*dstClr = ~(srcClr & *dstClr);
 			break;
 		case BlendMode::SET:
-			dstClr = 0xffffffff;
+			*dstClr = 0xffffffff;
 			break;
 		}
 	}
 
-	void SubtractBlend(u8 *srcClr, u8 *dstClr)
+	static void SubtractBlend(u8 *srcClr, u8 *dstClr)
 	{
 		for (int i = 0; i < 4; i++)
 		{
@@ -415,7 +416,7 @@ namespace EfbInterface
 		}
 		else if (bpmem.blendmode.logicopenable)
 		{
-			LogicBlend(*((u32*)color), dstClr, bpmem.blendmode.logicmode);
+			LogicBlend(*((u32*)color), &dstClr, bpmem.blendmode.logicmode);
 		}
 		else
 		{
@@ -436,12 +437,6 @@ namespace EfbInterface
 		{
 			SetPixelAlphaOnly(offset, dstClrPtr[ALP_C]);
 		}
-
-		// branchless bounding box update
-		PixelEngine::bbox[0] = std::min(x, PixelEngine::bbox[0]);
-		PixelEngine::bbox[1] = std::max(x, PixelEngine::bbox[1]);
-		PixelEngine::bbox[2] = std::min(y, PixelEngine::bbox[2]);
-		PixelEngine::bbox[3] = std::max(y, PixelEngine::bbox[3]);
 	}
 
 	void SetColor(u16 x, u16 y, u8 *color)
@@ -498,7 +493,8 @@ namespace EfbInterface
 		return &efb[GetColorOffset(x, y)];
 	}
 
-	void CopyToXFB(yuv422_packed* xfb_in_ram, u32 fbWidth, u32 fbHeight, const EFBRectangle& sourceRc, float Gamma) {
+	void CopyToXFB(yuv422_packed* xfb_in_ram, u32 fbWidth, u32 fbHeight, const EFBRectangle& sourceRc, float Gamma)
+	{
 		// FIXME: We should do Gamma correction
 
 		if (!xfb_in_ram)
@@ -512,7 +508,8 @@ namespace EfbInterface
 
 		// this assumes copies will always start on an even (YU) pixel and the
 		// copy always has an even width, which might not be true.
-		if (left & 1 || right & 1) {
+		if (left & 1 || right & 1)
+		{
 			WARN_LOG(VIDEO, "Trying to copy XFB to from unaligned EFB source");
 			// this will show up as wrongly encoded
 		}
@@ -543,7 +540,7 @@ namespace EfbInterface
 			{
 				// YU pixel
 				xfb_in_ram[x].Y = scanline[i].Y + 16;
-				// we mix our color difrences in 10 bit space so it will round more accurately
+				// we mix our color differences in 10 bit space so it will round more accurately
 				// U[i] = 1/4 * U[i-1] + 1/2 * U[i] + 1/4 * U[i+1]
 				xfb_in_ram[x].UV = 128 + ((scanline[i-1].U + (scanline[i].U << 1) + scanline[i+1].U) >> 2);
 
@@ -556,9 +553,11 @@ namespace EfbInterface
 		}
 	}
 
-	// Like CopyToXFB, but we copy directly into the opengl colour texture without going via Gamecube main memory or doing a yuyv conversion
-	void BypassXFB(u8* texture, u32 fbWidth, u32 fbHeight, const EFBRectangle& sourceRc, float Gamma) {
-		if (fbWidth*fbHeight > 640*568) {
+	// Like CopyToXFB, but we copy directly into the OpenGL color texture without going via GameCube main memory or doing a yuyv conversion
+	void BypassXFB(u8* texture, u32 fbWidth, u32 fbHeight, const EFBRectangle& sourceRc, float Gamma)
+	{
+		if (fbWidth*fbHeight > MAX_XFB_WIDTH*MAX_XFB_HEIGHT)
+		{
 			ERROR_LOG(VIDEO, "Framebuffer is too large: %ix%i", fbWidth, fbHeight);
 			return;
 		}

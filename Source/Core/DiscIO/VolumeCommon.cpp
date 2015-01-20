@@ -5,77 +5,72 @@
 #include <string>
 #include <vector>
 
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
+#include "Common/Logging/Log.h"
 #include "DiscIO/Volume.h"
 
+// Increment CACHE_REVISION if the code below is modified (ISOFile.cpp & GameFile.cpp)
 namespace DiscIO
 {
 IVolume::ECountry CountrySwitch(u8 CountryCode)
 {
 	switch (CountryCode)
 	{
-		// Region free - fall through to European defaults for now
+		// Region free - Uses European flag as placeholder
 		case 'A':
-
+			return IVolume::COUNTRY_INTERNATIONAL;
 
 		// PAL
-		case 'D': // German
+		case 'D':
 			return IVolume::COUNTRY_GERMANY;
-			break;
 
 		case 'X': // Used by a couple PAL games
-		case 'Y': // German, french
-
+		case 'Y': // German, French
 		case 'L': // Japanese import to PAL regions
 		case 'M': // Japanese import to PAL regions
-		case 'S': // Spanish-speaking regions
 		case 'P':
-		case 'U': // Australia
 			return IVolume::COUNTRY_EUROPE;
-			break;
+
+		case 'U':
+			return IVolume::COUNTRY_AUSTRALIA;
 
 		case 'F':
 			return IVolume::COUNTRY_FRANCE;
-			break;
 
 		case 'I':
 			return IVolume::COUNTRY_ITALY;
-			break;
+
+		case 'H':
+			return IVolume::COUNTRY_NETHERLANDS;
 
 		case 'R':
 			return IVolume::COUNTRY_RUSSIA;
-			break;
+
+		case 'S':
+			return IVolume::COUNTRY_SPAIN;
 
 		// NTSC
 		case 'E':
 		case 'N': // Japanese import to USA and other NTSC regions
 		case 'Z': // Prince Of Persia - The Forgotten Sands (WII)
+		case 'B': // Ufouria: The Saga (Virtual Console)
 			return IVolume::COUNTRY_USA;
-			break;
 
 		case 'J':
 			return IVolume::COUNTRY_JAPAN;
-			break;
 
 		case 'K':
-		case 'T': // Korea with English language
 		case 'Q': // Korea with Japanese language
+		case 'T': // Korea with English language
 			return IVolume::COUNTRY_KOREA;
-			break;
-
-		case 'O':
-			return IVolume::COUNTRY_SDK;
-			break;
 
 		case 'W':
 			return IVolume::COUNTRY_TAIWAN;
-			break;
 
 		default:
 			if (CountryCode > 'A') // Silently ignore IOS wads
 				WARN_LOG(DISCIO, "Unknown Country Code! %c", CountryCode);
 			return IVolume::COUNTRY_UNKNOWN;
-			break;
 	}
 }
 

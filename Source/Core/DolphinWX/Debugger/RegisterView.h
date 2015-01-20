@@ -10,7 +10,7 @@
 #include <wx/string.h>
 #include <wx/windowid.h>
 
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 
 class wxWindow;
 
@@ -30,14 +30,15 @@ class wxWindow;
 // Interrupt Mask (PI)
 // Interrupt Cause(PI)
 
+#define NUM_SPECIALS 14
+
 class CRegTable : public wxGridTableBase
 {
-	enum {
-		NUM_SPECIALS = 11,
-	};
 
 public:
-	CRegTable() {
+
+	CRegTable()
+	{
 		memset(m_CachedRegs, 0, sizeof(m_CachedRegs));
 		memset(m_CachedSpecialRegs, 0, sizeof(m_CachedSpecialRegs));
 		memset(m_CachedFRegs, 0, sizeof(m_CachedFRegs));
@@ -45,11 +46,12 @@ public:
 		memset(m_CachedSpecialRegHasChanged, 0, sizeof(m_CachedSpecialRegHasChanged));
 		memset(m_CachedFRegHasChanged, 0, sizeof(m_CachedFRegHasChanged));
 	}
-    int GetNumberCols(void) override {return 5;}
-    int GetNumberRows(void) override {return 32 + NUM_SPECIALS;}
-	bool IsEmptyCell(int row, int col) override {return row > 31 && col > 2;}
-    wxString GetValue(int row, int col) override;
-    void SetValue(int row, int col, const wxString &) override;
+
+	int GetNumberCols() override { return 9; }
+	int GetNumberRows() override { return 32 + NUM_SPECIALS; }
+	bool IsEmptyCell(int row, int col) override { return row > 31 && col > 2; }
+	wxString GetValue(int row, int col) override;
+	void SetValue(int row, int col, const wxString &) override;
 	wxGridCellAttr *GetAttr(int, int, wxGridCellAttr::wxAttrKind) override;
 	void UpdateCachedRegs();
 
@@ -69,4 +71,9 @@ class CRegisterView : public wxGrid
 public:
 	CRegisterView(wxWindow* parent, wxWindowID id);
 	void Update() override;
+	void OnMouseDownR(wxGridEvent& event);
+	void OnPopupMenu(wxCommandEvent& event);
+
+private:
+	u32 m_selectedAddress = 0;
 };

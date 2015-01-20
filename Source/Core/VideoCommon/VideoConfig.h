@@ -14,7 +14,7 @@
 #include <string>
 #include <vector>
 
-#include "Common/Common.h"
+#include "Common/CommonTypes.h"
 #include "VideoCommon/VideoCommon.h"
 
 // Log in two categories, and save three other options in the same byte
@@ -44,7 +44,14 @@ enum EFBScale
 	SCALE_4X,
 };
 
-class IniFile;
+enum StereoMode
+{
+	STEREO_OFF = 0,
+	STEREO_SBS,
+	STEREO_TAB,
+	STEREO_ANAGLYPH,
+	STEREO_3DVISION
+};
 
 // NEVER inherit from this class.
 struct VideoConfig final
@@ -59,7 +66,8 @@ struct VideoConfig final
 
 	// General
 	bool bVSync;
-
+	bool bFullscreen;
+	bool bExclusiveMode;
 	bool bRunning;
 	bool bWidescreenHack;
 	int iAspectRatio;
@@ -67,25 +75,25 @@ struct VideoConfig final
 	bool bUseXFB;
 	bool bUseRealXFB;
 
-	// OpenMP
-	bool bOMPDecoder;
-
 	// Enhancements
 	int iMultisampleMode;
 	int iEFBScale;
 	bool bForceFiltering;
 	int iMaxAnisotropy;
 	std::string sPostProcessingShader;
+	int iStereoMode;
+	int iStereoDepth;
+	int iStereoConvergence;
+	bool bStereoSwapEyes;
 
 	// Information
 	bool bShowFPS;
-	bool bShowInputDisplay;
 	bool bOverlayStats;
 	bool bOverlayProjStats;
 	bool bTexFmtOverlayEnable;
 	bool bTexFmtOverlayCenter;
 	bool bShowEFBCopyRegions;
-	bool bLogFPSToFile;
+	bool bLogRenderTimeToFile;
 
 	// Render
 	bool bWireFrame;
@@ -96,13 +104,9 @@ struct VideoConfig final
 	bool bDumpTextures;
 	bool bHiresTextures;
 	bool bDumpEFBTarget;
-	bool bDumpFrames;
 	bool bUseFFV1;
 	bool bFreeLook;
-	bool bAnaglyphStereo;
-	int iAnaglyphStereoSeparation;
-	int iAnaglyphFocalAngle;
-	bool b3DVision;
+	bool bBorderlessFullscreen;
 
 	// Hacks
 	bool bEFBAccessEnable;
@@ -117,11 +121,15 @@ struct VideoConfig final
 	int iPhackvalue[3];
 	std::string sPhackvalue[2];
 	float fAspectRatioHackW, fAspectRatioHackH;
-	bool bUseBBox;
 	bool bEnablePixelLighting;
 	bool bFastDepthCalc;
 	int iLog; // CONF_ bits
 	int iSaveTargetId; // TODO: Should be dropped
+
+	// Stereoscopy
+	bool bStereoEFBMonoDepth;
+	int iStereoDepthPercentage;
+	int iStereoConvergenceMinimum;
 
 	// D3D only config, mostly to be merged into the above
 	int iAdapter;
@@ -139,14 +147,16 @@ struct VideoConfig final
 		std::vector<std::string> AAModes;
 		std::vector<std::string> PPShaders; // post-processing shaders
 
-		bool bUseRGBATextures; // used for D3D in TextureCache
-		bool bUseMinimalMipCount;
-		bool bSupports3DVision;
+		bool bSupportsExclusiveFullscreen;
 		bool bSupportsDualSourceBlend;
 		bool bSupportsPrimitiveRestart;
 		bool bSupportsOversizedViewports;
+		bool bSupportsGeometryShaders;
+		bool bSupports3DVision;
 		bool bSupportsEarlyZ; // needed by PixelShaderGen, so must stay in VideoCommon
 		bool bSupportsBindingLayout; // Needed by ShaderGen, so must stay in VideoCommon
+		bool bSupportsBBox;
+		bool bSupportsGSInstancing; // Needed by GeometryShaderGen, so must stay in VideoCommon
 	} backend_info;
 
 	// Utility
@@ -154,6 +164,7 @@ struct VideoConfig final
 	bool VirtualXFBEnabled() const { return bUseXFB && !bUseRealXFB; }
 	bool EFBCopiesToTextureEnabled() const { return bEFBCopyEnable && bCopyEFBToTexture; }
 	bool EFBCopiesToRamEnabled() const { return bEFBCopyEnable && !bCopyEFBToTexture; }
+	bool ExclusiveFullscreenEnabled() const { return backend_info.bSupportsExclusiveFullscreen && !bBorderlessFullscreen; }
 };
 
 extern VideoConfig g_Config;

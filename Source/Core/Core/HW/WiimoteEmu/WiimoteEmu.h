@@ -12,7 +12,6 @@
 #include "Core/HW/WiimoteEmu/Encryption.h"
 #include "Core/HW/WiimoteEmu/WiimoteHid.h"
 #include "InputCommon/ControllerEmu.h"
-#include "InputCommon/UDPWrapper.h"
 
 // Registry sizes
 #define WIIMOTE_EEPROM_SIZE       (16*1024)
@@ -25,10 +24,9 @@ namespace WiimoteReal
 {
 class Wiimote;
 }
-
 namespace WiimoteEmu
 {
-
+#pragma pack(push,1)
 struct ReportFeatures
 {
 	u8 core, accel, ir, ext, size;
@@ -68,19 +66,13 @@ struct ExtensionReg
 	u8 constant_id[6];
 };
 
-extern const ReportFeatures reporting_mode_features[];
-
-void FillRawAccelFromGForceData(wm_accel& raw_accel,
-	const accel_cal& calib,
-	const WiimoteEmu::AccelData& accel);
-
 void EmulateShake(AccelData* const accel_data
 	  , ControllerEmu::Buttons* const buttons_group
 	  , u8* const shake_step);
 
 void EmulateTilt(AccelData* const accel
 	 , ControllerEmu::Tilt* const tilt_group
-	 , const bool focus, const bool sideways = false, const bool upright = false);
+	 , const bool sideways = false, const bool upright = false);
 
 void EmulateSwing(AccelData* const accel
 	 , ControllerEmu::Force* const tilt_group
@@ -96,7 +88,6 @@ inline double trim(double a)
 class Wiimote : public ControllerEmu
 {
 friend class WiimoteReal::Wiimote;
-friend void Spy(Wiimote* wm_, const void* data_, size_t size_);
 public:
 
 	enum
@@ -115,6 +106,13 @@ public:
 		BUTTON_HOME  = 0x8000,
 	};
 
+	enum
+	{
+		ACCEL_ZERO_G = 0x80,
+		ACCEL_ONE_G = 0x9A,
+		ACCEL_RANGE = (ACCEL_ONE_G - ACCEL_ZERO_G),
+	};
+
 	Wiimote(const unsigned int index);
 	std::string GetName() const override;
 
@@ -127,14 +125,16 @@ public:
 
 	void LoadDefaults(const ControllerInterface& ciface) override;
 
+	int CurrentExtension() const { return m_extension->active_extension; }
+
 protected:
 	bool Step();
 	void HidOutputReport(const wm_report* const sr, const bool send_ack = true);
 	void HandleExtensionSwap();
-	void UpdateButtonsStatus(bool has_focus);
+	void UpdateButtonsStatus();
 
-	void GetCoreData(u8* const data);
-	void GetAccelData(u8* const data);
+	void GetButtonData(u8* const data);
+	void GetAccelData(u8* const data, const ReportFeatures& rptf);
 	void GetIRData(u8* const data, bool use_accel);
 	void GetExtData(u8* const data);
 
@@ -177,8 +177,6 @@ private:
 
 	double ir_sin, ir_cos; //for the low pass filter
 
-	UDPWrapper* m_udp;
-
 	bool m_rumble_on;
 	bool m_speaker_mute;
 	bool m_motion_plus_present;
@@ -204,7 +202,6 @@ private:
 	wiimote_key m_ext_key;
 
 	u8 m_eeprom[WIIMOTE_EEPROM_SIZE];
-
 	struct MotionPlusReg
 	{
 		u8 unknown[0xF0];
@@ -240,8 +237,7 @@ private:
 		u8  play;
 		u8  unk_9;
 	} m_reg_speaker;
+#pragma pack(pop)
 };
-
-void Spy(Wiimote* wm_, const void* data_, size_t size_);
 
 }

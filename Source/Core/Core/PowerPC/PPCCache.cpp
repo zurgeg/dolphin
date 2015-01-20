@@ -2,6 +2,7 @@
 // Licensed under GPLv2
 // Refer to the license.txt file included.
 
+#include "Common/CommonFuncs.h"
 #include "Core/HW/Memmap.h"
 #include "Core/PowerPC/JitInterface.h"
 #include "Core/PowerPC/PowerPC.h"
@@ -11,23 +12,24 @@
 
 namespace PowerPC
 {
-
-	const u32 plru_mask[8] = {11,11,19,19,37,37,69,69};
-	const u32 plru_value[8] = {11,3,17,1,36,4,64,0};
+	static const u32 s_plru_mask[8] = {11, 11, 19, 19, 37, 37, 69, 69};
+	static const u32 s_plru_value[8] = {11, 3, 17, 1, 36, 4, 64, 0};
 
 	InstructionCache::InstructionCache()
 	{
 		for (u32 m = 0; m < 0xff; m++)
 		{
 			u32 w = 0;
-			while (m & (1<<w)) w++;
+			while (m & (1 << w))
+				w++;
 			way_from_valid[m] = w;
 		}
 
 		for (u32 m = 0; m < 128; m++)
 		{
 			u32 b[7];
-			for (int i = 0; i < 7; i++) b[i] = m & (1<<i);
+			for (int i = 0; i < 7; i++)
+				b[i] = m & (1 << i);
 			u32 w;
 			if (b[0])
 				if (b[2])
@@ -82,7 +84,7 @@ namespace PowerPC
 		// invalidates the whole set
 		u32 set = (addr >> 5) & 0x7f;
 		for (int i = 0; i < 8; i++)
-			if (valid[set] & (1<<i))
+			if (valid[set] & (1 << i))
 			{
 				if (tags[set][i] & (ICACHE_VMEM_BIT >> 12))
 					lookup_table_vmem[((tags[set][i] << 7) | set) & 0xfffff] = 0xff;
@@ -92,7 +94,7 @@ namespace PowerPC
 					lookup_table[((tags[set][i] << 7) | set) & 0xfffff] = 0xff;
 			}
 		valid[set] = 0;
-		JitInterface::InvalidateICache(addr & ~0x1f, 32);
+		JitInterface::InvalidateICache(addr & ~0x1f, 32, false);
 	}
 
 	u32 InstructionCache::ReadInstruction(u32 addr)
@@ -105,15 +107,15 @@ namespace PowerPC
 		u32 t;
 		if (addr & ICACHE_VMEM_BIT)
 		{
-			t = lookup_table_vmem[(addr>>5) & 0xfffff];
+			t = lookup_table_vmem[(addr >> 5) & 0xfffff];
 		}
 		else if (addr & ICACHE_EXRAM_BIT)
 		{
-			t = lookup_table_ex[(addr>>5) & 0x1fffff];
+			t = lookup_table_ex[(addr >> 5) & 0x1fffff];
 		}
 		else
 		{
-			t = lookup_table[(addr>>5) & 0xfffff];
+			t = lookup_table[(addr >> 5) & 0xfffff];
 		}
 
 		if (t == 0xff) // load to the cache
@@ -126,9 +128,8 @@ namespace PowerPC
 			else
 				t = way_from_plru[plru[set]];
 			// load
-			u8 *p = Memory::GetPointer(addr & ~0x1f);
-			memcpy(data[set][t], p, 32);
-			if (valid[set] & (1<<t))
+			Memory::CopyFromEmu((u8*)data[set][t], (addr & ~0x1f), 32);
+			if (valid[set] & (1 << t))
 			{
 				if (tags[set][t] & (ICACHE_VMEM_BIT >> 12))
 					lookup_table_vmem[((tags[set][t] << 7) | set) & 0xfffff] = 0xff;
@@ -139,17 +140,17 @@ namespace PowerPC
 			}
 
 			if (addr & ICACHE_VMEM_BIT)
-				lookup_table_vmem[(addr>>5) & 0xfffff] = t;
+				lookup_table_vmem[(addr >> 5) & 0xfffff] = t;
 			else if (addr & ICACHE_EXRAM_BIT)
-				lookup_table_ex[(addr>>5) & 0x1fffff] = t;
+				lookup_table_ex[(addr >> 5) & 0x1fffff] = t;
 			else
 				lookup_table[(addr>>5) & 0xfffff] = t;
 			tags[set][t] = tag;
-			valid[set] |= 1<<t;
+			valid[set] |= (1 << t);
 		}
 		// update plru
-		plru[set] = (plru[set] & ~plru_mask[t]) | plru_value[t];
-		u32 res = Common::swap32(data[set][t][(addr>>2)&7]);
+		plru[set] = (plru[set] & ~s_plru_mask[t]) | s_plru_value[t];
+		u32 res = Common::swap32(data[set][t][(addr >> 2) & 7]);
 		return res;
 	}
 

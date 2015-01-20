@@ -2,6 +2,7 @@
 // Licensed under GPLv2
 // Refer to the license.txt file included.
 
+#include "AudioCommon/AudioCommon.h"
 #include "Core/HW/WiimoteEmu/WiimoteEmu.h"
 
 //#define WIIMOTE_SPEAKER_DUMP
@@ -64,8 +65,14 @@ void stopdamnwav(){wav.Stop();ofile.close();}
 
 void Wiimote::SpeakerData(wm_speaker_data* sd)
 {
+	if (!SConfig::GetInstance().m_WiimoteEnableSpeaker)
+		return;
+
 	// TODO consider using static max size instead of new
-	s16 *samples = new s16[sd->length * 2];
+	std::unique_ptr<s16[]> samples(new s16[sd->length * 2]);
+
+	unsigned int sample_rate_dividend;
+	u8 volume_divisor;
 
 	if (m_reg_speaker.format == 0x40)
 	{
@@ -74,6 +81,10 @@ void Wiimote::SpeakerData(wm_speaker_data* sd)
 		{
 			samples[i] = (s16)(s8)sd->data[i];
 		}
+
+		// Following details from http://wiibrew.org/wiki/Wiimote#Speaker
+		sample_rate_dividend = 12000000;
+		volume_divisor = 0xff;
 	}
 	else if (m_reg_speaker.format == 0x00)
 	{
@@ -83,6 +94,37 @@ void Wiimote::SpeakerData(wm_speaker_data* sd)
 			samples[i * 2] = adpcm_yamaha_expand_nibble(m_adpcm_state, (sd->data[i] >> 4) & 0xf);
 			samples[i * 2 + 1] = adpcm_yamaha_expand_nibble(m_adpcm_state, sd->data[i] & 0xf);
 		}
+
+		// Following details from http://wiibrew.org/wiki/Wiimote#Speaker
+		sample_rate_dividend = 6000000;
+
+		// 0 - 127
+		// TODO: does it go beyond 127 for format == 0x40?
+		volume_divisor = 0x7F;
+	}
+	else
+	{
+		ERROR_LOG(WII_IPC_WIIMOTE, "Unknown speaker format %x\n", m_reg_speaker.format);
+		return;
+	}
+
+	// Speaker Pan
+	unsigned int vol = (unsigned int)(m_options->settings[4]->GetValue() * 100);
+
+	if (m_reg_speaker.sample_rate)
+	{
+		unsigned int sample_rate = sample_rate_dividend / m_reg_speaker.sample_rate;
+		float speaker_volume_ratio = (float)m_reg_speaker.volume / volume_divisor;
+		unsigned int left_volume = (unsigned int)((128 + vol) * speaker_volume_ratio);
+		unsigned int right_volume = (unsigned int)((128 - vol) * speaker_volume_ratio);
+
+		if (left_volume > 255)
+			left_volume = 255;
+		if (right_volume > 255)
+			right_volume = 255;
+
+		g_sound_stream->GetMixer()->SetWiimoteSpeakerVolume(left_volume, right_volume);
+		g_sound_stream->GetMixer()->PushWiimoteSpeakerSamples(samples.get(), sd->length, sample_rate);
 	}
 
 #ifdef WIIMOTE_SPEAKER_DUMP
@@ -96,7 +138,7 @@ void Wiimote::SpeakerData(wm_speaker_data* sd)
 		OpenFStream(ofile, "rmtdump.bin", ofile.binary | ofile.out);
 		wav.Start("rmtdump.wav", 6000/*Common::swap16(m_reg_speaker.sample_rate)*/);
 	}
-	wav.AddMonoSamples(samples, sd->length*2);
+	wav.AddMonoSamples(samples.get(), sd->length*2);
 	if (ofile.good())
 	{
 		for (int i = 0; i < sd->length; i++)
@@ -106,8 +148,6 @@ void Wiimote::SpeakerData(wm_speaker_data* sd)
 	}
 	num++;
 #endif
-
-	delete[] samples;
 }
 
 }

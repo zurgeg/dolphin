@@ -6,10 +6,17 @@
 
 #include <string>
 #include "Common/ChunkFile.h"
+#include "Core/MachineContext.h"
 #include "Core/PowerPC/CPUCoreBase.h"
 
 namespace JitInterface
 {
+	enum class ExceptionType
+	{
+		EXCEPTIONS_FIFO_WRITE,
+		EXCEPTIONS_PAIRED_QUANTIZE
+	};
+
 	void DoState(PointerWrap &p);
 
 	CPUCoreBase *InitJitCore(int core);
@@ -20,21 +27,22 @@ namespace JitInterface
 	void WriteProfileResults(const std::string& filename);
 
 	// Memory Utilities
-	bool IsInCodeSpace(u8 *ptr);
-	const u8 *BackPatch(u8 *codePtr, u32 em_address, void *ctx);
+	bool HandleFault(uintptr_t access_address, SContext* ctx);
 
 	// used by JIT to read instructions
-	u32 Read_Opcode_JIT(const u32 _Address);
+	u32 ReadOpcodeJIT(const u32 _Address);
 
 	// Clearing CodeCache
 	void ClearCache();
 
 	void ClearSafe();
 
-	void InvalidateICache(u32 address, u32 size);
+	// If "forced" is true, a recompile is being requested on code that hasn't been modified.
+	void InvalidateICache(u32 address, u32 size, bool forced);
+
+	void CompileExceptionCheck(ExceptionType type);
 
 	void Shutdown();
 }
-extern bool bFakeVMEM;
 extern bool bMMU;
 

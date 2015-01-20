@@ -27,32 +27,25 @@
 #include "DolphinWX/HotkeyDlg.h"
 #include "DolphinWX/WXInputBase.h"
 
-class wxWindow;
-
-BEGIN_EVENT_TABLE(HotkeyConfigDialog,wxDialog)
-	EVT_COMMAND_RANGE(0, NUM_HOTKEYS - 1, wxEVT_BUTTON, HotkeyConfigDialog::OnButtonClick)
-	EVT_TIMER(wxID_ANY, HotkeyConfigDialog::OnButtonTimer)
-END_EVENT_TABLE()
-
 HotkeyConfigDialog::HotkeyConfigDialog(wxWindow *parent, wxWindowID id, const wxString &title,
 		const wxPoint &position, const wxSize& size, long style)
 : wxDialog(parent, id, title, position, size, style)
+, m_ButtonMappingTimer(this)
 {
 	CreateHotkeyGUIControls();
 
-#if wxUSE_TIMER
-	m_ButtonMappingTimer = new wxTimer(this, wxID_ANY);
+	Bind(wxEVT_BUTTON, &HotkeyConfigDialog::OnButtonClick, this, 0, NUM_HOTKEYS - 1);
+	Bind(wxEVT_TIMER, &HotkeyConfigDialog::OnButtonTimer, this);
+
 	g_Pressed = 0;
 	g_Modkey = 0;
 	ClickedButton = nullptr;
 	GetButtonWaitingID = 0;
 	GetButtonWaitingTimer = 0;
-#endif
 }
 
 HotkeyConfigDialog::~HotkeyConfigDialog()
 {
-	delete m_ButtonMappingTimer;
 }
 
 // Save keyboard key mapping
@@ -62,10 +55,10 @@ void HotkeyConfigDialog::SaveButtonMapping(int Id, int Key, int Modkey)
 	SConfig::GetInstance().m_LocalCoreStartupParameter.iHotkeyModifier[Id] = Modkey;
 }
 
-void HotkeyConfigDialog::EndGetButtons(void)
+void HotkeyConfigDialog::EndGetButtons()
 {
 	wxTheApp->Unbind(wxEVT_KEY_DOWN, &HotkeyConfigDialog::OnKeyDown, this);
-	m_ButtonMappingTimer->Stop();
+	m_ButtonMappingTimer.Stop();
 	GetButtonWaitingTimer = 0;
 	GetButtonWaitingID = 0;
 	ClickedButton = nullptr;
@@ -100,8 +93,8 @@ void HotkeyConfigDialog::OnKeyDown(wxKeyEvent& event)
 				// We compare against this to see if we have a duplicate bind attempt.
 				wxString existingHotkey = btn->GetLabel();
 
-				wxString tentativeModKey = InputCommon::WXKeymodToString(g_Modkey);
-				wxString tentativePressedKey = InputCommon::WXKeyToString(g_Pressed);
+				wxString tentativeModKey = WxUtils::WXKeymodToString(g_Modkey);
+				wxString tentativePressedKey = WxUtils::WXKeyToString(g_Pressed);
 				wxString tentativeHotkey(tentativeModKey + tentativePressedKey);
 
 				// Found a button that already has this binding. Unbind it.
@@ -114,8 +107,8 @@ void HotkeyConfigDialog::OnKeyDown(wxKeyEvent& event)
 
 			// Proceed to apply the binding to the selected button.
 			SetButtonText(ClickedButton->GetId(),
-					InputCommon::WXKeyToString(g_Pressed),
-					InputCommon::WXKeymodToString(g_Modkey));
+					WxUtils::WXKeyToString(g_Pressed),
+					WxUtils::WXKeymodToString(g_Modkey));
 			SaveButtonMapping(ClickedButton->GetId(), g_Pressed, g_Modkey);
 		}
 		EndGetButtons();
@@ -135,19 +128,17 @@ void HotkeyConfigDialog::DoGetButtons(int _GetId)
 	const int TimesPerSecond = 40; // How often to run the check
 
 	// If the Id has changed or the timer is not running we should start one
-	if ( GetButtonWaitingID != _GetId || !m_ButtonMappingTimer->IsRunning() )
+	if ( GetButtonWaitingID != _GetId || !m_ButtonMappingTimer.IsRunning() )
 	{
-		if (m_ButtonMappingTimer->IsRunning())
-			m_ButtonMappingTimer->Stop();
+		if (m_ButtonMappingTimer.IsRunning())
+			m_ButtonMappingTimer.Stop();
 
 		// Save the button Id
 		GetButtonWaitingID = _GetId;
 		GetButtonWaitingTimer = 0;
 
 		// Start the timer
-		#if wxUSE_TIMER
-		m_ButtonMappingTimer->Start(1000 / TimesPerSecond);
-		#endif
+		m_ButtonMappingTimer.Start(1000 / TimesPerSecond);
 	}
 
 	// Process results
@@ -177,7 +168,7 @@ void HotkeyConfigDialog::OnButtonClick(wxCommandEvent& event)
 {
 	event.Skip();
 
-	if (m_ButtonMappingTimer->IsRunning())
+	if (m_ButtonMappingTimer.IsRunning())
 		return;
 
 	wxTheApp->Bind(wxEVT_KEY_DOWN, &HotkeyConfigDialog::OnKeyDown, this);
@@ -194,7 +185,7 @@ void HotkeyConfigDialog::OnButtonClick(wxCommandEvent& event)
 
 #define HOTKEY_NUM_COLUMNS 2
 
-void HotkeyConfigDialog::CreateHotkeyGUIControls(void)
+void HotkeyConfigDialog::CreateHotkeyGUIControls()
 {
 	const wxString pageNames[] =
 	{
@@ -228,6 +219,10 @@ void HotkeyConfigDialog::CreateHotkeyGUIControls(void)
 		_("Connect Wiimote 4"),
 		_("Connect Balance Board"),
 
+		_("Volume Up"),
+		_("Volume Down"),
+		_("Volume Toggle Mute"),
+
 		_("Toggle IR"),
 		_("Toggle Aspect Ratio"),
 		_("Toggle EFB Copies"),
@@ -235,6 +230,22 @@ void HotkeyConfigDialog::CreateHotkeyGUIControls(void)
 		_("Toggle Frame limit"),
 		_("Increase Frame limit"),
 		_("Decrease Frame limit"),
+
+		_("Freelook Increase Speed"),
+		_("Freelook Decrease Speed"),
+		_("Freelook Reset Speed"),
+		_("Freelook Move Up"),
+		_("Freelook Move Down"),
+		_("Freelook Move Left"),
+		_("Freelook Move Right"),
+		_("Freelook Zoom In"),
+		_("Freelook Zoom Out"),
+		_("Freelook Reset"),
+
+		_("Increase Depth"),
+		_("Decrease Depth"),
+		_("Increase Convergence"),
+		_("Decrease Convergence"),
 
 		_("Load State Slot 1"),
 		_("Load State Slot 2"),
@@ -257,6 +268,20 @@ void HotkeyConfigDialog::CreateHotkeyGUIControls(void)
 		_("Save State Slot 8"),
 		_("Save State Slot 9"),
 		_("Save State Slot 10"),
+
+		_("Select State Slot 1"),
+		_("Select State Slot 2"),
+		_("Select State Slot 3"),
+		_("Select State Slot 4"),
+		_("Select State Slot 5"),
+		_("Select State Slot 6"),
+		_("Select State Slot 7"),
+		_("Select State Slot 8"),
+		_("Select State Slot 9"),
+		_("Select State Slot 10"),
+
+		_("Save to selected slot"),
+		_("Load from selected slot"),
 
 		_("Load State Last 1"),
 		_("Load State Last 2"),
@@ -285,7 +310,7 @@ void HotkeyConfigDialog::CreateHotkeyGUIControls(void)
 
 	for (int j = 0; j < 2; j++)
 	{
-		wxPanel *Page = new wxPanel(Notebook, wxID_ANY);
+		wxPanel *Page = new wxPanel(Notebook);
 		Notebook->AddPage(Page, pageNames[j]);
 
 		wxGridBagSizer *sHotkeys = new wxGridBagSizer();
@@ -313,8 +338,8 @@ void HotkeyConfigDialog::CreateHotkeyGUIControls(void)
 			m_Button_Hotkeys[i]->SetFont(m_SmallFont);
 			m_Button_Hotkeys[i]->SetToolTip(_("Left click to detect hotkeys.\nEnter space to clear."));
 			SetButtonText(i,
-					InputCommon::WXKeyToString(SConfig::GetInstance().m_LocalCoreStartupParameter.iHotkey[i]),
-					InputCommon::WXKeymodToString(
+					WxUtils::WXKeyToString(SConfig::GetInstance().m_LocalCoreStartupParameter.iHotkey[i]),
+					WxUtils::WXKeymodToString(
 						SConfig::GetInstance().m_LocalCoreStartupParameter.iHotkeyModifier[i]));
 
 			wxBoxSizer *sHotkey = new wxBoxSizer(wxHORIZONTAL);
