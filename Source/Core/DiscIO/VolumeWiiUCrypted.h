@@ -38,17 +38,26 @@ public:
 	bool SupportsIntegrityCheck() const override { return true; }
 	bool CheckIntegrity() const override;
 
+	bool ChangePartition(u64 offset) override;
+
+	void SetTitleKey(u8 *key);
+	void UseTitleKey(bool _use);
+
+
 private:
-	IBlobReader* m_pReader;
+	std::unique_ptr<IBlobReader> m_pReader;
+	std::unique_ptr<aes_context> m_AES_ctx;
 
 	u8* m_pBuffer;
-	aes_context* m_AES_ctx;
+
 	u8 m_pDiscKey[16];
 	u8 m_pCommonKey[16];
 	u8 m_pTitleKey[16];
 
 	u64 m_VolumeOffset;
 	u64 dataOffset;
+	
+	bool m_useTitleKey;
 
 	mutable u64 m_LastDecryptedBlockOffset;
 	mutable unsigned char m_LastDecryptedBlock[0x8000];

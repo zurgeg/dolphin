@@ -13,6 +13,7 @@
 #include "Common/StringUtil.h"
 
 #include "DiscIO/Blob.h"
+#include "DiscIO/FileSystem.h"
 #include "DiscIO/Volume.h"
 #include "DiscIO/VolumeCreator.h"
 #include "DiscIO/VolumeDirectory.h"
@@ -261,6 +262,9 @@ static u32 PointerRead32(u8 *p)
 
 static IVolume* CreateVolumeFromCryptedWiiUImage(IBlobReader& _rReader, u32 _PartitionGroup, u32 _VolumeType, u32 _VolumeNum, bool Korean)
 {
+	if (_PartitionGroup > 0)
+		return nullptr;
+
 	CBlobBigEndianReader Reader(_rReader);
 	// Read game ID
 	u32 game_id = Reader.Read32(0x06);
@@ -343,7 +347,7 @@ static IVolume* CreateVolumeFromCryptedWiiUImage(IBlobReader& _rReader, u32 _Par
 			return new CVolumeWiiU(&_rReader);
 	}
 
-	// Read cluster at 0x18000, then decrypt it using title key
+	// Read cluster at 0x18000, then decrypt it using the disc key
 	u8 encrypted[0x8000], decrypted[0x8000];
 	_rReader.Read(0x18000, 0x8000, encrypted);
 	aes_context AES_ctx;
@@ -363,6 +367,46 @@ static IVolume* CreateVolumeFromCryptedWiiUImage(IBlobReader& _rReader, u32 _Par
 	// Check if we're looking for a valid partition
 	if ((int)_VolumeNum != -1 && _VolumeNum >= numPartitions)
 		return nullptr;
+
+	// First create partition 0
+	u32 offset = 0x8000 * PointerRead32(&decrypted[0x800 + 0x80 * _VolumeNum + 0x20]);
+	CVolumeWiiUCrypted *volume = new CVolumeWiiUCrypted(&_rReader, offset, title_key, s_master_key_wiiu);
+	DiscIO::IFileSystem* _rFileSystem = DiscIO::CreateFileSystem(volume);
+	size_t FileSize = (size_t)_rFileSystem->GetFileSize("title.tik");
+	if (FileSize > 0)
+	{
+		u8 *m_pTikFile = new u8[FileSize];
+		if (m_pTikFile)
+		{
+			_rFileSystem->ReadFile("02/title.tik", m_pTikFile, FileSize);
+			u8 SubKey[16];
+			memcpy(SubKey, &m_pTikFile[0x1bf], 16);
+			NOTICE_LOG(WIIMOTE, "Encrypted Title KEY : %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\n\t",
+				SubKey[0], SubKey[1], SubKey[2], SubKey[3], SubKey[4], SubKey[5], SubKey[6], SubKey[7], SubKey[8], SubKey[9], SubKey[10], SubKey[11], SubKey[12], SubKey[13], SubKey[14], SubKey[15]);
+
+			u8 IV[16];
+			memset(IV, 0, 16);
+
+			u8 decrypted_key[16];
+			aes_setkey_dec(&AES_ctx, s_master_key_wiiu, 128);
+			aes_crypt_cbc(&AES_ctx, AES_DECRYPT, 16, IV, SubKey, decrypted_key);
+			NOTICE_LOG(WIIMOTE, "Decrypted Title KEY : %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x\n\t",
+				decrypted_key[0], decrypted_key[1], decrypted_key[2], decrypted_key[3], decrypted_key[4], decrypted_key[5], decrypted_key[6], decrypted_key[7], decrypted_key[8], decrypted_key[9], decrypted_key[10], decrypted_key[11], decrypted_key[12], decrypted_key[13], decrypted_key[14], decrypted_key[15]);
+			volume->SetTitleKey(decrypted_key);
+		}
+		delete[] m_pTikFile;
+	}
+	FileSize = (size_t)_rFileSystem->GetFileSize("02/title.tmd");
+	if (FileSize > 0)
+	{
+		u8 *m_pTmdFile = new u8[FileSize];
+		if (m_pTmdFile)
+		{
+			_rFileSystem->ReadFile("02/title.tmd", m_pTmdFile, FileSize);
+		}
+		delete[] m_pTmdFile;
+	}
+	delete _rFileSystem;
 
 	// return the partition type specified or number
 	// types: 0 = game, 1 = firmware update, 2 = channel installer
@@ -393,13 +437,17 @@ static IVolume* CreateVolumeFromCryptedWiiUImage(IBlobReader& _rReader, u32 _Par
 			if (type == _VolumeType)
 			{
 				u32 offset = 0x8000 * PointerRead32(&decrypted[0x800 + 0x80 * i + 0x20]);
-				return new CVolumeWiiUCrypted(&_rReader, offset, title_key, s_master_key_wiiu);
+				volume->UseTitleKey(type == 0);
+				volume->ChangePartition(offset);
+				return volume;
 			}
 		}
 		return nullptr;
 	}
-	u32 offset = 0x8000 * PointerRead32(&decrypted[0x800 + 0x80 * _VolumeNum + 0x20]);
-	return new CVolumeWiiUCrypted(&_rReader, offset, title_key, s_master_key_wiiu);
+	offset = 0x8000 * PointerRead32(&decrypted[0x800 + 0x80 * _VolumeNum + 0x20]);
+	volume->UseTitleKey(PointerRead16(&decrypted[0x800 + 0x80 * 0]) == 0x474D);
+	volume->ChangePartition(offset);
+	return volume;
 }
 
 EDiscType GetDiscType(IBlobReader& _rReader)

@@ -21,27 +21,49 @@ namespace DiscIO
 CVolumeWiiUCrypted::CVolumeWiiUCrypted(IBlobReader* _pReader, u64 _VolumeOffset,
 									 const unsigned char* _pDiscKey, const unsigned char* _pCommonKey)
 	: m_pReader(_pReader),
+	m_AES_ctx(new aes_context),
 	m_pBuffer(nullptr),
 	m_VolumeOffset(_VolumeOffset),
 	dataOffset(0),
-	m_LastDecryptedBlockOffset(-1)
+	m_LastDecryptedBlockOffset(-1),
+	m_useTitleKey(false)
 {
 	memcpy(m_pDiscKey, _pDiscKey, 16);
 	memcpy(m_pCommonKey, _pCommonKey, 16);
-	m_AES_ctx = new aes_context;
-	aes_setkey_dec(m_AES_ctx, _pDiscKey, 128);
+	if (m_useTitleKey)
+		aes_setkey_dec(m_AES_ctx.get(), m_pTitleKey, 128);
+	else
+		aes_setkey_dec(m_AES_ctx.get(), m_pDiscKey, 128);
 	m_pBuffer = new u8[0x8000];
 }
 
+void CVolumeWiiUCrypted::SetTitleKey(u8 *key)
+{
+	memcpy(m_pTitleKey, key, 16);
+}
+
+void CVolumeWiiUCrypted::UseTitleKey(bool _use)
+{
+	m_useTitleKey = _use;
+}
+
+bool CVolumeWiiUCrypted::ChangePartition(u64 offset)
+{
+	m_VolumeOffset = offset;
+	m_LastDecryptedBlockOffset = -1;
+
+	//DiscIO::VolumeKeyForParition(*m_pReader, offset, volume_key);
+	if (m_useTitleKey)
+		aes_setkey_dec(m_AES_ctx.get(), m_pTitleKey, 128);
+	else
+		aes_setkey_dec(m_AES_ctx.get(), m_pDiscKey, 128);
+	return true;
+}
 
 CVolumeWiiUCrypted::~CVolumeWiiUCrypted()
 {
-	delete m_pReader; // is this really our responsibility?
-	m_pReader = nullptr;
 	delete[] m_pBuffer;
 	m_pBuffer = nullptr;
-	delete m_AES_ctx;
-	m_AES_ctx = nullptr;
 }
 
 bool CVolumeWiiUCrypted::RAWRead( u64 _Offset, u64 _Length, u8* _pBuffer ) const
@@ -84,7 +106,7 @@ bool CVolumeWiiUCrypted::Read(u64 _ReadOffset, u64 _Length, u8* _pBuffer, bool d
 		if (m_LastDecryptedBlockOffset != Block)
 		{
 			u8 IV[16] = { 0 };
-			aes_crypt_cbc(m_AES_ctx, AES_DECRYPT, 0x8000, IV, m_pBuffer, m_LastDecryptedBlock);
+			aes_crypt_cbc(m_AES_ctx.get(), AES_DECRYPT, 0x8000, IV, m_pBuffer, m_LastDecryptedBlock);
 
 			m_LastDecryptedBlockOffset = Block;
 		}
@@ -105,8 +127,8 @@ bool CVolumeWiiUCrypted::Read(u64 _ReadOffset, u64 _Length, u8* _pBuffer, bool d
 
 bool CVolumeWiiUCrypted::GetTitleID(u8* _pBuffer) const
 {
-	// Tik is at m_VolumeOffset size 0x2A4
-	// TitleID offset in tik is 0x1DC
+	// Tik is at ?
+	// Title Key offset in tik is 0x1BF
 	return false;
 }
 
