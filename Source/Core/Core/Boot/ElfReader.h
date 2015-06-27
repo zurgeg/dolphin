@@ -33,6 +33,7 @@ private:
 	// an array of pointers to decompressed sections
 	u8 **decompressed;
 	u32 m_number_of_sections;
+	u32 base_address;
 
 public:
 	ElfReader(void *ptr);
@@ -72,4 +73,5 @@ public:
 
 	// true for Wii U .rpx or .rpl files
 	bool is_rpx = false;
+	bool Relocate();
 };

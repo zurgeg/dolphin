@@ -121,7 +121,7 @@ bool CBoot::Boot_ELF(const std::string& filename)
 	}
 
 	ElfReader reader(mem.data());
-	reader.LoadInto(0x80000000);
+	reader.LoadInto(0x80100000);
 	if (!reader.LoadSymbols())
 	{
 		if (LoadMapFromFilename())

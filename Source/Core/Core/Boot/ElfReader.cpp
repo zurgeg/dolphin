@@ -7,11 +7,18 @@
 
 #include "Common/CommonFuncs.h"
 #include "Common/CommonTypes.h"
+#include "Common/MsgHandler.h"
 
 #include "Core/Boot/ElfReader.h"
 #include "Core/Debugger/Debugger_SymbolMap.h"
 #include "Core/HW/Memmap.h"
 #include "Core/PowerPC/PPCSymbolDB.h"
+
+// Wii U RPL files have import/export sections with an address above 0xc0000000
+// They're not currently loaded by this reader
+static const u32 RPL_VIRTUAL_SECTION_ADDR = 0xc0000000;
+// RPLs are linked to this address by default
+static const u32 RPL_DEFAULT_BASE = 0x2000000;
 
 static void bswap(u32 &w) {w = Common::swap32(w);}
 static void bswap(u16 &w) {w = Common::swap16(w);}
@@ -198,12 +205,14 @@ bool ElfReader::LoadInto(u32 vaddr)
 	sectionAddrs = new u32[GetNumSections()];
 
 	// Should we relocate? (if it's a library not an executable)
-	// Wii U RPX files don't set the ET_EXEC flag, but do set e_entry to the entry point.
-	bRelocate = (header->e_type != ET_EXEC && header->e_entry == 0);
+	// all Wii U RPLs and RPXes are relocateable (and marked as ET_DYN)
+	bRelocate = (header->e_type != ET_EXEC);
 
 	if (bRelocate)
 	{
 		DEBUG_LOG(MASTER_LOG,"Relocatable module");
+		if (is_rpx)
+			vaddr -= RPL_DEFAULT_BASE; // RPLs have a default base of 0x2000000; subtract that when calculating desired load address
 		entryPoint += vaddr;
 	}
 	else
@@ -261,6 +270,10 @@ bool ElfReader::LoadInto(u32 vaddr)
 		if (s->sh_flags & SHF_ALLOC)
 		{
 			INFO_LOG(MASTER_LOG,"Data Section found: %s     Sitting at %08x, size %08x", name, writeAddr, s->sh_size);
+			if (is_rpx && s->sh_addr >= RPL_VIRTUAL_SECTION_ADDR) {
+				INFO_LOG(MASTER_LOG, "RPX: section is >0xc0000000; not loading");
+				continue;
+			}
 			const u8 *src = GetSectionDataPtr(i);
 			u8 *dst = Memory::GetPointer(writeAddr);
 			u32 srcSize = GetSectionSize(i);
@@ -278,6 +291,8 @@ bool ElfReader::LoadInto(u32 vaddr)
 			INFO_LOG(MASTER_LOG,"NonData Section found: %s     Ignoring (size=%08x) (flags=%08x)", name, s->sh_size, s->sh_flags);
 		}
 	}
+	base_address = baseAddress;
+	if (bRelocate) Relocate();
 	INFO_LOG(MASTER_LOG,"Done loading.");
 	return true;
 }
@@ -325,9 +340,12 @@ bool ElfReader::LoadSymbols()
 			int type = symtab[sym].st_info & 0xF;
 			int sectionIndex = Common::swap16(symtab[sym].st_shndx);
 			int value = Common::swap32(symtab[sym].st_value);
+			if (is_rpx && ((u32)value) >= RPL_VIRTUAL_SECTION_ADDR)
+				continue;
 			const char *name = stringBase + Common::swap32(symtab[sym].st_name);
 			if (bRelocate)
-				value += sectionAddrs[sectionIndex];
+				value += base_address;
+			//	value += sectionAddrs[sectionIndex];
 
 			int symtype = Symbol::SYMBOL_DATA;
 			switch (type)
@@ -345,4 +363,99 @@ bool ElfReader::LoadSymbols()
 	}
 	g_symbolDB.Index();
 	return hasSymbols;
+}
+
+
+
+bool ElfReader::Relocate()
+{
+	bool success = true;
+	SectionID sec = GetSectionByName(".symtab");
+	if (sec == -1)
+	{
+		return false;
+	}
+	int stringSection = sections[sec].sh_link;
+	const char *stringBase = (const char *)GetSectionDataPtr(stringSection);
+
+	//We have a symbol table!
+	Elf32_Sym *symtab = (Elf32_Sym *)(GetSectionDataPtr(sec));
+
+	for (int i = 0; i < GetNumSections(); i++)
+	{
+		Elf32_Shdr *s = &sections[i];
+		const char *name = GetSectionName(i);
+		if (s->sh_type == SHT_REL)
+		{
+			PanicAlert("Failed to relocate ELF: SHT_REL sections are not handled");
+			continue;
+		}
+		else if (s->sh_type == SHT_RELA)
+		{
+			int numRels = s->sh_size / s->sh_entsize;
+			Elf32_Rela* relaSection = (Elf32_Rela*)GetSectionDataPtr(i);
+			for (int i = 0; i < numRels; i++)
+			{
+				Elf32_Rela* rela = relaSection + i;
+				uint32_t offset = Common::swap32(rela->r_offset);
+				uint32_t info = Common::swap32(rela->r_info);
+				uint32_t addend = Common::swap32(rela->r_addend);
+				if (offset >= RPL_VIRTUAL_SECTION_ADDR) // fexports section; todo
+					continue;
+
+				uint32_t symIndex = ELF32_R_SYM(info);
+				uint32_t relocType = ELF32_R_TYPE(info);
+				Elf32_Sym* symbol = symtab + symIndex;
+				const char *symbolName = stringBase + Common::swap32(symbol->st_name);
+				DEBUG_LOG(BOOT, "Relocation: offset=%x, addend=%x, sym=%s, relocType=%d", offset, addend, symbolName, relocType);
+
+				u32 symValue = Common::swap32(symbol->st_value);
+				u32 symAddr = symValue + base_address;
+				if (symValue >= RPL_VIRTUAL_SECTION_ADDR) // import
+				{
+					// TODO: actually resolve based on lib name and import table
+					Symbol* globalSymbol = g_symbolDB.GetSymbolFromName(symbolName);
+					if (!globalSymbol)
+					{
+						ERROR_LOG(BOOT, "Failed to resolve symbol %s", symbolName);
+						symValue = 0xdeadbeef; // FIXME: properly handle this error
+						success = false;
+					}
+					else
+					{
+						ERROR_LOG(BOOT, "using global symbol for %s", symbolName);
+						symAddr = globalSymbol->address;
+					}
+				}
+				symAddr += addend;
+
+				u32 writeAddr = offset + base_address;
+
+				switch (relocType)
+				{
+				case R_PPC_ADDR32:
+					Memory::Write_U32(symAddr, writeAddr);
+					break;
+				case R_PPC_ADDR16_LO:
+					Memory::Write_U16(symAddr & 0xffff, writeAddr);
+					break;
+				case R_PPC_ADDR16_HI:
+					Memory::Write_U16((symAddr >> 16) & 0xffff, writeAddr);
+					break;
+				case R_PPC_ADDR16_HA:
+					Memory::Write_U16((((symAddr >> 16) + ((symAddr & 0x8000) ? 1 : 0)) & 0xFFFF), writeAddr);
+					break;
+				case R_PPC_REL24:
+					Memory::Write_U32((Memory::Read_U32(writeAddr) & 0xff000000) | ((symAddr - offset) >> 2), writeAddr);
+					break;
+				default:
+					// I don't think any Wii U RPX executable uses relocations other than the above types
+					PanicAlert("Failed to relocate ELF: unsupported relocation type %d", relocType);
+					success = false;
+					break;
+				}
+			}
+		}
+	}
+	return success;
 }
