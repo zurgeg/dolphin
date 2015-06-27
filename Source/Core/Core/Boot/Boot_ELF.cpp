@@ -2,6 +2,7 @@
 // Licensed under GPLv2
 // Refer to the license.txt file included.
 
+#include "Common/CommonPaths.h"
 #include "Common/FileUtil.h"
 
 #include "Core/Boot/Boot.h"
@@ -109,6 +110,58 @@ bool CBoot::IsElfWiiU(const std::string& filename)
 	return isWiiU;
 }
 
+static u32 rpx_load_address;
+
+static ElfReader* BootOneRPX(const std::string& name, std::vector<std::string>& ld_library_path,
+	std::map<std::string, std::unique_ptr<ElfReader> >& readers)
+{
+	auto readerFind = readers.find(name);
+	if (readerFind != readers.end())
+		return readers.at(name).get();
+
+	std::string filename;
+	bool foundFile = false;
+	for each (std::string path in ld_library_path)
+	{
+		if (File::Exists(path + DIR_SEP + name))
+		{
+			foundFile = true;
+			filename = path + DIR_SEP + name;
+			break;
+		}
+	}
+	if (!foundFile)
+	{
+		ERROR_LOG(BOOT, "Unable to boot RPX: missing %s", name.c_str());
+		return nullptr;
+	}
+	WARN_LOG(BOOT, "Loading %s", filename);
+	const u64 filesize = File::GetSize(filename);
+	std::vector<u8> mem((size_t)filesize);
+
+	{
+		File::IOFile f(filename, "rb");
+		f.ReadBytes(mem.data(), (size_t)filesize);
+	}
+
+	std::unique_ptr<ElfReader> reader(new ElfReader(mem.data()));
+
+	for each (std::string name in reader->GetDependencies())
+	{
+		BootOneRPX(name, ld_library_path, readers);
+	}
+	WARN_LOG(BOOT, "Loading %s into %x", name.c_str(), rpx_load_address);
+	reader->LoadInto(rpx_load_address);
+
+	if (reader->LoadSymbols())
+	{
+		HLE::PatchFunctions();
+	}
+	rpx_load_address += reader->GetLoadedLength();
+	readers[name] = std::move(reader);
+	return readers.at(name).get();
+}
+
 
 bool CBoot::Boot_ELF(const std::string& filename)
 {
@@ -121,7 +174,7 @@ bool CBoot::Boot_ELF(const std::string& filename)
 	}
 
 	ElfReader reader(mem.data());
-	reader.LoadInto(0x80100000);
+	reader.LoadInto(0x80000000);
 	if (!reader.LoadSymbols())
 	{
 		if (LoadMapFromFilename())
@@ -135,4 +188,33 @@ bool CBoot::Boot_ELF(const std::string& filename)
 	PC = reader.GetEntryPoint();
 
 	return true;
+}
+
+bool CBoot::Boot_RPX(const std::string& filename)
+{
+	size_t lastSlash = filename.rfind(DIR_SEP);
+	if (lastSlash == std::string::npos)
+		lastSlash = filename.rfind("\\"); // Windows
+	std::string dirName, name;
+	if (lastSlash == std::string::npos)
+	{
+		dirName = "";
+		name = filename;
+	}
+	else
+	{
+		dirName = filename.substr(0, lastSlash);
+		name = filename.substr(lastSlash + 1);
+	}
+	std::map<std::string, std::unique_ptr<ElfReader> > readers;
+	// FIXME: remove hardcoded path
+	std::vector<std::string> ld_library_path = { dirName, "P:/docs/wiiu/titles/000500101000400A/11464/rpl" };
+	rpx_load_address = 0x80100000;
+	ElfReader* reader = BootOneRPX(name, ld_library_path, readers);
+	if (reader == nullptr)
+		return false;
+	PC = reader->GetEntryPoint();
+	GPR(1) = 0x84000000; // setup stack
+	return true;
+
 }

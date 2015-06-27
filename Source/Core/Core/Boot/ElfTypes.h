@@ -179,6 +179,8 @@ enum ElfSectionFlags
 #define	R_PPC_SECTOFF_HI	35
 #define	R_PPC_SECTOFF_HA	36
 
+#define R_PPC_EMB_SDA21		109
+
 // Segment types
 #define PT_NULL             0
 #define PT_LOAD             1

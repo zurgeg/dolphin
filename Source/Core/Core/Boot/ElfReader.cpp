@@ -197,6 +197,20 @@ const u8 *ElfReader::GetSectionDataPtr(int section) const
 	}
 }
 
+// PowerPC page sizes
+static u32 PPC_PAGE_SIZE = 4096;
+static u32 PPC_PAGE_MASK = ~(PPC_PAGE_SIZE - 1);
+
+static inline u32 ppc_page_begin(u32 p)
+{
+	return p & PPC_PAGE_MASK;
+}
+
+static inline u32 ppc_page_end(u32 p)
+{
+	return ppc_page_begin(p + (PPC_PAGE_SIZE - 1));
+}
+
 bool ElfReader::LoadInto(u32 vaddr)
 {
 	DEBUG_LOG(MASTER_LOG,"String section: %i", header->e_shstrndx);
@@ -211,8 +225,6 @@ bool ElfReader::LoadInto(u32 vaddr)
 	if (bRelocate)
 	{
 		DEBUG_LOG(MASTER_LOG,"Relocatable module");
-		if (is_rpx)
-			vaddr -= RPL_DEFAULT_BASE; // RPLs have a default base of 0x2000000; subtract that when calculating desired load address
 		entryPoint += vaddr;
 	}
 	else
@@ -258,12 +270,20 @@ bool ElfReader::LoadInto(u32 vaddr)
 	
 	INFO_LOG(MASTER_LOG,"%i sections:", header->e_shnum);
 
+	u32 lastSuggestedAddress = 0;
+	u32 lastLength = 0;
+	u32 lastWriteAddress = baseAddress;
+
+	u32 minAddr = 0xffffffff, maxAddr = 0;
+
 	for (int i=0; i<GetNumSections(); i++)
 	{
 		Elf32_Shdr *s = &sections[i];
 		const char *name = GetSectionName(i);
 
-		u32 writeAddr = s->sh_addr + baseAddress;
+		u32 writeAddr = lastWriteAddress + lastLength;
+		if (lastSuggestedAddress + lastLength != s->sh_addr) // not contiguous
+			writeAddr = ppc_page_end(writeAddr);
 		// sectionOffsets[i] = writeAddr - vaddr;
 		sectionAddrs[i] = writeAddr;
 
@@ -285,13 +305,27 @@ bool ElfReader::LoadInto(u32 vaddr)
 			// zero out bss
 			for (u32 num = srcSize; num < dstSize; ++num)
 				Memory::Write_U8(0, writeAddr + num);
+
+			// for length calculations
+			if (minAddr > writeAddr)
+				minAddr = writeAddr;
+			if (maxAddr < writeAddr + dstSize)
+				maxAddr = writeAddr + dstSize;
+
+			if (header->e_entry >= s->sh_addr && header->e_entry < s->sh_addr + dstSize)
+				entryPoint = (header->e_entry - s->sh_addr) + writeAddr;
+
+			lastWriteAddress = writeAddr;
+			lastLength = dstSize;
+			lastSuggestedAddress = s->sh_addr;
+
 		}
 		else
 		{
 			INFO_LOG(MASTER_LOG,"NonData Section found: %s     Ignoring (size=%08x) (flags=%08x)", name, s->sh_size, s->sh_flags);
 		}
 	}
-	base_address = baseAddress;
+	loaded_length = ppc_page_end(maxAddr - minAddr);
 	if (bRelocate) Relocate();
 	INFO_LOG(MASTER_LOG,"Done loading.");
 	return true;
@@ -344,8 +378,7 @@ bool ElfReader::LoadSymbols()
 				continue;
 			const char *name = stringBase + Common::swap32(symtab[sym].st_name);
 			if (bRelocate)
-				value += base_address;
-			//	value += sectionAddrs[sectionIndex];
+				value = (value - sections[sectionIndex].sh_addr) + sectionAddrs[sectionIndex];
 
 			int symtype = Symbol::SYMBOL_DATA;
 			switch (type)
@@ -392,7 +425,9 @@ bool ElfReader::Relocate()
 		}
 		else if (s->sh_type == SHT_RELA)
 		{
-			int numRels = s->sh_size / s->sh_entsize;
+			int numRels = GetSectionSize(i) / s->sh_entsize;
+			int relSectionIndex = s->sh_info;
+
 			Elf32_Rela* relaSection = (Elf32_Rela*)GetSectionDataPtr(i);
 			for (int i = 0; i < numRels; i++)
 			{
@@ -410,7 +445,8 @@ bool ElfReader::Relocate()
 				DEBUG_LOG(BOOT, "Relocation: offset=%x, addend=%x, sym=%s, relocType=%d", offset, addend, symbolName, relocType);
 
 				u32 symValue = Common::swap32(symbol->st_value);
-				u32 symAddr = symValue + base_address;
+				u32 symSectionIndex = Common::swap16(symbol->st_shndx);
+				u32 symAddr = (symValue - sections[symSectionIndex].sh_addr) + sectionAddrs[symSectionIndex];
 				if (symValue >= RPL_VIRTUAL_SECTION_ADDR) // import
 				{
 					// TODO: actually resolve based on lib name and import table
@@ -423,13 +459,13 @@ bool ElfReader::Relocate()
 					}
 					else
 					{
-						ERROR_LOG(BOOT, "using global symbol for %s", symbolName);
+						DEBUG_LOG(BOOT, "using global symbol for %s", symbolName);
 						symAddr = globalSymbol->address;
 					}
 				}
 				symAddr += addend;
 
-				u32 writeAddr = offset + base_address;
+				u32 writeAddr = (offset - sections[relSectionIndex].sh_addr) + sectionAddrs[relSectionIndex];
 
 				switch (relocType)
 				{
@@ -446,8 +482,28 @@ bool ElfReader::Relocate()
 					Memory::Write_U16((((symAddr >> 16) + ((symAddr & 0x8000) ? 1 : 0)) & 0xFFFF), writeAddr);
 					break;
 				case R_PPC_REL24:
-					Memory::Write_U32((Memory::Read_U32(writeAddr) & 0xff000000) | ((symAddr - offset) >> 2), writeAddr);
+					printf("symaddr %x offset %x sub %x writeaddr sub %x", symAddr, offset, symAddr - offset, symAddr - writeAddr);
+					Memory::Write_U32((Memory::Read_U32(writeAddr) & 0xfc000003) | (((symAddr - writeAddr) >> 2) & 0xffffff) << 2, writeAddr);
 					break;
+				case R_PPC_EMB_SDA21: {
+					u32 instr = Memory::Read_U32(writeAddr) & 0xffe00000; // top 6 bits of instruction + top 5 bits for destination register
+					u32 reg;
+					const char* sectname = GetSectionName(symSectionIndex);
+					if (!strcmp(sectname, ".sdata") || !strcmp(sectname, ".sbss"))
+						reg = 13;
+					else if (!strcmp(sectname, ".sdata2") || !strcmp(sectname, ".sbss2"))
+						reg = 2;
+					else if (!strcmp(sectname, ".sdata0") || !strcmp(sectname, ".sbss0"))
+						reg = 0;
+					else
+					{
+						PanicAlert("Invalid relocation for EMB_SDA21: symbol in invalid section %s", sectname);
+						break;
+					}
+					u32 off = symAddr & 0xffff;
+					Memory::Write_U32(instr | (reg << 16) | off, writeAddr);
+					break;
+				}
 				default:
 					// I don't think any Wii U RPX executable uses relocations other than the above types
 					PanicAlert("Failed to relocate ELF: unsupported relocation type %d", relocType);
@@ -458,4 +514,20 @@ bool ElfReader::Relocate()
 		}
 	}
 	return success;
+}
+
+std::vector<std::string> ElfReader::GetDependencies()
+{
+	std::vector<std::string> vec;
+	if (!is_rpx) return vec;
+	for (int i = 0; i < header->e_shnum; i++)
+	{
+		const char *secname = GetSectionName(i);
+
+		if (secname != nullptr && strstr(secname, ".fimport_") == secname)
+			vec.emplace_back(std::string(secname + 9) + ".rpl");
+		// FIXME: use the proper import tables: some libraries' import sections have different names
+		// e.g. fimport_nfc.rpl instead of fimport_nfc
+	}
+	return vec;
 }

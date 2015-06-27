@@ -377,7 +377,10 @@ bool CBoot::BootUp()
 		else // Poor man's bootup
 		{
 			Load_FST(elfWii);
-			Boot_ELF(_StartupPara.m_strFilename);
+			if (!elfWiiU)
+				Boot_ELF(_StartupPara.m_strFilename);
+			else
+				Boot_RPX(_StartupPara.m_strFilename);
 		}
 		UpdateDebugger_MapLoaded();
 		Dolphin_Debugger::AddAutoBreakpoints();
