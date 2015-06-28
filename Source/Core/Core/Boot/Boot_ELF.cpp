@@ -113,7 +113,7 @@ bool CBoot::IsElfWiiU(const std::string& filename)
 static u32 rpx_load_address;
 
 static ElfReader* BootOneRPX(const std::string& name, std::vector<std::string>& ld_library_path,
-	std::map<std::string, std::unique_ptr<ElfReader> >& readers)
+	std::map<std::string, std::unique_ptr<ElfReader> >& readers, ElfReader::RPLExportsMap& exports)
 {
 	auto readerFind = readers.find(name);
 	if (readerFind != readers.end())
@@ -135,7 +135,7 @@ static ElfReader* BootOneRPX(const std::string& name, std::vector<std::string>& 
 		ERROR_LOG(BOOT, "Unable to boot RPX: missing %s", name.c_str());
 		return nullptr;
 	}
-	WARN_LOG(BOOT, "Loading %s", filename);
+	DEBUG_LOG(BOOT, "Loading %s", filename.c_str());
 	const u64 filesize = File::GetSize(filename);
 	std::vector<u8> mem((size_t)filesize);
 
@@ -148,16 +148,20 @@ static ElfReader* BootOneRPX(const std::string& name, std::vector<std::string>& 
 
 	for each (std::string name in reader->GetDependencies())
 	{
-		BootOneRPX(name, ld_library_path, readers);
+		BootOneRPX(name, ld_library_path, readers, exports);
 	}
-	WARN_LOG(BOOT, "Loading %s into %x", name.c_str(), rpx_load_address);
+	WARN_LOG(BOOT, "Loading %s at address %x", name.c_str(), rpx_load_address);
 	reader->LoadInto(rpx_load_address);
+	reader->Relocate(exports);
+	reader->LoadExports(name, exports);
 
 	if (reader->LoadSymbols())
 	{
 		HLE::PatchFunctions();
 	}
 	rpx_load_address += reader->GetLoadedLength();
+	if (name == "coreinit.rpl")
+		PC = reader->GetEntryPoint(); // Coreinit needs to be initialized first
 	readers[name] = std::move(reader);
 	return readers.at(name).get();
 }
@@ -207,13 +211,14 @@ bool CBoot::Boot_RPX(const std::string& filename)
 		name = filename.substr(lastSlash + 1);
 	}
 	std::map<std::string, std::unique_ptr<ElfReader> > readers;
+	ElfReader::RPLExportsMap exports;
 	// FIXME: remove hardcoded path
 	std::vector<std::string> ld_library_path = { dirName, "P:/docs/wiiu/titles/000500101000400A/11464/rpl" };
 	rpx_load_address = 0x80100000;
-	ElfReader* reader = BootOneRPX(name, ld_library_path, readers);
+	ElfReader* reader = BootOneRPX(name, ld_library_path, readers, exports);
 	if (reader == nullptr)
 		return false;
-	PC = reader->GetEntryPoint();
+
 	GPR(1) = 0x84000000; // setup stack
 	return true;
 

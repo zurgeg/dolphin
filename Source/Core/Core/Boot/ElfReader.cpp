@@ -20,6 +20,14 @@ static const u32 RPL_VIRTUAL_SECTION_ADDR = 0xc0000000;
 // RPLs are linked to this address by default
 static const u32 RPL_DEFAULT_BASE = 0x2000000;
 
+static const u32 RPL_SHT_EXPORT = SHT_LOUSER + 1;
+static const u32 RPL_SHT_IMPORT = SHT_LOUSER + 2;
+
+struct RPLExport {
+	u32 address;
+	u32 name_index;
+};
+
 static void bswap(u32 &w) {w = Common::swap32(w);}
 static void bswap(u16 &w) {w = Common::swap16(w);}
 
@@ -290,10 +298,6 @@ bool ElfReader::LoadInto(u32 vaddr)
 		if (s->sh_flags & SHF_ALLOC)
 		{
 			INFO_LOG(MASTER_LOG,"Data Section found: %s     Sitting at %08x, size %08x", name, writeAddr, s->sh_size);
-			if (is_rpx && s->sh_addr >= RPL_VIRTUAL_SECTION_ADDR) {
-				INFO_LOG(MASTER_LOG, "RPX: section is >0xc0000000; not loading");
-				continue;
-			}
 			const u8 *src = GetSectionDataPtr(i);
 			u8 *dst = Memory::GetPointer(writeAddr);
 			u32 srcSize = GetSectionSize(i);
@@ -326,7 +330,7 @@ bool ElfReader::LoadInto(u32 vaddr)
 		}
 	}
 	loaded_length = ppc_page_end(maxAddr - minAddr);
-	if (bRelocate) Relocate();
+
 	INFO_LOG(MASTER_LOG,"Done loading.");
 	return true;
 }
@@ -400,7 +404,7 @@ bool ElfReader::LoadSymbols()
 
 
 
-bool ElfReader::Relocate()
+bool ElfReader::Relocate(RPLExportsMap& exports)
 {
 	bool success = true;
 	SectionID sec = GetSectionByName(".symtab");
@@ -435,8 +439,6 @@ bool ElfReader::Relocate()
 				uint32_t offset = Common::swap32(rela->r_offset);
 				uint32_t info = Common::swap32(rela->r_info);
 				uint32_t addend = Common::swap32(rela->r_addend);
-				if (offset >= RPL_VIRTUAL_SECTION_ADDR) // fexports section; todo
-					continue;
 
 				uint32_t symIndex = ELF32_R_SYM(info);
 				uint32_t relocType = ELF32_R_TYPE(info);
@@ -449,9 +451,17 @@ bool ElfReader::Relocate()
 				u32 symAddr = (symValue - sections[symSectionIndex].sh_addr) + sectionAddrs[symSectionIndex];
 				if (symValue >= RPL_VIRTUAL_SECTION_ADDR) // import
 				{
+					if (sections[symSectionIndex].sh_type != RPL_SHT_IMPORT)
+						PanicAlert("relocations for symbols above 0xc0000000 is only supported for import sections");
+
+					const char* libname_raw = ((const char*)GetSectionDataPtr(symSectionIndex)) + 8;
+					std::string libname = libname_raw;
+					if (libname.find(".rpl") == std::string::npos)
+						libname += ".rpl";
 					// TODO: actually resolve based on lib name and import table
-					Symbol* globalSymbol = g_symbolDB.GetSymbolFromName(symbolName);
-					if (!globalSymbol)
+					auto& themap = exports.map[libname];
+					auto findResult = themap.find(symbolName);
+					if (findResult == themap.end())
 					{
 						ERROR_LOG(BOOT, "Failed to resolve symbol %s", symbolName);
 						symValue = 0xdeadbeef; // FIXME: properly handle this error
@@ -459,8 +469,7 @@ bool ElfReader::Relocate()
 					}
 					else
 					{
-						DEBUG_LOG(BOOT, "using global symbol for %s", symbolName);
-						symAddr = globalSymbol->address;
+						symAddr = findResult->second;
 					}
 				}
 				symAddr += addend;
@@ -522,12 +531,38 @@ std::vector<std::string> ElfReader::GetDependencies()
 	if (!is_rpx) return vec;
 	for (int i = 0; i < header->e_shnum; i++)
 	{
-		const char *secname = GetSectionName(i);
-
-		if (secname != nullptr && strstr(secname, ".fimport_") == secname)
-			vec.emplace_back(std::string(secname + 9) + ".rpl");
-		// FIXME: use the proper import tables: some libraries' import sections have different names
-		// e.g. fimport_nfc.rpl instead of fimport_nfc
+		if (sections[i].sh_type == RPL_SHT_IMPORT)
+		{
+			const char* name = ((const char*) GetSectionDataPtr(i)) + 8;
+			std::string libname = name;
+			if (libname.find(".rpl") == std::string::npos)
+				libname += ".rpl";
+			if (std::find(vec.begin(), vec.end(), libname) == vec.end())
+				vec.emplace_back(libname);
+		}
 	}
 	return vec;
+}
+
+bool ElfReader::LoadExports(std::string const& libraryname, RPLExportsMap& exportsMap)
+{
+	// must be loaded and relocated already before running loadExports
+	static_assert(sizeof(RPLExport) == 8, "RPLExport size should be 8");
+	for (int i = 0; i < header->e_shnum; i++)
+	{
+		if (sections[i].sh_type == RPL_SHT_EXPORT)
+		{
+			u32* sectionPtr = (u32*) Memory::GetPointer(sectionAddrs[i]);
+			u32 numExports = Common::swap32(sectionPtr[0]);
+			RPLExport* exports = (RPLExport*)(sectionPtr + 2);
+			const char* nametable = (const char*)(exports + numExports + 1);
+			for (u32 i = 0; i < numExports; i++)
+			{
+				const char* name = ((const char*) sectionPtr) + Common::swap32(exports[i].name_index);
+				u32 address = Common::swap32(exports[i].address);
+				exportsMap.AddExport(libraryname, name, address);
+			}
+		}
+	}
+	return true;
 }
