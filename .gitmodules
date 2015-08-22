@@ -2,3 +2,6 @@
 	path = Externals/Qt
 	url = https://github.com/dolphin-emu/ext-win-qt.git
 	branch = master
+[submodule "Externals/openvr"]
+	path = Externals/openvr
+	url = https://github.com/ValveSoftware/openvr.git
