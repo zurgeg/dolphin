@@ -7,11 +7,26 @@
 
 #include "Common/CommonFuncs.h"
 #include "Common/CommonTypes.h"
+#include "Common/MsgHandler.h"
 
 #include "Core/Boot/ElfReader.h"
 #include "Core/Debugger/Debugger_SymbolMap.h"
 #include "Core/HW/Memmap.h"
 #include "Core/PowerPC/PPCSymbolDB.h"
+
+// Wii U RPL files have import/export sections with an address above 0xc0000000
+// They're not currently loaded by this reader
+static const u32 RPL_VIRTUAL_SECTION_ADDR = 0xc0000000;
+// RPLs are linked to this address by default
+static const u32 RPL_DEFAULT_BASE = 0x2000000;
+
+static const u32 RPL_SHT_EXPORT = SHT_LOUSER + 1;
+static const u32 RPL_SHT_IMPORT = SHT_LOUSER + 2;
+
+struct RPLExport {
+	u32 address;
+	u32 name_index;
+};
 
 static void bswap(u32 &w) {w = Common::swap32(w);}
 static void bswap(u16 &w) {w = Common::swap16(w);}
@@ -190,6 +205,20 @@ const u8 *ElfReader::GetSectionDataPtr(int section) const
 	}
 }
 
+// PowerPC page sizes
+static u32 PPC_PAGE_SIZE = 4096;
+static u32 PPC_PAGE_MASK = ~(PPC_PAGE_SIZE - 1);
+
+static inline u32 ppc_page_begin(u32 p)
+{
+	return p & PPC_PAGE_MASK;
+}
+
+static inline u32 ppc_page_end(u32 p)
+{
+	return ppc_page_begin(p + (PPC_PAGE_SIZE - 1));
+}
+
 bool ElfReader::LoadInto(u32 vaddr)
 {
 	DEBUG_LOG(MASTER_LOG,"String section: %i", header->e_shstrndx);
@@ -198,8 +227,8 @@ bool ElfReader::LoadInto(u32 vaddr)
 	sectionAddrs = new u32[GetNumSections()];
 
 	// Should we relocate? (if it's a library not an executable)
-	// Wii U RPX files don't set the ET_EXEC flag, but do set e_entry to the entry point.
-	bRelocate = (header->e_type != ET_EXEC && header->e_entry == 0);
+	// all Wii U RPLs and RPXes are relocateable (and marked as ET_DYN)
+	bRelocate = (header->e_type != ET_EXEC);
 
 	if (bRelocate)
 	{
@@ -249,12 +278,20 @@ bool ElfReader::LoadInto(u32 vaddr)
 	
 	INFO_LOG(MASTER_LOG,"%i sections:", header->e_shnum);
 
+	u32 lastSuggestedAddress = 0;
+	u32 lastLength = 0;
+	u32 lastWriteAddress = baseAddress;
+
+	u32 minAddr = 0xffffffff, maxAddr = 0;
+
 	for (int i=0; i<GetNumSections(); i++)
 	{
 		Elf32_Shdr *s = &sections[i];
 		const char *name = GetSectionName(i);
 
-		u32 writeAddr = s->sh_addr + baseAddress;
+		u32 writeAddr = lastWriteAddress + lastLength;
+		if (lastSuggestedAddress + lastLength != s->sh_addr) // not contiguous
+			writeAddr = ppc_page_end(writeAddr);
 		// sectionOffsets[i] = writeAddr - vaddr;
 		sectionAddrs[i] = writeAddr;
 
@@ -272,12 +309,28 @@ bool ElfReader::LoadInto(u32 vaddr)
 			// zero out bss
 			for (u32 num = srcSize; num < dstSize; ++num)
 				Memory::Write_U8(0, writeAddr + num);
+
+			// for length calculations
+			if (minAddr > writeAddr)
+				minAddr = writeAddr;
+			if (maxAddr < writeAddr + dstSize)
+				maxAddr = writeAddr + dstSize;
+
+			if (header->e_entry >= s->sh_addr && header->e_entry < s->sh_addr + dstSize)
+				entryPoint = (header->e_entry - s->sh_addr) + writeAddr;
+
+			lastWriteAddress = writeAddr;
+			lastLength = dstSize;
+			lastSuggestedAddress = s->sh_addr;
+
 		}
 		else
 		{
 			INFO_LOG(MASTER_LOG,"NonData Section found: %s     Ignoring (size=%08x) (flags=%08x)", name, s->sh_size, s->sh_flags);
 		}
 	}
+	loaded_length = ppc_page_end(maxAddr - minAddr);
+
 	INFO_LOG(MASTER_LOG,"Done loading.");
 	return true;
 }
@@ -325,9 +378,11 @@ bool ElfReader::LoadSymbols()
 			int type = symtab[sym].st_info & 0xF;
 			int sectionIndex = Common::swap16(symtab[sym].st_shndx);
 			int value = Common::swap32(symtab[sym].st_value);
+			if (is_rpx && ((u32)value) >= RPL_VIRTUAL_SECTION_ADDR)
+				continue;
 			const char *name = stringBase + Common::swap32(symtab[sym].st_name);
 			if (bRelocate)
-				value += sectionAddrs[sectionIndex];
+				value = (value - sections[sectionIndex].sh_addr) + sectionAddrs[sectionIndex];
 
 			int symtype = Symbol::SYMBOL_DATA;
 			switch (type)
@@ -345,4 +400,169 @@ bool ElfReader::LoadSymbols()
 	}
 	g_symbolDB.Index();
 	return hasSymbols;
+}
+
+
+
+bool ElfReader::Relocate(RPLExportsMap& exports)
+{
+	bool success = true;
+	SectionID sec = GetSectionByName(".symtab");
+	if (sec == -1)
+	{
+		return false;
+	}
+	int stringSection = sections[sec].sh_link;
+	const char *stringBase = (const char *)GetSectionDataPtr(stringSection);
+
+	//We have a symbol table!
+	Elf32_Sym *symtab = (Elf32_Sym *)(GetSectionDataPtr(sec));
+
+	for (int i = 0; i < GetNumSections(); i++)
+	{
+		Elf32_Shdr *s = &sections[i];
+		const char *name = GetSectionName(i);
+		if (s->sh_type == SHT_REL)
+		{
+			PanicAlert("Failed to relocate ELF: SHT_REL sections are not handled");
+			continue;
+		}
+		else if (s->sh_type == SHT_RELA)
+		{
+			int numRels = GetSectionSize(i) / s->sh_entsize;
+			int relSectionIndex = s->sh_info;
+
+			Elf32_Rela* relaSection = (Elf32_Rela*)GetSectionDataPtr(i);
+			for (int i = 0; i < numRels; i++)
+			{
+				Elf32_Rela* rela = relaSection + i;
+				uint32_t offset = Common::swap32(rela->r_offset);
+				uint32_t info = Common::swap32(rela->r_info);
+				uint32_t addend = Common::swap32(rela->r_addend);
+
+				uint32_t symIndex = ELF32_R_SYM(info);
+				uint32_t relocType = ELF32_R_TYPE(info);
+				Elf32_Sym* symbol = symtab + symIndex;
+				const char *symbolName = stringBase + Common::swap32(symbol->st_name);
+				DEBUG_LOG(BOOT, "Relocation: offset=%x, addend=%x, sym=%s, relocType=%d", offset, addend, symbolName, relocType);
+
+				u32 symValue = Common::swap32(symbol->st_value);
+				u32 symSectionIndex = Common::swap16(symbol->st_shndx);
+				u32 symAddr = (symValue - sections[symSectionIndex].sh_addr) + sectionAddrs[symSectionIndex];
+				if (symValue >= RPL_VIRTUAL_SECTION_ADDR) // import
+				{
+					if (sections[symSectionIndex].sh_type != RPL_SHT_IMPORT)
+						PanicAlert("relocations for symbols above 0xc0000000 is only supported for import sections");
+
+					const char* libname_raw = ((const char*)GetSectionDataPtr(symSectionIndex)) + 8;
+					std::string libname = libname_raw;
+					if (libname.find(".rpl") == std::string::npos)
+						libname += ".rpl";
+					// TODO: actually resolve based on lib name and import table
+					auto& themap = exports.map[libname];
+					auto findResult = themap.find(symbolName);
+					if (findResult == themap.end())
+					{
+						ERROR_LOG(BOOT, "Failed to resolve symbol %s", symbolName);
+						symValue = 0xdeadbeef; // FIXME: properly handle this error
+						success = false;
+					}
+					else
+					{
+						symAddr = findResult->second;
+					}
+				}
+				symAddr += addend;
+
+				u32 writeAddr = (offset - sections[relSectionIndex].sh_addr) + sectionAddrs[relSectionIndex];
+
+				switch (relocType)
+				{
+				case R_PPC_ADDR32:
+					Memory::Write_U32(symAddr, writeAddr);
+					break;
+				case R_PPC_ADDR16_LO:
+					Memory::Write_U16(symAddr & 0xffff, writeAddr);
+					break;
+				case R_PPC_ADDR16_HI:
+					Memory::Write_U16((symAddr >> 16) & 0xffff, writeAddr);
+					break;
+				case R_PPC_ADDR16_HA:
+					Memory::Write_U16((((symAddr >> 16) + ((symAddr & 0x8000) ? 1 : 0)) & 0xFFFF), writeAddr);
+					break;
+				case R_PPC_REL24:
+					printf("symaddr %x offset %x sub %x writeaddr sub %x", symAddr, offset, symAddr - offset, symAddr - writeAddr);
+					Memory::Write_U32((Memory::Read_U32(writeAddr) & 0xfc000003) | (((symAddr - writeAddr) >> 2) & 0xffffff) << 2, writeAddr);
+					break;
+				case R_PPC_EMB_SDA21: {
+					u32 instr = Memory::Read_U32(writeAddr) & 0xffe00000; // top 6 bits of instruction + top 5 bits for destination register
+					u32 reg;
+					const char* sectname = GetSectionName(symSectionIndex);
+					if (!strcmp(sectname, ".sdata") || !strcmp(sectname, ".sbss"))
+						reg = 13;
+					else if (!strcmp(sectname, ".sdata2") || !strcmp(sectname, ".sbss2"))
+						reg = 2;
+					else if (!strcmp(sectname, ".sdata0") || !strcmp(sectname, ".sbss0"))
+						reg = 0;
+					else
+					{
+						PanicAlert("Invalid relocation for EMB_SDA21: symbol in invalid section %s", sectname);
+						break;
+					}
+					u32 off = symAddr & 0xffff;
+					Memory::Write_U32(instr | (reg << 16) | off, writeAddr);
+					break;
+				}
+				default:
+					// I don't think any Wii U RPX executable uses relocations other than the above types
+					PanicAlert("Failed to relocate ELF: unsupported relocation type %d", relocType);
+					success = false;
+					break;
+				}
+			}
+		}
+	}
+	return success;
+}
+
+std::vector<std::string> ElfReader::GetDependencies()
+{
+	std::vector<std::string> vec;
+	if (!is_rpx) return vec;
+	for (int i = 0; i < header->e_shnum; i++)
+	{
+		if (sections[i].sh_type == RPL_SHT_IMPORT)
+		{
+			const char* name = ((const char*) GetSectionDataPtr(i)) + 8;
+			std::string libname = name;
+			if (libname.find(".rpl") == std::string::npos)
+				libname += ".rpl";
+			if (std::find(vec.begin(), vec.end(), libname) == vec.end())
+				vec.emplace_back(libname);
+		}
+	}
+	return vec;
+}
+
+bool ElfReader::LoadExports(std::string const& libraryname, RPLExportsMap& exportsMap)
+{
+	// must be loaded and relocated already before running loadExports
+	static_assert(sizeof(RPLExport) == 8, "RPLExport size should be 8");
+	for (int i = 0; i < header->e_shnum; i++)
+	{
+		if (sections[i].sh_type == RPL_SHT_EXPORT)
+		{
+			u32* sectionPtr = (u32*) Memory::GetPointer(sectionAddrs[i]);
+			u32 numExports = Common::swap32(sectionPtr[0]);
+			RPLExport* exports = (RPLExport*)(sectionPtr + 2);
+			const char* nametable = (const char*)(exports + numExports + 1);
+			for (u32 i = 0; i < numExports; i++)
+			{
+				const char* name = ((const char*) sectionPtr) + Common::swap32(exports[i].name_index);
+				u32 address = Common::swap32(exports[i].address);
+				exportsMap.AddExport(libraryname, name, address);
+			}
+		}
+	}
+	return true;
 }

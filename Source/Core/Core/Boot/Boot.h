@@ -51,6 +51,7 @@ private:
 
 	static bool LoadMapFromFilename();
 	static bool Boot_ELF(const std::string& filename);
+	static bool Boot_RPX(const std::string& filename);
 	static bool Boot_WiiWAD(const std::string& filename);
 
 	static bool EmulatedBS2_GC();

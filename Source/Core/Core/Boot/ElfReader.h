@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <unordered_map>
+
 #include "Core/Boot/ElfTypes.h"
 
 enum KnownElfTypes
@@ -33,8 +35,19 @@ private:
 	// an array of pointers to decompressed sections
 	u8 **decompressed;
 	u32 m_number_of_sections;
+	u32 loaded_length;
 
 public:
+
+	class RPLExportsMap {
+	public:
+		std::unordered_map<std::string, std::unordered_map<std::string, u32> > map;
+		void AddExport(std::string const& libraryname, std::string const& symbolname, u32 symbol)
+		{
+			map[libraryname][symbolname] = symbol;
+		}
+	};
+
 	ElfReader(void *ptr);
 	~ElfReader();
 
@@ -72,4 +85,11 @@ public:
 
 	// true for Wii U .rpx or .rpl files
 	bool is_rpx = false;
+	bool Relocate(RPLExportsMap& exports);
+	std::vector<std::string> GetDependencies();
+	u32 GetLoadedLength()
+	{
+		return loaded_length;
+	}
+	bool LoadExports(std::string const& libraryname, RPLExportsMap& map);
 };
