@@ -1,12 +1,60 @@
 #include <Windows.h>
 #include <assert.h>
 
-#include "OculusSystemLibraryHeader.h"
+#include "VROculus.h"
 
+// convert oculus function result to ovrResult
 #define CONV_RESULT(result, error)                                                                 \
   ((g_libovr_version >= libovr_060) ? result : ((result & 0xFF) ? ovrSuccess : error))
 
+#ifndef HAVE_OCULUSSDK
 TLibOvrVersion g_libovr_version;
+#elif OVR_PRODUCT_VERSION >= 1
+TLibOvrVersion g_libovr_version = libovr_130;
+#elif OVR_MAJOR_VERSION >= 8
+TLibOvrVersion g_libovr_version = libovr_080;
+#elif OVR_MAJOR_VERSION == 7
+TLibOvrVersion g_libovr_version = libovr_070;
+#elif OVR_MAJOR_VERSION == 6
+TLibOvrVersion g_libovr_version = libovr_060;
+#elif OVR_MAJOR_VERSION == 5
+TLibOvrVersion g_libovr_version = libovr_050;
+#elif OVR_MINOR_VERSION == 4 && OVR_BUILD_VERSION >= 4
+TLibOvrVersion g_libovr_version = libovr_044;
+#elif OVR_MINOR_VERSION == 4 && OVR_BUILD_VERSION == 3
+TLibOvrVersion g_libovr_version = libovr_043;
+#elif OVR_MINOR_VERSION == 4 && OVR_BUILD_VERSION == 2
+TLibOvrVersion g_libovr_version = libovr_042;
+#elif OVR_MINOR_VERSION == 4 && OVR_BUILD_VERSION == 1
+TLibOvrVersion g_libovr_version = libovr_041;
+#elif OVR_MINOR_VERSION == 4
+TLibOvrVersion g_libovr_version = libovr_040;
+#elif OVR_MINOR_VERSION == 3 && OVR_BUILD_VERSION == 2
+TLibOvrVersion g_libovr_version = libovr_032;
+#elif OVR_MINOR_VERSION == 3 && OVR_BUILD_VERSION == 1
+TLibOvrVersion g_libovr_version = libovr_031;
+#elif OVR_MINOR_VERSION == 3
+TLibOvrVersion g_libovr_version = libovr_033;
+#elif OVR_MINOR_VERSION == 2 && OVR_BUILD_NUMBER >= 5
+TLibOvrVersion g_libovr_version = libovr_025;
+#elif OVR_MINOR_VERSION == 2 && OVR_BUILD_NUMBER == 4
+TLibOvrVersion g_libovr_version = libovr_024;
+#elif OVR_MINOR_VERSION == 2 && OVR_BUILD_NUMBER == 3
+TLibOvrVersion g_libovr_version = libovr_023;
+#elif OVR_MINOR_VERSION == 2 && OVR_BUILD_NUMBER == 2
+TLibOvrVersion g_libovr_version = libovr_022;
+#elif OVR_MINOR_VERSION == 2
+TLibOvrVersion g_libovr_version = libovr_021;
+#elif OVR_MINOR_VERSION == 1 && OVR_BUILD_NUMBER >= 5
+TLibOvrVersion g_libovr_version = libovr_015;
+#elif OVR_MINOR_VERSION == 1 && OVR_BUILD_NUMBER == 4
+TLibOvrVersion g_libovr_version = libovr_014;
+#elif OVR_MINOR_VERSION == 1
+TLibOvrVersion g_libovr_version = libovr_013;
+#else
+TLibOvrVersion g_libovr_version = libovr_none;
+#endif
+
 ovrGraphicsLuid s_libovr_luid;
 ovrGraphicsLuid* g_libovr_luid;
 
@@ -73,8 +121,16 @@ PFUNC_TRACE ovr_TraceMessage;
 PFUNC_ORTHO ovrMatrix4f_OrthoSubProjection;
 PFUNC_TIMEWARPPROJ ovrTimewarpProjectionDesc_FromProjection;
 
+#endif
+
+#if !defined(HAVE_OCULUSSDK) || OVR_MAJOR_VERSION != 6 || OVR_PRODUCT_VERSION > 0
+
 PFUNC_CREATEMIRRORD3D116 ovrHmd_CreateMirrorTextureD3D11;
 PFUNC_CREATESWAPD3D116 ovrHmd_CreateSwapTextureSetD3D11;
+
+#endif
+
+#ifndef HAVE_OCULUSSDK
 
 PFUNC_CREATEMIRRORGL ovrHmd_CreateMirrorTextureGL;
 PFUNC_CREATESWAPGL ovrHmd_CreateSwapTextureSetGL;
@@ -97,7 +153,6 @@ PFUNC_UINT_HMD ovr_GetTrackingCaps;
 PFUNC_TRACKING_STATE8 ovr_GetTrackingState8;
 PFUNC_SUBMIT8 ovr_SubmitFrame8;
 PFUNC_DISPLAYTIME ovr_GetPredictedDisplayTime;
-
 
 static bool dll_loaded = false;
 static HMODULE dll = 0;
@@ -143,7 +198,8 @@ static bool Load8()
   ovrHmd_GetLatencyTest2DrawColor = nullptr;
   ovr_WaitTillTime = nullptr;
 
-  b = b && (ovr_InitializeRenderingShimVersion_Real = (PFUNC_CHAR_INT)GetProcAddress(dll, "ovr_InitializeRenderingShimVersion"));
+  b = b && (ovr_InitializeRenderingShimVersion_Real =
+                (PFUNC_CHAR_INT)GetProcAddress(dll, "ovr_InitializeRenderingShimVersion"));
   b = b && (ovr_Initialize_Real = (PFUNC_INIT)GetProcAddress(dll, "ovr_Initialize"));
   b = b && (ovr_Shutdown_Real = (PFUNC_VOID)GetProcAddress(dll, "ovr_Shutdown"));
   b = b && (ovr_GetVersionString_Real = (PFUNC_PCHAR)GetProcAddress(dll, "ovr_GetVersionString"));
@@ -151,22 +207,29 @@ static bool Load8()
   b = b && (ovr_GetHmdDesc_Real = (PFUNC_HMDDESC)GetProcAddress(dll, "ovr_GetHmdDesc"));
   b = b && (ovr_Create_Real = (PFUNC_CREATE7)GetProcAddress(dll, "ovr_Create"));
   b = b && (ovrHmd_Destroy = (PFUNC_VOID_HMD)GetProcAddress(dll, "ovr_Destroy"));
-  b = b && (ovr_GetSessionStatus = (PFUNC_SESSIONSTATUS)GetProcAddress(dll, "ovr_GetSessionStatus"));
+  b = b &&
+      (ovr_GetSessionStatus = (PFUNC_SESSIONSTATUS)GetProcAddress(dll, "ovr_GetSessionStatus"));
   b = b && (ovrHmd_GetEnabledCaps = (PFUNC_UINT_HMD)GetProcAddress(dll, "ovr_GetEnabledCaps"));
   b = b && (ovrHmd_SetEnabledCaps = (PFUNC_HMD_UINT)GetProcAddress(dll, "ovr_SetEnabledCaps"));
   b = b && (ovr_GetTrackingCaps = (PFUNC_UINT_HMD)GetProcAddress(dll, "ovr_GetTrackingCaps"));
-  b = b && (ovrHmd_ConfigureTracking_Real = (PFUNC_HMD_INT_INT)GetProcAddress(dll, "ovr_ConfigureTracking"));
+  b = b && (ovrHmd_ConfigureTracking_Real =
+                (PFUNC_HMD_INT_INT)GetProcAddress(dll, "ovr_ConfigureTracking"));
   b = b && (ovrHmd_RecenterPose = (PFUNC_VOID_HMD)GetProcAddress(dll, "ovr_RecenterPose"));
-  b = b && (ovr_GetTrackingState = (PFUNC_TRACKING_STATE7)GetProcAddress(dll, "ovr_GetTrackingState"));
+  b = b &&
+      (ovr_GetTrackingState = (PFUNC_TRACKING_STATE7)GetProcAddress(dll, "ovr_GetTrackingState"));
   b = b && (ovr_GetInputState = (PFUNC_INPUT)GetProcAddress(dll, "ovr_GetInputState"));
-  b = b && (ovr_SetControllerVibration = (PFUNC_VIBE)GetProcAddress(dll, "ovr_SetControllerVibration"));
+  b = b &&
+      (ovr_SetControllerVibration = (PFUNC_VIBE)GetProcAddress(dll, "ovr_SetControllerVibration"));
   b = b && (ovrHmd_GetFovTextureSize = (PFUNC_FOV)GetProcAddress(dll, "ovr_GetFovTextureSize"));
   b = b && (ovr_SubmitFrame8 = (PFUNC_SUBMIT8)GetProcAddress(dll, "ovr_SubmitFrame"));
   b = b && (ovrHmd_GetRenderDesc = (PFUNC_RENDERDESC)GetProcAddress(dll, "ovr_GetRenderDesc"));
-  b = b && (ovr_GetPredictedDisplayTime = (PFUNC_DISPLAYTIME)GetProcAddress(dll, "ovr_GetPredictedDisplayTime"));
+  b = b && (ovr_GetPredictedDisplayTime =
+                (PFUNC_DISPLAYTIME)GetProcAddress(dll, "ovr_GetPredictedDisplayTime"));
   b = b && (ovr_GetTimeInSeconds = (PFUNC_DOUBLE)GetProcAddress(dll, "ovr_GetTimeInSeconds"));
-  b = b && (ovr_ResetBackOfHeadTracking = (PFUNC_VOID_HMD)GetProcAddress(dll, "ovr_ResetBackOfHeadTracking"));
-  b = b && (ovr_ResetMulticameraTracking = (PFUNC_VOID_HMD)GetProcAddress(dll, "ovr_ResetMulticameraTracking"));
+  b = b && (ovr_ResetBackOfHeadTracking =
+                (PFUNC_VOID_HMD)GetProcAddress(dll, "ovr_ResetBackOfHeadTracking"));
+  b = b && (ovr_ResetMulticameraTracking =
+                (PFUNC_VOID_HMD)GetProcAddress(dll, "ovr_ResetMulticameraTracking"));
   b = b && (ovrHmd_GetBool = (PFUNC_GETBOOL)GetProcAddress(dll, "ovr_GetBool"));
   b = b && (ovrHmd_SetBool = (PFUNC_SETBOOL)GetProcAddress(dll, "ovr_SetBool"));
   b = b && (ovrHmd_GetInt = (PFUNC_GETINT)GetProcAddress(dll, "ovr_GetInt"));
@@ -178,23 +241,29 @@ static bool Load8()
   b = b && (ovrHmd_GetString = (PFUNC_GETSTRING)GetProcAddress(dll, "ovr_GetString"));
   b = b && (ovrHmd_SetString = (PFUNC_SETSTRING)GetProcAddress(dll, "ovr_SetString"));
   b = b && (ovr_TraceMessage = (PFUNC_TRACE)GetProcAddress(dll, "ovr_TraceMessage"));
-  b = b && (ovr_CreateSwapTextureSetD3D11 = (PFUNC_CREATESWAPD3D117)GetProcAddress(dll, "ovr_CreateSwapTextureSetD3D11"));
-  b = b && (ovr_CreateMirrorTextureD3D11 = (PFUNC_CREATEMIRRORD3D117)GetProcAddress(dll, "ovr_CreateMirrorTextureD3D11"));
-  b = b && (ovrHmd_CreateSwapTextureSetGL = (PFUNC_CREATESWAPGL)GetProcAddress(dll, "ovr_CreateSwapTextureSetGL"));
-  b = b && (ovrHmd_CreateMirrorTextureGL = (PFUNC_CREATEMIRRORGL)GetProcAddress(dll, "ovr_CreateMirrorTextureGL"));
-  b = b && (ovrHmd_DestroySwapTextureSet = (PFUNC_DESTROYSWAP)GetProcAddress(dll, "ovr_DestroySwapTextureSet"));
-  b = b && (ovrHmd_DestroyMirrorTexture = (PFUNC_DESTROYMIRROR)GetProcAddress(dll, "ovr_DestroyMirrorTexture"));
+  b = b && (ovr_CreateSwapTextureSetD3D11 =
+                (PFUNC_CREATESWAPD3D117)GetProcAddress(dll, "ovr_CreateSwapTextureSetD3D11"));
+  b = b && (ovr_CreateMirrorTextureD3D11 =
+                (PFUNC_CREATEMIRRORD3D117)GetProcAddress(dll, "ovr_CreateMirrorTextureD3D11"));
+  b = b && (ovrHmd_CreateSwapTextureSetGL =
+                (PFUNC_CREATESWAPGL)GetProcAddress(dll, "ovr_CreateSwapTextureSetGL"));
+  b = b && (ovrHmd_CreateMirrorTextureGL =
+                (PFUNC_CREATEMIRRORGL)GetProcAddress(dll, "ovr_CreateMirrorTextureGL"));
+  b = b && (ovrHmd_DestroySwapTextureSet =
+                (PFUNC_DESTROYSWAP)GetProcAddress(dll, "ovr_DestroySwapTextureSet"));
+  b = b && (ovrHmd_DestroyMirrorTexture =
+                (PFUNC_DESTROYMIRROR)GetProcAddress(dll, "ovr_DestroyMirrorTexture"));
   b = b && (ovr_Lookup = (PFUNC_LOOKUP)GetProcAddress(dll, "ovr_Lookup"));
 
   // ovr_SetQueueAheadFraction is in OVR_CAPIShim since SDK 0.7, but not in the include file
 
-//  b = b && (ovrMatrix4f_OrthoSubProjection =
-//    (PFUNC_ORTHO)GetProcAddress(dll, "ovrMatrix4f_OrthoSubProjection"));
-//  b = b &&
-//    (ovrMatrix4f_Projection = (PFUNC_PROJECTION)GetProcAddress(dll, "ovrMatrix4f_Projection"));
-//  b = b && (ovrTimewarpProjectionDesc_FromProjection = (PFUNC_TIMEWARPPROJ)GetProcAddress(
-//    dll, "ovrTimewarpProjectionDesc_FromProjection"));
-//  b = b && (ovr_GetEyePoses = (PFUNC_EYEPOSES7)GetProcAddress(dll, "ovr_GetEyePoses"));
+  //  b = b && (ovrMatrix4f_OrthoSubProjection =
+  //    (PFUNC_ORTHO)GetProcAddress(dll, "ovrMatrix4f_OrthoSubProjection"));
+  //  b = b &&
+  //    (ovrMatrix4f_Projection = (PFUNC_PROJECTION)GetProcAddress(dll, "ovrMatrix4f_Projection"));
+  //  b = b && (ovrTimewarpProjectionDesc_FromProjection = (PFUNC_TIMEWARPPROJ)GetProcAddress(
+  //    dll, "ovrTimewarpProjectionDesc_FromProjection"));
+  //  b = b && (ovr_GetEyePoses = (PFUNC_EYEPOSES7)GetProcAddress(dll, "ovr_GetEyePoses"));
 
   if (!b)
     FreeLibrary(dll);
@@ -486,7 +555,8 @@ static bool Load5()
   b = b &&
       (ovrMatrix4f_Projection = (PFUNC_PROJECTION)GetProcAddress(dll, "ovrMatrix4f_Projection"));
   // This function is present in the original DLL, but not in libovrwrapper
-  (ovrTimewarpProjectionDesc_FromProjection = (PFUNC_TIMEWARPPROJ)GetProcAddress(dll, "ovrTimewarpProjectionDesc_FromProjection"));
+  (ovrTimewarpProjectionDesc_FromProjection =
+       (PFUNC_TIMEWARPPROJ)GetProcAddress(dll, "ovrTimewarpProjectionDesc_FromProjection"));
   b = b && (ovrHmd_GetBool = (PFUNC_GETBOOL)GetProcAddress(dll, "ovrHmd_GetBool"));
   b = b && (ovrHmd_GetFloat = (PFUNC_GETFLOAT)GetProcAddress(dll, "ovrHmd_GetFloat"));
   b = b &&
@@ -516,7 +586,7 @@ static bool LoadOculusDLL()
     return true;
   assert(sizeof(int) == 4);
 #ifdef _WIN32
-//  if (Load8() || Load7() || Load6() || Load5())
+  //  if (Load8() || Load7() || Load6() || Load5())
   if (Load5())
   {
     return true;
@@ -897,7 +967,7 @@ ovrResult ovrHmd_ConfigureTracking(ovrHmd hmd, unsigned supported_ovrTrackingCap
     return ovrError_NotInitialized;
   ovrResult result =
       ovrHmd_ConfigureTracking_Real(hmd, supported_ovrTrackingCap, required_ovrTrackingCap);
-  
+
   return (g_libovr_version >= libovr_060) ? result : ((char)(result & 0xFF));
 }
 

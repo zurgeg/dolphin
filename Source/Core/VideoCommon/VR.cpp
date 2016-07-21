@@ -47,9 +47,8 @@ ovrHmd hmd = nullptr;
 ovrHmdDesc hmdDesc;
 ovrFovPort g_best_eye_fov[2], g_eye_fov[2], g_last_eye_fov[2];
 ovrEyeRenderDesc g_eye_render_desc[2];
-#if OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION <= 7
-ovrFrameTiming5 g_rift_frame_timing;
-#endif
+ovrFrameTiming5 g_rift_frame_timing5;
+ovrFrameTiming6 g_rift_frame_timing6;
 ovrPosef g_eye_poses[2], g_front_eye_poses[2];
 int g_ovr_frameindex;
 #if OVR_PRODUCT_VERSION >= 1 || OVR_MAJOR_VERSION >= 7
@@ -437,7 +436,7 @@ bool InitOculusHMD()
     g_vr_has_dynamic_predict = true;
     g_vr_has_configure_rendering = true;
 // ovrHmd_GetDesc(hmd, &hmdDesc);
-#ifdef OCULUSSYSTEMLIBRARYHEADER
+#ifndef HAVE_OCULUSSDK
     hmdDesc = ovr_GetHmdDesc(hmd);
 #else
     hmdDesc = *hmd;
@@ -526,7 +525,8 @@ bool InitOculusVR()
 {
 #ifdef OVR_MAJOR_VERSION
 #if OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION <= 7
-  memset(&g_rift_frame_timing, 0, sizeof(g_rift_frame_timing));
+  memset(&g_rift_frame_timing5, 0, sizeof(g_rift_frame_timing5));
+  memset(&g_rift_frame_timing6, 0, sizeof(g_rift_frame_timing6));
 #endif
 
 #if OVR_PRODUCT_VERSION >= 1 || OVR_MAJOR_VERSION >= 7
@@ -857,7 +857,8 @@ void UpdateOculusHeadTracking()
   OVR::Posef pose = g_eye_poses[ovrEye_Left];
 #endif
 #endif
-  // ovrTrackingState ss = ovrHmd_GetTrackingState(hmd, g_rift_frame_timing.ScanoutMidpointSeconds);
+  // ovrTrackingState ss = ovrHmd_GetTrackingState(hmd,
+  // g_rift_frame_timing5.ScanoutMidpointSeconds);
   // if (ss.StatusFlags & (ovrStatus_OrientationTracked | ovrStatus_PositionTracked))
   {
     // OVR::Posef pose = ss.HeadPose.ThePose;
@@ -1795,9 +1796,9 @@ bool VR_GetHMDGestures(u32* gestures)
 #if OVR_PRODUCT_VERSION >= 1 || OVR_MAJOR_VERSION >= 8
     ovrTrackingState t = ovr_GetTrackingState(hmd, 0, false);
 #elif OVR_MAJOR_VERSION >= 6
-    ovrTrackingState5 t = ovrHmd_GetTrackingState(hmd, g_rift_frame_timing.DisplayMidpointSeconds);
+    ovrTrackingState5 t = ovrHmd_GetTrackingState(hmd, g_rift_frame_timing6.DisplayMidpointSeconds);
 #else
-    ovrTrackingState5 t = ovrHmd_GetTrackingState(hmd, g_rift_frame_timing.ScanoutMidpointSeconds);
+    ovrTrackingState5 t = ovrHmd_GetTrackingState(hmd, g_rift_frame_timing5.ScanoutMidpointSeconds);
 #endif
     if (WasItTapped(t.HeadPose.LinearAcceleration, t.HeadPose.TimeInSeconds))
     {

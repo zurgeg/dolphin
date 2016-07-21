@@ -63,27 +63,23 @@ void ovrhmd_EnableHSWDisplaySDKRender(ovrHmd hmd, ovrBool enabled);
 #define SCM_OCULUS_STR ", Oculus SDK " OVR_VERSION_STRING
 #endif
 
+#include "OculusSystemLibraryHeader.h"
 
-
-#define ovrFrameTiming5 ovrFrameTiming
-#define ovrFrameTiming6 ovrFrameTiming
 #define ovrGLTexture5 ovrGLTexture
 #define ovrGLTexture6 ovrGLTexture
 #define ovrTrackingState5 ovrTrackingState
 #define ovrTrackingState7 ovrTrackingState
 #define ovrTrackingState8 ovrTrackingState
 #define ovrTrackingState13 ovrTrackingState
-#define ovrD3D11Texture5 ovrD3D11Texture
-#define ovrD3D11Texture6 ovrD3D11Texture
 
 #else
 #ifdef _WIN32
 #include "OculusSystemLibraryHeader.h"
 #define OCULUSSDK044ORABOVE
 #ifdef HAVE_OPENVR
-#define SCM_OCULUS_STR ", for Oculus DLL " OVR_VERSION_STRING " or OpenVR"
+#define SCM_OCULUS_STR ", for Oculus DLLs or OpenVR"
 #else
-#define SCM_OCULUS_STR ", for Oculus DLL " OVR_VERSION_STRING
+#define SCM_OCULUS_STR ", for Oculus DLLs "
 #endif
 #else
 #ifdef HAVE_OPENVR
@@ -99,9 +95,8 @@ extern ovrHmd hmd;
 extern ovrHmdDesc hmdDesc;
 extern ovrFovPort g_eye_fov[2];
 extern ovrEyeRenderDesc g_eye_render_desc[2];
-#if OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION <= 7
-extern ovrFrameTiming5 g_rift_frame_timing;
-#endif
+extern ovrFrameTiming5 g_rift_frame_timing5;
+extern ovrFrameTiming6 g_rift_frame_timing6;
 extern ovrPosef g_eye_poses[2], g_front_eye_poses[2];
 #endif
 

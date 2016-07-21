@@ -12,12 +12,6 @@
 
 #include "d3d11.h"
 
-#ifdef HAVE_OCULUSSDK
-#include "OVR_CAPI_D3D.h"
-#else
-#include "OculusSystemLibraryHeaderD3D11.h"
-#endif
-
 namespace DX11
 {
 void VR_ConfigureHMD();

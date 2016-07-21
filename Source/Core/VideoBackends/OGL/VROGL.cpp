@@ -15,10 +15,10 @@
 #include "VideoBackends/OGL/TextureConverter.h"
 #include "VideoBackends/OGL/VROGL.h"
 #include "VideoCommon/RenderBase.h"
-#include "VideoCommon/VideoConfig.h"
 #include "VideoCommon/VR.h"
 #include "VideoCommon/VROculus.h"
 #include "VideoCommon/VROpenVR.h"
+#include "VideoCommon/VideoConfig.h"
 
 #ifdef HAVE_OCULUSSDK
 // don't include Windows SDK OPENGL include files
@@ -917,7 +917,7 @@ void VR_BeginFrame()
     ++g_ovr_frameindex;
 #if OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION <= 7
     // On Oculus SDK 0.6.0 and above, we get the frame timing manually, then swap each eye texture
-    g_rift_frame_timing = ovrHmd_GetFrameTiming(hmd, 0);
+    g_rift_frame_timing6 = ovrHmd_GetFrameTiming(hmd, 0);
 #endif
     for (int eye = 0; eye < 2; eye++)
     {
@@ -932,7 +932,7 @@ void VR_BeginFrame()
     }
 #else
     ovrHmd_DismissHSWDisplay(hmd);
-    g_rift_frame_timing = ovrHmd_BeginFrame(hmd, ++g_ovr_frameindex);
+    g_rift_frame_timing5 = ovrHmd_BeginFrame(hmd, ++g_ovr_frameindex);
 #endif
   }
 #endif

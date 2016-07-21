@@ -90,6 +90,8 @@ extern TLibOvrVersion g_libovr_version;
 #define ovrHand_Right 1
 #endif
 
+#ifndef HAVE_OCULUSSDK
+
 // only ovrHmdCap_DebugDevice is supported on SDK 0.7 and above
 #define ovrHmdCap_Present 0x0001
 #define ovrHmdCap_Available 0x0002
@@ -278,8 +280,16 @@ typedef ovrLogCallback5 ovrLogCallback6;
 typedef void(__cdecl* ovrLogCallback7)(uintptr_t userData, int level, const char* message);
 typedef void* ovrLogCallback;
 
-typedef int ovrResult;
+#endif
+
 typedef float ovrScalar;
+
+#if !defined(HAVE_OCULUSSDK) || (OVR_MAJOR_VERSION < 6 && OVR_PRODUCT_VERSION == 0)
+typedef int ovrResult;
+#endif
+
+#ifndef HAVE_OCULUSSDK
+
 typedef struct
 {
   int w, h;
@@ -401,6 +411,10 @@ typedef struct
   ovrVector3f HmdToEyeViewOffset;
 } ovrEyeRenderDesc;
 
+#endif
+
+#if !defined(OVR_MAJOR_VERSION) || OVR_MAJOR_VERSION >= 8 || OVR_PRODUCT_VERSION >= 1
+
 typedef struct ALIGN_TO_EIGHT_BYTE_BOUNDARY
 {
   ovrScalar DeltaSeconds, unused;
@@ -414,6 +428,15 @@ typedef struct ALIGN_TO_EIGHT_BYTE_BOUNDARY
   double DisplayMidpointSeconds, FrameIntervalSeconds;
   unsigned AppFrameIndex, DisplayFrameIndex;
 } ovrFrameTiming6;
+
+#else
+
+#define ovrFrameTiming5 ovrFrameTiming
+#define ovrFrameTiming6 ovrFrameTiming
+
+#endif
+
+#ifndef HAVE_OCULUSSDK
 
 typedef struct
 {
@@ -455,6 +478,10 @@ typedef struct
   char ErrorString[512];
 } ovrErrorInfo;
 
+#endif
+
+#if !defined(HAVE_OCULUSSDK) || OVR_MAJOR_VERSION > 5 || OVR_PRODUCT_VERSION > 0
+
 typedef struct
 {
   int API;
@@ -484,6 +511,15 @@ typedef struct
   void* PlatformData[8];
 } ovrTexture5;
 
+#else
+
+typedef ovrTextureHeader ovrTextureHeader5;
+typedef ovrTexture ovrTexture5;
+
+#endif
+
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION < 6
+
 typedef struct
 {
   int API;
@@ -504,6 +540,15 @@ typedef struct ALIGN_TO_POINTER_BOUNDARY
   ovrTexture6* Textures;
   int TextureCount, CurrentIndex;
 } ovrSwapTextureSet;
+
+#else
+
+typedef ovrTextureHeader ovrTextureHeader6;
+typedef ovrTexture ovrTexture6;
+
+#endif
+
+#ifndef HAVE_OCULUSSDK
 
 typedef struct
 {
@@ -590,10 +635,18 @@ typedef struct
   unsigned VertexCount, IndexCount;
 } ovrDistortionMesh;
 
+#endif
+
+#if !defined(HAVE_OCULUSSDK) || (OVR_MAJOR_VERSION < 7 && OVR_PRODUCT_VERSION == 0)
+
 typedef struct
 {
   unsigned char platform_dependent[8];
 } ovrGraphicsLuid;
+
+#endif
+
+#ifndef HAVE_OCULUSSDK
 
 typedef struct ALIGN_TO_FOUR_BYTE_BOUNDARY
 {
@@ -822,12 +875,20 @@ typedef char(__cdecl* PFUNC_SETSTRING)(ovrHmd hmd, const char* property, const c
 typedef int(__cdecl* PFUNC_TRACE)(int ovrloglevel, const char* message);
 
 typedef ovrResult(__cdecl* PFUNC_CREATE6)(int number, ovrHmd* hmd_pointer);
+#endif
+
+#if !defined(HAVE_OCULUSSDK) || OVR_MAJOR_VERSION != 6 || OVR_PRODUCT_VERSION > 0
+
 typedef ovrResult(__cdecl* PFUNC_CREATEMIRRORD3D116)(ovrHmd hmd, void* id3d11device,
                                                      const void* d3d11_texture2d_desc,
                                                      ovrTexture6** mirror_texture_result_pointer);
 typedef ovrResult(__cdecl* PFUNC_CREATESWAPD3D116)(
     ovrHmd hmd, void* id3d11device, const void* d3d11_texture2d_desc,
     ovrSwapTextureSet** swap_texture_set_result_pointer);
+
+#endif
+
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION < 6
 
 typedef ovrResult(__cdecl* PFUNC_CREATEMIRRORGL)(ovrHmd hmd, unsigned gl_colour_format, int width,
                                                  int height,
@@ -837,6 +898,11 @@ typedef ovrResult(__cdecl* PFUNC_CREATESWAPGL)(ovrHmd hmd, unsigned gl_colour_fo
                                                ovrSwapTextureSet** swap_texture_set_result_pointer);
 typedef ovrResult(__cdecl* PFUNC_DESTROYMIRROR)(ovrHmd hmd, ovrTexture6* mirror_texture);
 typedef ovrResult(__cdecl* PFUNC_DESTROYSWAP)(ovrHmd hmd, ovrSwapTextureSet* swap_texture_set);
+
+#endif
+
+#ifndef HAVE_OCULUSSDK
+
 typedef ovrResult(__cdecl* PFUNC_CALC)(ovrPosef head_pose,
                                        const ovrVector3f hmd_to_eye_view_offset[2],
                                        ovrPosef out_eye_poses[2]);
@@ -874,6 +940,10 @@ typedef ovrResult(__cdecl* PFUNC_SUBMIT8)(ovrHmd hmd, long long frame_number,
                                           ovrLayerHeader const* const* layer_ptr_list,
                                           unsigned layer_count);
 typedef double(__cdecl* PFUNC_DISPLAYTIME)(ovrHmd hmd, long long frame_number);
+
+#endif
+
+#ifndef HAVE_OCULUSSDK
 
 // These functions will work without the DLL
 bool ovr_InitializeRenderingShimVersion(int MinorVersion);
@@ -932,13 +1002,27 @@ extern PFUNC_SETSTRING ovrHmd_SetString;
 extern PFUNC_TRACE ovr_TraceMessage;
 extern PFUNC_ORTHO ovrMatrix4f_OrthoSubProjection;
 extern PFUNC_TIMEWARPPROJ ovrTimewarpProjectionDesc_FromProjection;
-
 extern PFUNC_CREATEMIRRORGL ovrHmd_CreateMirrorTextureGL;
-extern PFUNC_CREATEMIRRORD3D116 ovrHmd_CreateMirrorTextureD3D11;
+
+#endif
+
+#if !defined(HAVE_OCULUSSDK) || OVR_MAJOR_VERSION != 6 || OVR_PRODUCT_VERSION > 0
+
 extern PFUNC_CREATESWAPGL ovrHmd_CreateSwapTextureSetGL;
+extern PFUNC_CREATEMIRRORD3D116 ovrHmd_CreateMirrorTextureD3D11;
 extern PFUNC_CREATESWAPD3D116 ovrHmd_CreateSwapTextureSetD3D11;
+
+#endif
+
+#if !defined(HAVE_OCULUSSDK) || (OVR_MAJOR_VERSION < 6 && OVR_PRODUCT_VERSION == 0)
+
 extern PFUNC_DESTROYMIRROR ovrHmd_DestroyMirrorTexture;
 extern PFUNC_DESTROYSWAP ovrHmd_DestroySwapTextureSet;
+
+#endif
+
+#ifndef HAVE_OCULUSSDK
+
 extern PFUNC_CALC ovr_CalcEyePoses;
 extern PFUNC_ERRORINFO ovr_GetLastErrorInfo;
 extern PFUNC_SUBMIT ovrHmd_SubmitFrame;
@@ -979,6 +1063,10 @@ extern PFUNC_DISPLAYTIME ovr_GetPredictedDisplayTime;
 #define ovr_SubmitFrame ovrHmd_SubmitFrame
 #define ovr_GetRenderDesc ovrHmd_GetRenderDesc
 #define ovrHmd_GetFrameTiming6 ovr_GetFrameTiming
+
+#endif
+
+#ifndef HAVE_OCULUSSDK
 
 namespace OVR
 {
@@ -1049,3 +1137,5 @@ public:
 #define OVR_PATCH_VERSION 1
 #define OVR_BUILD_NUMBER 0
 #define OVR_VERSION_STRING "0.5.0.1"
+
+#endif

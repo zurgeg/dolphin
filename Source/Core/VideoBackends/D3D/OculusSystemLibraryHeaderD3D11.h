@@ -1,6 +1,8 @@
 #pragma once
-#include "VideoCommon/OculusSystemLibraryHeader.h"
+#include "VideoCommon/VROculus.h"
 #include "d3d11.h"
+
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION >= 1
 
 typedef struct
 {
@@ -29,6 +31,15 @@ typedef union {
   ovrTexture6 Texture;
 } ovrD3D11Texture6;
 
+#else
+
+#define ovrD3D11Texture5 ovrD3D11Texture
+#define ovrD3D11Texture6 ovrD3D11Texture
+
+#endif
+
+#if !defined(HAVE_OCULUSSDK) || OVR_MAJOR_VERSION > 5 || OVR_PRODUCT_VERSION > 0
+
 typedef struct
 {
   ovrRenderAPIConfigHeader Header;
@@ -43,3 +54,5 @@ typedef union {
   ovrD3D11ConfigData D3D11;
   ovrRenderAPIConfig Config;
 } ovrD3D11Config;
+
+#endif

@@ -10,19 +10,23 @@
 #include "VideoBackends/D3D/PixelShaderCache.h"
 #include "VideoBackends/D3D/Render.h"
 #include "VideoBackends/D3D/VertexShaderCache.h"
-#include "VideoCommon/VideoConfig.h"
 #include "VideoCommon/VR.h"
 #include "VideoCommon/VROculus.h"
 #include "VideoCommon/VROpenVR.h"
+#include "VideoCommon/VideoConfig.h"
+
+#ifdef HAVE_OCULUSSDK
+#include "OVR_CAPI_D3D.h"
+#endif
+#include "OculusSystemLibraryHeaderD3D11.h"
 
 namespace DX11
 {
 // Oculus Rift
 #ifdef OVR_MAJOR_VERSION
 
-#if OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION <= 5
 ovrD3D11Texture5 g_eye_texture[2];
-#else
+
 //------------------------------------------------------------
 // ovrSwapTextureSet wrapper class that also maintains the render target views
 // needed for D3D11 rendering.
@@ -110,7 +114,7 @@ struct OculusTexture
       TexRtv.push_back(rtv);
       tex->Release();
 #else
-      ovrD3D11Texture* tex = (ovrD3D11Texture*)&TextureSet->Textures[i];
+      ovrD3D11Texture6* tex = (ovrD3D11Texture6*)&TextureSet->Textures[i];
 #if OVR_MAJOR_VERSION >= 7
       D3D11_RENDER_TARGET_VIEW_DESC rtvd = {};
       rtvd.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -169,12 +173,10 @@ ovrRecti eyeRenderViewport[2];
 #if OVR_PRODUCT_VERSION >= 1
 ovrMirrorTexture mirrorTexture = nullptr;
 #else
-ovrTexture* mirrorTexture = nullptr;
+ovrTexture6* mirrorTexture = nullptr;
 #endif
 int mirror_width = 0, mirror_height = 0;
 D3D11_TEXTURE2D_DESC texdesc = {};
-#endif
-
 #endif
 
 #ifdef HAVE_OPENVR
@@ -462,7 +464,7 @@ void VR_BeginFrame()
     ++g_ovr_frameindex;
 // On Oculus SDK 0.6.0 and above, we get the frame timing manually, then swap each eye texture
 #if OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION <= 7
-    g_rift_frame_timing = ovrHmd_GetFrameTiming(hmd, 0);
+    g_rift_frame_timing6 = ovrHmd_GetFrameTiming(hmd, 0);
 #endif
     for (int eye = 0; eye < 2; eye++)
     {
@@ -471,7 +473,7 @@ void VR_BeginFrame()
     }
 #else
     ovrHmd_DismissHSWDisplay(hmd);
-    g_rift_frame_timing = ovrHmd_BeginFrame(hmd, ++g_ovr_frameindex);
+    g_rift_frame_timing5 = ovrHmd_BeginFrame(hmd, ++g_ovr_frameindex);
 #endif
   }
 #endif
