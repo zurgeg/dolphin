@@ -62,6 +62,20 @@ void ovrhmd_EnableHSWDisplaySDKRender(ovrHmd hmd, ovrBool enabled);
 #else
 #define SCM_OCULUS_STR ", Oculus SDK " OVR_VERSION_STRING
 #endif
+
+
+
+#define ovrFrameTiming5 ovrFrameTiming
+#define ovrFrameTiming6 ovrFrameTiming
+#define ovrGLTexture5 ovrGLTexture
+#define ovrGLTexture6 ovrGLTexture
+#define ovrTrackingState5 ovrTrackingState
+#define ovrTrackingState7 ovrTrackingState
+#define ovrTrackingState8 ovrTrackingState
+#define ovrTrackingState13 ovrTrackingState
+#define ovrD3D11Texture5 ovrD3D11Texture
+#define ovrD3D11Texture6 ovrD3D11Texture
+
 #else
 #ifdef _WIN32
 #include "OculusSystemLibraryHeader.h"
@@ -86,7 +100,7 @@ extern ovrHmdDesc hmdDesc;
 extern ovrFovPort g_eye_fov[2];
 extern ovrEyeRenderDesc g_eye_render_desc[2];
 #if OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION <= 7
-extern ovrFrameTiming g_rift_frame_timing;
+extern ovrFrameTiming5 g_rift_frame_timing;
 #endif
 extern ovrPosef g_eye_poses[2], g_front_eye_poses[2];
 #endif

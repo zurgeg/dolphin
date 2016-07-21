@@ -21,7 +21,7 @@ namespace DX11
 #ifdef OVR_MAJOR_VERSION
 
 #if OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION <= 5
-ovrD3D11Texture g_eye_texture[2];
+ovrD3D11Texture5 g_eye_texture[2];
 #else
 //------------------------------------------------------------
 // ovrSwapTextureSet wrapper class that also maintains the render target views
@@ -636,7 +636,7 @@ void VR_DrawTimewarpFrame()
   if (g_has_rift)
   {
 #if OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION <= 5
-    ovrFrameTiming frameTime;
+    ovrFrameTiming5 frameTime;
     frameTime = ovrHmd_BeginFrame(hmd, ++g_ovr_frameindex);
     // const ovrTexture* new_eye_texture = new
     // ovrTexture(FramebufferManager::m_eye_texture[0].Texture);

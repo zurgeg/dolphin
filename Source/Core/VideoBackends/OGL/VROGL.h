@@ -11,11 +11,6 @@
 
 #include "VideoCommon/VR.h"
 
-#ifdef HAVE_OCULUSSDK
-#include "OVR_CAPI_GL.h"
-#else
-#endif
-
 namespace OGL
 {
 void VR_ConfigureHMD();

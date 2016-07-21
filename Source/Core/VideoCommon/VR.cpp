@@ -48,7 +48,7 @@ ovrHmdDesc hmdDesc;
 ovrFovPort g_best_eye_fov[2], g_eye_fov[2], g_last_eye_fov[2];
 ovrEyeRenderDesc g_eye_render_desc[2];
 #if OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION <= 7
-ovrFrameTiming g_rift_frame_timing;
+ovrFrameTiming5 g_rift_frame_timing;
 #endif
 ovrPosef g_eye_poses[2], g_front_eye_poses[2];
 int g_ovr_frameindex;
@@ -348,7 +348,7 @@ bool InitOpenVR()
               m_pHMD->GetFloatTrackedDeviceProperty(vr::k_unTrackedDeviceIndex_Hmd,
                                                     vr::Prop_DisplayFrequency_Float, &error));
     g_openvr_ipd = m_pHMD->GetFloatTrackedDeviceProperty(vr::k_unTrackedDeviceIndex_Hmd,
-                                                          vr::Prop_UserIpdMeters_Float, &error);
+                                                         vr::Prop_UserIpdMeters_Float, &error);
 
     NOTICE_LOG(VR, "OpenVR strDriver = '%s'", m_strDriver.c_str());
     NOTICE_LOG(VR, "OpenVR strDisplay = '%s'", m_strDisplay.c_str());
@@ -436,8 +436,12 @@ bool InitOculusHMD()
     g_vr_cant_motion_blur = false;
     g_vr_has_dynamic_predict = true;
     g_vr_has_configure_rendering = true;
-    // ovrHmd_GetDesc(hmd, &hmdDesc);
+// ovrHmd_GetDesc(hmd, &hmdDesc);
+#ifdef OCULUSSYSTEMLIBRARYHEADER
+    hmdDesc = ovr_GetHmdDesc(hmd);
+#else
     hmdDesc = *hmd;
+#endif
     ovrHmd_SetEnabledCaps(hmd, ovrHmd_GetEnabledCaps(hmd) | ovrHmdCap_DynamicPrediction |
                                    ovrHmdCap_LowPersistence);
 #endif
@@ -1790,8 +1794,10 @@ bool VR_GetHMDGestures(u32* gestures)
   {
 #if OVR_PRODUCT_VERSION >= 1 || OVR_MAJOR_VERSION >= 8
     ovrTrackingState t = ovr_GetTrackingState(hmd, 0, false);
+#elif OVR_MAJOR_VERSION >= 6
+    ovrTrackingState5 t = ovrHmd_GetTrackingState(hmd, g_rift_frame_timing.DisplayMidpointSeconds);
 #else
-    ovrTrackingState t = ovrHmd_GetTrackingState(hmd, g_rift_frame_timing.ScanoutMidpointSeconds);
+    ovrTrackingState5 t = ovrHmd_GetTrackingState(hmd, g_rift_frame_timing.ScanoutMidpointSeconds);
 #endif
     if (WasItTapped(t.HeadPose.LinearAcceleration, t.HeadPose.TimeInSeconds))
     {

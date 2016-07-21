@@ -20,9 +20,16 @@
 #include "VideoCommon/VROculus.h"
 #include "VideoCommon/VROpenVR.h"
 
+#ifdef HAVE_OCULUSSDK
+// don't include Windows SDK OPENGL include files
+#define __gl_h_
+#include "OVR_CAPI_GL.h"
+#else
+#endif
+
 // Oculus Rift
 #if defined(OVR_MAJOR_VERSION) && OVR_PRODUCT_VERSION == 0
-ovrGLTexture g_eye_texture[2];
+ovrGLTexture5 g_eye_texture[2];
 #endif
 
 namespace OGL
@@ -1058,7 +1065,7 @@ void VR_DrawTimewarpFrame()
   if (g_has_rift)
   {
 #if OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION <= 5
-    ovrFrameTiming frameTime;
+    ovrFrameTiming5 frameTime;
     frameTime = ovrHmd_BeginFrame(hmd, ++g_ovr_frameindex);
 
     ovr_WaitTillTime(frameTime.NextFrameSeconds - g_ActiveConfig.fTimeWarpTweak);
@@ -1119,7 +1126,7 @@ void VR_DrawAsyncTimewarpFrame()
     // Grab the most recent textures
     for (int eye = 0; eye < 2; eye++)
     {
-      ((ovrGLTexture&)(g_eye_texture[eye])).OGL.TexId = FramebufferManager::m_frontBuffer[eye];
+      ((ovrGLTexture5&)(g_eye_texture[eye])).OGL.TexId = FramebufferManager::m_frontBuffer[eye];
     }
 #ifdef _WIN32
 // HANDLE thread_handle = g_video_backend->m_video_thread->native_handle();

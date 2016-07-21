@@ -1,23 +1,33 @@
-// This is a header file for linking to the Oculus Rift system libraries to build for the Oculus
-// Rift platform.
-// Moral rights Carl Kenner
-// Public Domain
-
 #pragma once
 #include "VideoCommon/OculusSystemLibraryHeader.h"
 #include "d3d11.h"
 
 typedef struct
 {
-  ovrTextureHeader Header;
+  ovrTextureHeader5 Header;
   ID3D11Texture2D* pTexture;
   ID3D11ShaderResourceView* pSRView;
-} ovrD3D11TextureData;
+} ovrD3D11TextureData5;
 
 typedef union {
-  ovrD3D11TextureData D3D11;
-  ovrTexture Texture;
-} ovrD3D11Texture;
+  ovrD3D11TextureData5 D3D11;
+  ovrTexture5 Texture;
+} ovrD3D11Texture5;
+
+typedef struct ALIGN_TO_POINTER_BOUNDARY
+{
+  ovrTextureHeader6 Header;
+#ifdef _WIN64
+  unsigned padding;
+#endif
+  ID3D11Texture2D* pTexture;
+  ID3D11ShaderResourceView* pSRView;
+} ovrD3D11TextureData6;
+
+typedef union {
+  ovrD3D11TextureData6 D3D11;
+  ovrTexture6 Texture;
+} ovrD3D11Texture6;
 
 typedef struct
 {
