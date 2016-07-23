@@ -2,8 +2,9 @@
 #include "VideoCommon/VROculus.h"
 #include "d3d11.h"
 
-#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION >= 1
-
+// 0.3 to 0.5
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 5 ||                \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 3)
 typedef struct
 {
   ovrTextureHeader5 Header;
@@ -15,7 +16,11 @@ typedef union {
   ovrD3D11TextureData5 D3D11;
   ovrTexture5 Texture;
 } ovrD3D11Texture5;
+#else
+#define ovrD3D11Texture5 ovrD3D11Texture
+#endif
 
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 6
 typedef struct ALIGN_TO_POINTER_BOUNDARY
 {
   ovrTextureHeader6 Header;
@@ -30,12 +35,8 @@ typedef union {
   ovrD3D11TextureData6 D3D11;
   ovrTexture6 Texture;
 } ovrD3D11Texture6;
-
 #else
-
-#define ovrD3D11Texture5 ovrD3D11Texture
 #define ovrD3D11Texture6 ovrD3D11Texture
-
 #endif
 
 #if !defined(HAVE_OCULUSSDK) || OVR_MAJOR_VERSION > 5 || OVR_PRODUCT_VERSION > 0

@@ -1,3 +1,16 @@
+// Licensed under GPL2+
+// Copyright Carl Kenner 2016
+
+// This file should be included either after the Oculus SDK CAPI and version file with
+// HAVE_OCULUSSDK defined,
+// or without the Oculus SDK and HAVE_OCULUSSDK and OVR_MAJOR_VERSION not defined.
+// It adds all the constants, types, and functions (in my own words) from all the Oculus SDK
+// versions 0.5 to 1.5.
+// The functions will be loaded dynamically at runtime.
+// You should only use #ifdefs in your code around features from Oculus SDK 0.4 and below.
+// Use normal if (g_libovr_version > libovr_060) etc. statements to check which functions and types
+// to use.
+
 #pragma once
 #include <stdint.h>
 
@@ -43,133 +56,337 @@ enum TLibOvrVersion
 
 extern TLibOvrVersion g_libovr_version;
 
-#if !defined(OVR_MAJOR_VERSION)
+#if !defined(HAVE_OCULUSSDK)
 #define ovrHmd_None 0
 #define ovrHmd_DK1 3
 #define ovrHmd_DKHD 4
 #endif
-#if !defined(OVR_MAJOR_VERSION) || (OVR_MAJOR_VERSION >= 5) || (OVR_PRODUCT_VERSION >= 1)
+#if !defined(HAVE_OCULUSSDK) || (OVR_MAJOR_VERSION >= 5) || (OVR_PRODUCT_VERSION >= 1)
 #define ovrHmd_CrystalCoveProto 5
 #endif
-#if !defined(OVR_MAJOR_VERSION) ||                                                                 \
+#if !defined(HAVE_OCULUSSDK) ||                                                                    \
     (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 4)
 #define ovrHmd_DK2 6
 #endif
-#if !defined(OVR_MAJOR_VERSION) || (OVR_MAJOR_VERSION != 5 || OVR_PRODUCT_VERSION != 0)
+#if !defined(HAVE_OCULUSSDK) || (OVR_MAJOR_VERSION != 5 || OVR_PRODUCT_VERSION != 0)
 #define ovrHmd_BlackStar 7
 #endif
-#if !defined(OVR_MAJOR_VERSION) || (OVR_MAJOR_VERSION < 5 && OVR_PRODUCT_VERSION < 1)
+#if !defined(HAVE_OCULUSSDK) || (OVR_MAJOR_VERSION < 5 && OVR_PRODUCT_VERSION < 1)
 #define ovrHmd_CB 8
 #endif
-#if !defined(OVR_MAJOR_VERSION)
+#if !defined(HAVE_OCULUSSDK)
 #define ovrHmd_Other 9
 #endif
-#if !defined(OVR_MAJOR_VERSION) || (OVR_MAJOR_VERSION < 7 && OVR_PRODUCT_VERSION < 1)
+#if !defined(HAVE_OCULUSSDK) || (OVR_MAJOR_VERSION < 7 && OVR_PRODUCT_VERSION < 1)
 #define ovrHmd_E3_2015 10
 #define ovrHmd_ES06 11
 #endif
-#if !defined(OVR_MAJOR_VERSION) || (OVR_MAJOR_VERSION < 8 && OVR_PRODUCT_VERSION < 1)
+#if !defined(HAVE_OCULUSSDK) || (OVR_MAJOR_VERSION < 8 && OVR_PRODUCT_VERSION < 1)
 #define ovrHmd_ES09 12
 #endif
-#if !defined(OVR_MAJOR_VERSION) || (OVR_MAJOR_VERSION < 8 && OVR_PRODUCT_VERSION < 1)
+#if !defined(HAVE_OCULUSSDK) || (OVR_MAJOR_VERSION < 8 && OVR_PRODUCT_VERSION < 1)
 #define ovrHmd_ES09 12
 #endif
-#if !defined(OVR_MAJOR_VERSION) || OVR_PRODUCT_VERSION < 1
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION < 1
 #define ovrHmd_ES11 13
 #define ovrHmd_CV1 14
 #endif
 
-#if !defined(OVR_MAJOR_VERSION)
+// SDK 0.3 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 3)
 #define ovrEye_Left 0
 #define ovrEye_Right 1
 #define ovrEye_Count 2
 #endif
 
-#if !defined(OVR_MAJOR_VERSION) || (OVR_MAJOR_VERSION < 7 && OVR_PRODUCT_VERSION < 1)
+// SDK 0.7 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_MAJOR_VERSION < 7 && OVR_PRODUCT_VERSION < 1)
 #define ovrHand_Left 0
 #define ovrHand_Right 1
 #endif
 
-#ifndef HAVE_OCULUSSDK
-
-// only ovrHmdCap_DebugDevice is supported on SDK 0.7 and above
+// SDK 0.3 to 0.5
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 5 ||                \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 3)
 #define ovrHmdCap_Present 0x0001
 #define ovrHmdCap_Available 0x0002
+#endif
+// SDK 0.4 to 0.5
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 5 ||                \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 4)
 #define ovrHmdCap_Captured 0x0004
+#endif
+// SDK 0.4 to 0.6 (commented out in 0.3, in unused file in SDK 0.7 and above)
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 6 ||                \
+    (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 4)
 #define ovrHmdCap_ExtendDesktop 0x0008
+#endif
+// SDK 0.5 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 5)
 #define ovrHmdCap_DebugDevice 0x0010
+#endif
+// SDK 0.4 to SDK 0.5 (commented out in 0.3)
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 5 ||                \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 4)
 #define ovrHmdCap_DisplayOff 0x0040
+#endif
+// SDK 0.3 to 0.6
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 6 ||                \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 3)
 #define ovrHmdCap_LowPersistence 0x0080
 #define ovrHmdCap_DynamicPrediction 0x0200
+#endif
+// SDK 0.4.4 only
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION != 0 ||               \
+    OVR_MINOR_VERSION != 4 || OVR_BUILD_VERSION < 4
+#define ovrHmdCap_DirectPentile 0x0400
+#endif
+// SDK 0.3 to 0.5
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 5 ||                \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 3)
 #define ovrHmdCap_NoVSync 0x1000
+#endif
+// SDK 0.4 to SDK 0.5 (commented out in 0.3)
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 5 ||                \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 4)
 #define ovrHmdCap_NoMirrorToWindow 0x2000
+#endif
+// SDK 0.4 to 0.8 (but set to zero on 0.7 and 0.8)
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 ||                                         \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 4)
 #define ovrHmdCap_Service_Mask 0x22C0
+#endif
+// SDK 0.3 to 0.8 (but set to zero on 0.7 and 0.8)
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 ||                                         \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 3)
 #define ovrHmdCap_Writable_Mask 0x32C0
+#endif
 
+// SDK 0.4 and above
+#if !defined(HAVE_OCULUSSDK) ||                                                                    \
+    (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 4)
 #define ovrTrackingCap_Orientation 0x010
 #define ovrTrackingCap_MagYawCorrection 0x020
 #define ovrTrackingCap_Position 0x040
+#endif
+// SDK 0.4 to 0.7
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 7 ||                \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 4)
 #define ovrTrackingCap_Idle 0x100
+#endif
 
+// SDK 0.3 and above
+#if !defined(HAVE_OCULUSSDK) ||                                                                    \
+    (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 3)
 #define ovrStatus_OrientationTracked 0x0001
 #define ovrStatus_PositionTracked 0x0002
+#endif
+// SDK 0.4 to 0.8
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 ||                                         \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 4)
 #define ovrStatus_CameraPoseTracked 0x0004
+#endif
+// SDK 0.3 to 0.8
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 ||                                         \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 3)
 #define ovrStatus_PositionConnected 0x0020
 #define ovrStatus_HmdConnected 0x0080
+#endif
 
+// 0.3 to 0.4
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 0 ||                \
+    OVR_MINOR_VERSION < 3
 #define ovrDistortionCap_Chromatic 0x00001
+#endif
+
+// 0.3 to 0.5
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 5 ||                \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 3)
 #define ovrDistortionCap_TimeWarp 0x00002
 #define ovrDistortionCap_Vignette 0x00008
+#endif
+// 0.4.0 to 0.5
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 5 ||                \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 4)
 #define ovrDistortionCap_NoRestore 0x00010
 #define ovrDistortionCap_FlipInput 0x00020
 #define ovrDistortionCap_SRGB 0x00040
 #define ovrDistortionCap_Overdrive 0x00080
+#endif
+// 0.4.2 to 0.5
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 5 ||                \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 4) ||                                           \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION == 4 && OVR_BUILD_VERSION < 2)
 #define ovrDistortionCap_HqDistortion 0x00100
+#endif
+// 0.4.3 to 0.5
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 5 ||                \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 4) ||                                           \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION == 4 && OVR_BUILD_VERSION < 3)
 #define ovrDistortionCap_LinuxDevFullscreen 0x00200
+#endif
+// 0.4.4 to 0.5
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 5 ||                \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 4) ||                                           \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION == 4 && OVR_BUILD_VERSION < 4)
 #define ovrDistortionCap_ComputeShader 0x00400
+#endif
+
+// 0.5 only
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION != 5
 #define ovrDistortionCap_NoTimewarpJit 0x00800
 #define ovrDistortionCap_TimewarpJitDelay 0x01000
 #define ovrDistortionCap_ProfileNoSpinWaits 0x10000
+#endif
 
+// 0.5 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 5)
 #define ovrLogLevel_Debug 0
 #define ovrLogLevel_Info 1
 #define ovrLogLevel_Error 2
+#endif
 
+// 0.5 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 5)
 #define ovrInit_Debug 1
+#endif
+// 0.5 to 0.7
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 7 ||                \
+    OVR_MAJOR_VERSION < 5
 #define ovrInit_ServerOptional 2
+#endif
+// 0.5 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 5)
 #define ovrInit_RequestVersion 4
+#endif
+// 0.5 to 0.6
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 6 ||                \
+    OVR_MAJOR_VERSION < 5
 #define ovrInit_ForceNoDebug 8
+#endif
 
+// 0.5 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 5)
 #define ovrFalse 0
 #define ovrTrue 1
+#endif
 
+// 0.3 to 0.8
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 ||                                         \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 3)
 #define ovrRenderAPI_None 0
 #define ovrRenderAPI_OpenGL 1
 #define ovrRenderAPI_Android_GLES 2
+#endif
+// 0.3 to 0.5
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 5 ||                \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 3)
 #define ovrRenderAPI_D3D9 3
 #define ovrRenderAPI_D3D10 4
+#endif
+// 0.6 only
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION != 6
+#define ovrRenderAPI_D3D9_Obsolete 3
+#define ovrRenderAPI_D3D10_Obsolete 4
+#endif
+// 0.3 to 0.8
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 ||                                         \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 3)
 #define ovrRenderAPI_D3D11 5
+// 0.3 to 0.8 (but has different values)
 #define ovrRenderAPI_Count 6
+#endif
 
+// 0.5 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 5)
 #define ovrProjection_None 0
+#endif
+// 0.5 to 0.8
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION < 5
 #define ovrProjection_RightHanded 1
+#endif
+// 1.3 and above
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION == 0
+#define ovrProjection_LeftHanded 1
+#endif
+// 0.5 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 5)
 #define ovrProjection_FarLessThanNear 2
 #define ovrProjection_FarClipAtInfinity 4
 #define ovrProjection_ClipRangeOpenGL 8
+#endif
 
+// 0.5 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 5)
 #define ovrSuccess 0
+#endif
+// 0.6 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 6)
 #define ovrSuccess_NotVisible 1000
 #define ovrSuccess_HMDFirmwareMismatch 4100
 #define ovrSuccess_TrackerFirmwareMismatch 4101
+#endif
+// 0.7 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 7)
 #define ovrSuccess_ControllerFirmwareMismatch 4104
+#endif
+// 1.3 and above
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION == 0
+#define ovrSuccess_TrackerDriverNotFound 4105
+#endif
+
+// 0.6 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 6)
 #define ovrError_MemoryAllocationFailure -1000
 #define ovrError_SocketCreationFailure -1001
+#endif
+// 0.6 to 0.7
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 7 ||                \
+    OVR_MAJOR_VERSION < 6
 #define ovrError_InvalidHmd -1002
+#endif
+// 0.8 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 8)
+#define ovrError_InvalidSession -1002
+#endif
+// 0.6 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 6)
 #define ovrError_Timeout -1003
 #define ovrError_NotInitialized -1004
 #define ovrError_InvalidParameter -1005
 #define ovrError_ServiceError -1006
 #define ovrError_NoHmd -1007
+#endif
+
+// 1.3 and above
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION == 0
+#define ovrError_Unsupported -1009
+#define ovrError_DeviceUnavailable -1010
+#define ovrError_InvalidHeadsetOrientation -1011
+#define ovrError_ClientSkippedDestroy -1012
+#define ovrError_ClientSkippedShutdown -1013
+#endif
+// 1.4 and above
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION == 0 ||                                        \
+    (OVR_PRODUCT_VERSION == 1 && OVR_MAJOR_VERSION <= 1 && OVR_MINOR_VERSION < 4)
+#define ovrError_ServiceDeadlockDetected -1014
+#endif
+
+// 0.6 to 1.4
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 6) ||             \
+    (OVR_PRODUCT_VERSION == 1 && OVR_MAJOR_VERSION == 1 && OVR_MINOR_VERSION > 4) ||               \
+    (OVR_PRODUCT_VERSION == 1 && OVR_MAJOR_VERSION > 1) || (OVR_PRODUCT_VERSION > 1)
+#define ovrError_AudioReservedBegin -2000
+#define ovrError_AudioReservedEnd -2999
+#endif
+// 0.8 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 8)
+#define ovrError_AudioDeviceNotFound -2001
+#define ovrError_AudioComError -2002
+#endif
+
+// 0.5 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 5)
 #define ovrError_Initialize -3000
 #define ovrError_LibLoad -3001
 #define ovrError_LibVersion -3002
@@ -179,9 +396,36 @@ extern TLibOvrVersion g_libovr_version;
 #define ovrError_DisplayInit -3006
 #define ovrError_ServerStart -3007
 #define ovrError_Reinitialization -3008
+#endif
+// 0.6 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 6)
 #define ovrError_MismatchedAdapters -3009
+#endif
+// 0.7 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 7)
 #define ovrError_LeakingResources -3010
 #define ovrError_ClientVersion -3011
+#endif
+// 0.8 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 8)
+#define ovrError_OutOfDateOS -3012
+#define ovrError_OutOfDateGfxDriver -3013
+#define ovrError_IncompatibleGPU -3014
+#define ovrError_NoValidVRDisplaySystem -3015
+#endif
+// 1.3 and above
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION == 0
+#define ovrError_Obsolete -3016
+#define ovrError_DisabledOrDefaultAdapter -3017
+#define ovrError_HybridGraphicsNotSupported -3018
+#define ovrError_DisplayManagerInit -3019
+#define ovrError_TrackerDriverInit -3020
+#endif
+
+// 0.6 to 1.4
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 6) ||             \
+    (OVR_PRODUCT_VERSION == 1 && OVR_MAJOR_VERSION == 1 && OVR_MINOR_VERSION > 4) ||               \
+    (OVR_PRODUCT_VERSION == 1 && OVR_MAJOR_VERSION > 1) || (OVR_PRODUCT_VERSION > 1)
 #define ovrError_InvalidBundleAdjustment -4000
 #define ovrError_USBBandwidth -4001
 #define ovrError_USBEnumeratedSpeed -4002
@@ -190,19 +434,125 @@ extern TLibOvrVersion g_libovr_version;
 #define ovrError_ExcessiveFrameTruncation -4005
 #define ovrError_ExcessiveFrameSkipping -4006
 #define ovrError_SyncDisconnected -4007
+#endif
+// 0.7 to 1.4
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 7) ||             \
+    (OVR_PRODUCT_VERSION == 1 && OVR_MAJOR_VERSION == 1 && OVR_MINOR_VERSION > 4) ||               \
+    (OVR_PRODUCT_VERSION == 1 && OVR_MAJOR_VERSION > 1) || (OVR_PRODUCT_VERSION > 1)
 #define ovrError_TrackerMemoryReadFailure -4008
 #define ovrError_TrackerMemoryWriteFailure -4009
 #define ovrError_TrackerFrameTimeout -4010
 #define ovrError_TrackerTruncatedFrame -4011
+#endif
+// 1.3 to 1.4
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION != 1 || OVR_MAJOR_VERSION != 1 ||              \
+    OVR_MINOR_VERSION > 4
+#define ovrError_TrackerDriverFailure = -4012
+#define ovrError_TrackerNRFFailure = -4013
+#define ovrError_HardwareGone = -4014
+#define ovrError_NordicEnabledNoSync = -4015
+#define ovrError_NordicSyncNoFrames = -4016
+#define ovrError_CatastrophicFailure = -4017
+#endif
+// 1.4 only
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION != 1 || OVR_MAJOR_VERSION != 1 ||              \
+    OVR_MINOR_VERSION != 4
+#define ovrError_CatastrophicTimeout -4018
+#define ovrError_RepeatCatastrophicFail -4019
+#define ovrError_USBOpenDeviceFailure -4020
+#define ovrError_HMDGeneralFailure -4021
+#endif
+
+// 0.6 to 1.4
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 6) ||             \
+    (OVR_PRODUCT_VERSION == 1 && OVR_MAJOR_VERSION == 1 && OVR_MINOR_VERSION > 4) ||               \
+    (OVR_PRODUCT_VERSION == 1 && OVR_MAJOR_VERSION > 1) || (OVR_PRODUCT_VERSION > 1)
 #define ovrError_HMDFirmwareMismatch -4100
 #define ovrError_TrackerFirmwareMismatch -4101
+#endif
+// 0.7 to 1.4
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 7) ||             \
+    (OVR_PRODUCT_VERSION == 1 && OVR_MAJOR_VERSION == 1 && OVR_MINOR_VERSION > 4) ||               \
+    (OVR_PRODUCT_VERSION == 1 && OVR_MAJOR_VERSION > 1) || (OVR_PRODUCT_VERSION > 1)
 #define ovrError_BootloaderDeviceDetected -4102
 #define ovrError_TrackerCalibrationError -4103
 #define ovrError_ControllerFirmwareMismatch -4104
+#endif
+
+// 1.5 only
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION != 1 || OVR_MAJOR_VERSION != 1 ||              \
+    OVR_MINOR_VERSION != 5
+#define ovrError_DevManDeviceDetected -4105
+#define ovrError_RebootedBootloaderDevice -4106
+#define ovrError_FailedRebootBootloaderDev -4107
+#endif
+
+// 1.3 to 1.4
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION != 1 || OVR_MAJOR_VERSION != 1 ||              \
+    OVR_MINOR_VERSION > 4
+#define ovrError_IMUTooManyLostSamples -4200
+#define ovrError_IMURateError -4201
+#define ovrError_FeatureReportFailure -4202
+#endif
+// 1.4 only
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION != 1 || OVR_MAJOR_VERSION != 1 ||              \
+    OVR_MINOR_VERSION != 4
+#define ovrError_HMDWirelessTimeout -4203
+#define ovrError_BootloaderAssertLog -4300
+#define ovrError_AppAssertLog -4301
+#endif
+
+// 0.6 to 1.4
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 6) ||             \
+    (OVR_PRODUCT_VERSION == 1 && OVR_MAJOR_VERSION == 1 && OVR_MINOR_VERSION > 4) ||               \
+    (OVR_PRODUCT_VERSION == 1 && OVR_MAJOR_VERSION > 1) || (OVR_PRODUCT_VERSION > 1)
 #define ovrError_Incomplete -5000
 #define ovrError_Abandoned -5001
-#define ovrError_DisplayLost -6000
+#endif
 
+// 0.7 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 7)
+#define ovrError_DisplayLost -6000
+#endif
+// 1.3 and above
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION == 0
+#define ovrError_TextureSwapChainFull -6001
+#define ovrError_TextureSwapChainInvalid -6002
+#endif
+// 1.4 and above
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION == 0 ||                                        \
+    (OVR_PRODUCT_VERSION == 1 && OVR_MAJOR_VERSION <= 1 && OVR_MINOR_VERSION < 4)
+#define ovrError_GraphicsDeviceReset -6003
+#define ovrError_DisplayRemoved -6004
+#define ovrError_ContentProtectionNotAvailable -6005
+#define ovrError_ApplicationInvisible -6006
+#define ovrError_Disallowed -6007
+#define ovrError_DisplayPluggedIncorrectly -6008
+#endif
+
+// 0.8 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 8)
+#define ovrError_RuntimeException -7000
+#endif
+
+// 1.3 to 1.4
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION != 1 || OVR_MAJOR_VERSION != 1 ||              \
+    OVR_MINOR_VERSION > 4
+#define ovrError_MetricsUnknownApp -90000,
+#define ovrError_MetricsDuplicateApp -90001,
+#define ovrError_MetricsNoEvents -90002,
+#define ovrError_MetricsRuntime -90003,
+#define ovrError_MetricsFile -90004,
+#define ovrError_MetricsNoClientInfo -90005,
+#define ovrError_MetricsNoAppMetaData -90006,
+#define ovrError_MetricsNoApp -90007,
+#define ovrError_MetricsOafFailure -90008,
+#define ovrError_MetricsSessionAlreadyActive -90009,
+#define ovrError_MetricsSessionNotActive -90010,
+#endif
+
+// 0.7 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 7)
 #define ovrButton_A 0x00000001
 #define ovrTouch_A ovrButton_A
 #define ovrButton_B 0x00000002
@@ -229,34 +579,121 @@ extern TLibOvrVersion g_libovr_version;
 #define ovrButton_Right 0x00080000
 #define ovrButton_Enter 0x00100000
 #define ovrButton_Back 0x00200000
+#endif
+// 0.8 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 8)
 #define ovrButton_Private 0x01C00000
+#endif
+// 1.3 and above
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION == 0
+#define ovrButton_RMask 0x0000000F
+#define ovrTouch_RButtonMask 0x0000001F
+#define ovrTouch_RPoseMask 0x00000060
+#define ovrButton_LMask 0x00000F00
+#define ovrTouch_LButtonMask 0x00001F00
+#define ovrTouch_LPoseMask 0x00006000
+#define ovrButton_VolUp 0x00400000
+#define ovrButton_VolDown 0x00800000
+#define ovrButton_Home 0x01000000
+#endif
+// 1.5 and above
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION < 1 || OVR_MAJOR_VERSION < 1 ||                \
+    OVR_MINOR_VERSION < 5
+#define ovrTouch_RThumbRest 0x00000008
+#define ovrTouch_LThumbRest 0x00000800
+#endif
 
+// 0.7 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 7)
 #define ovrControllerType_LTouch 0x01
 #define ovrControllerType_RTouch 0x02
 #define ovrControllerType_Touch 0x03
+#endif
+// 1.3 and above
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION == 0
+#define ovrControllerType_Remote 0x04
+#endif
+// 0.8 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 8)
 #define ovrControllerType_XBox 0x10
+#endif
+// 0.7 to 0.8
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION < 7
 #define ovrControllerType_All 0xff
+#endif
 
+// 0.6 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 6)
 #define ovrLayerType_Disabled 0
 #define ovrLayerType_EyeFov 1
+#endif
+// 0.6 to 0.8
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION < 6
 #define ovrLayerType_EyeFovDepth 2
-#define ovrLayerType_Quad 3
+#endif
+// 0.6 to 0.7
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION < 6 ||                \
+    OVR_MAJOR_VERSION > 7
 #define ovrLayerType_QuadInWorld 3
 #define ovrLayerType_QuadHeadLocked 4
+#endif
+// 0.8 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 8)
+#define ovrLayerType_Quad 3
 #define ovrLayerType_EyeMatrix 5
+#endif
+// 0.6 to 0.8
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION < 6
 #define ovrLayerType_Direct 6
+#endif
 
+// 0.6 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 6)
 #define ovrLayerFlag_HighQuality 1
 #define ovrLayerFlag_TextureOriginAtBottomLeft 2
+#endif
+// 0.8 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 8)
 #define ovrLayerFlag_HeadLocked 4
+#endif
 
+// 0.6 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 6)
 #define ovrPerfHud_Off 0
+// 0.6 and above but different values
 #define ovrPerfHud_LatencyTiming 1
+#endif
+// 0.6 to 0.8
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION < 6
 #define ovrPerfHud_RenderTiming 2
+#endif
+// 0.7 to 0.8
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION < 7
 #define ovrPerfHud_PerfHeadroom 3
+#endif
+// 0.7 and above but different values
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 7)
 #define ovrPerfHud_VersionInfo 4
+#endif
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 6)
+// 0.6 and above but different values
 #define ovrPerfHud_Count 5
+#endif
 
+// 1.3 and above
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION == 0
+#define ovrPerfHud_PerfSummary 1
+#define ovrPerfHud_AppRenderTiming 3
+#define ovrPerfHud_CompRenderTiming 4
+#endif
+
+// we named these ourselves
+#define ovrPerfHud6_Off 0
+#define ovrPerfHud6_LatencyTiming 1
+#define ovrPerfHud6_RenderTiming 2
+#define ovrPerfHud6_PerfHeadroom 3
+#define ovrPerfHud6_VersionInfo 4
+#define ovrPerfHud6_Count 5
 #define ovrPerfHud13_Off 0
 #define ovrPerfHud13_PerfSummary 1
 #define ovrPerfHud13_LatencyTiming 2
@@ -265,31 +702,43 @@ extern TLibOvrVersion g_libovr_version;
 #define ovrPerfHud13_VersionInfo 5
 #define ovrPerfHud13_Count 6
 
+// 0.8 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 8)
 #define ovrLayerHud_Off 0
 #define ovrLayerHud_Info 1
 
-#define ovrSwapTextureSetD3D11_Typeless 1
-
+// 0.8 and above (but different value on 0.8)
 #define ovrMaxLayerCount 16
+#endif
 
+// 0.7 to 0.8
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION < 7
+#define ovrSwapTextureSetD3D11_Typeless 1
+#endif
+
+// 0.6 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 6)
 #define OVR_SUCCESS(x) (x >= 0)
 #define OVR_FAILURE(x) (x < 0)
 
-typedef void(__cdecl* ovrLogCallback5)(int level, const char* message);
-typedef ovrLogCallback5 ovrLogCallback6;
-typedef void(__cdecl* ovrLogCallback7)(uintptr_t userData, int level, const char* message);
-typedef void* ovrLogCallback;
-
-#endif
-
-typedef float ovrScalar;
-
-#if !defined(HAVE_OCULUSSDK) || (OVR_MAJOR_VERSION < 6 && OVR_PRODUCT_VERSION == 0)
 typedef int ovrResult;
 #endif
 
-#ifndef HAVE_OCULUSSDK
+// we named these ourselves
+typedef float ovrScalar;
+typedef void(__cdecl* ovrLogCallback5)(int level, const char* message);
+typedef void(__cdecl* ovrLogCallback7)(uintptr_t userData, int level, const char* message);
 
+// 0.5 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 5)
+typedef void* ovrLogCallback;
+#endif
+
+// 0.3 and above
+#if !defined(HAVE_OCULUSSDK) ||                                                                    \
+    (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 3)
+typedef char ovrBool;
+typedef int ovrEyeType;
 typedef struct
 {
   int w, h;
@@ -321,8 +770,15 @@ typedef struct
   ovrScalar UpTan, DownTan, LeftTan, RightTan;
 } ovrFovPort;
 
-// It's only valid to access the contents of this struct on SDK 0.5
-typedef struct ovrHmdStruct
+#endif
+
+// It's only valid to access the contents of this struct on 0.5
+typedef struct
+#if !defined(HAVE_OCULUSSDK) ||                                                                    \
+    (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 3)
+    // 0.3 and above
+    ovrHmdStruct
+#endif
 {
   void* internal;
   int Type;
@@ -339,7 +795,19 @@ typedef struct ovrHmdStruct
   ovrVector2i WindowsPos;
   char* DisplayDeviceName;
   int DisplayId;
-} ovrHmdDesc5, *ovrHmd, *ovrSession;
+} ovrHmdDesc5
+#if !defined(HAVE_OCULUSSDK) ||                                                                    \
+    (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 3)
+    // 0.3 to 0.8, but typedefed on 1.3 and above
+    ,
+    *ovrHmd
+#endif
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 8)
+    // 0.8 and above
+    ,
+    *ovrSession
+#endif
+    ;
 
 typedef struct ALIGN_TO_POINTER_BOUNDARY
 {
@@ -400,44 +868,59 @@ typedef struct
   ovrVector2i WindowsPos;
   char DisplayDeviceName[128];
   int DisplayId;
-} ovrHmdDesc, ovrHmdDescComplete;
+}
+#if !defined(HAVE_OCULUSSDK) ||                                                                    \
+    (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 3)
+// 0.3 and above
+ovrHmdDesc,
+#endif
+    ovrHmdDescComplete;
 
-typedef struct
+// 0.3 and above
+#if !defined(HAVE_OCULUSSDK) ||                                                                    \
+    (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 3)
+typedef struct ALIGN_TO_FOUR_BYTE_BOUNDARY
 {
   int Eye;
   ovrFovPort Fov;
   ovrRecti DistortedViewport;
   ovrVector2f PixelsPerTanAngleAtCenter;
-  ovrVector3f HmdToEyeViewOffset;
+  union {
+    ovrVector3f HmdToEyeViewOffset;
+    ovrVector3f HmdToEyeOffset;
+    ovrVector3f ViewAdjust;
+  };
 } ovrEyeRenderDesc;
-
 #endif
 
-#if !defined(OVR_MAJOR_VERSION) || OVR_MAJOR_VERSION >= 8 || OVR_PRODUCT_VERSION >= 1
-
+// 0.3 to 0.5
+#if !defined(OVR_MAJOR_VERSION) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 5 ||             \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 3)
 typedef struct ALIGN_TO_EIGHT_BYTE_BOUNDARY
 {
   ovrScalar DeltaSeconds, unused;
   double ThisFrameSeconds, TimewarpPointSeconds, NextFrameSeconds, ScanoutMidpointSeconds,
       EyeScanoutSeconds[2];
 } ovrFrameTiming5;
+#else
+#define ovrFrameTiming5 ovrFrameTiming
+#endif
 
-// SDK 0.6 to 0.7 - there is no ovrFrameTiming in SDK 0.8 and above
+// 0.6 to 0.7 - there is no ovrFrameTiming in SDK 0.8 and above
+#if !defined(OVR_MAJOR_VERSION) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION < 6 ||             \
+    OVR_MAJOR_VERSION > 7
 typedef struct ALIGN_TO_EIGHT_BYTE_BOUNDARY
 {
   double DisplayMidpointSeconds, FrameIntervalSeconds;
   unsigned AppFrameIndex, DisplayFrameIndex;
 } ovrFrameTiming6;
-
 #else
-
-#define ovrFrameTiming5 ovrFrameTiming
 #define ovrFrameTiming6 ovrFrameTiming
-
 #endif
 
-#ifndef HAVE_OCULUSSDK
-
+// 0.3 and above
+#if !defined(OVR_MAJOR_VERSION) ||                                                                 \
+    (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 3)
 typedef struct
 {
   ovrQuatf Orientation;
@@ -448,21 +931,33 @@ typedef struct
 {
   ovrScalar M[4][4];
 } ovrMatrix4f;
+#endif
 
+// 0.4 to 0.5
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 5 ||                \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 4)
 typedef struct ALIGN_TO_EIGHT_BYTE_BOUNDARY
 {
   char Displayed, unused[7];
   double StartTime, DismissibleTime;
 } ovrHSWDisplayState;
+#endif
 
+// 0.5 to 0.6
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 6 ||                \
+    OVR_MAJOR_VERSION < 5
 typedef struct ALIGN_TO_EIGHT_BYTE_BOUNDARY
 {
   unsigned Flags, RequestedMinorVersion;
   ovrLogCallback LogCallback;
   unsigned ConnectionTimeoutMS;
   unsigned padding[3];
-} ovrInitParams, ovrInitParams5, ovrInitParams6;
+} ovrInitParams5;
+#else
+#define ovrInitParams5 ovrInitParams
+#endif
 
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION < 7
 typedef struct ALIGN_TO_EIGHT_BYTE_BOUNDARY
 {
   unsigned Flags, RequestedMinorVersion;
@@ -471,15 +966,20 @@ typedef struct ALIGN_TO_EIGHT_BYTE_BOUNDARY
   unsigned ConnectionTimeoutMS;
   unsigned padding[1];
 } ovrInitParams7;
+#else
+#define ovrInitParams7 ovrInitParams
+#endif
 
+// 0.6 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 6)
 typedef struct
 {
   ovrResult Result;
   char ErrorString[512];
 } ovrErrorInfo;
-
 #endif
 
+// 0.5
 #if !defined(HAVE_OCULUSSDK) || OVR_MAJOR_VERSION > 5 || OVR_PRODUCT_VERSION > 0
 
 typedef struct
@@ -548,15 +1048,18 @@ typedef ovrTexture ovrTexture6;
 
 #endif
 
-#ifndef HAVE_OCULUSSDK
-
+// 0.4 to 0.8
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 ||                                         \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 4)
 typedef struct
 {
   ovrVector3f Accelerometer, Gyro, Magnetometer;
   ovrScalar Temperature, TimeInSeconds;
 } ovrSensorData;
+#endif
 
-// unchanged from 0.5 to 1.3
+// unchanged from 0.5 to 1.5
+#ifndef HAVE_OCULUSSDK
 typedef struct ALIGN_TO_EIGHT_BYTE_BOUNDARY
 {
   ovrPosef ThePose;
@@ -564,7 +1067,10 @@ typedef struct ALIGN_TO_EIGHT_BYTE_BOUNDARY
   ovrScalar unused;
   double TimeInSeconds;
 } ovrPoseStatef;
+#endif
 
+// 0.5 (or below) to 0.6
+#if !defined(HAVE_OCULUSSDK) || OVR_MAJOR_VERSION > 6 || OVR_PRODUCT_VERSION > 0
 typedef struct
 {
   ovrPoseStatef HeadPose;
@@ -572,7 +1078,11 @@ typedef struct
   ovrSensorData RawSensorData;
   unsigned StatusFlags, LastCameraFrameCounter, unusued;
 } ovrTrackingState5;
+#else
+typedef ovrTrackingState ovrTrackingState5;
+#endif
 
+#if !defined(HAVE_OCULUSSDK) || OVR_MAJOR_VERSION != 7 || OVR_PRODUCT_VERSION > 0
 typedef struct ALIGN_TO_EIGHT_BYTE_BOUNDARY
 {
   ovrPoseStatef HeadPose;
@@ -581,7 +1091,11 @@ typedef struct ALIGN_TO_EIGHT_BYTE_BOUNDARY
   ovrSensorData RawSensorData;
   unsigned StatusFlags, LastCameraFrameCounter, unusued;
 } ovrTrackingState7;
+#else
+typedef ovrTrackingState ovrTrackingState7;
+#endif
 
+#if !defined(HAVE_OCULUSSDK) || OVR_MAJOR_VERSION < 8 || OVR_PRODUCT_VERSION > 0
 typedef struct ALIGN_TO_EIGHT_BYTE_BOUNDARY
 {
   ovrPoseStatef HeadPose;
@@ -590,7 +1104,11 @@ typedef struct ALIGN_TO_EIGHT_BYTE_BOUNDARY
   ovrSensorData RawSensorData;
   unsigned StatusFlags, HandStatusFlags[2], LastCameraFrameCounter, unusued;
 } ovrTrackingState8;
+#else
+typedef ovrTrackingState ovrTrackingState8;
+#endif
 
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION == 0
 typedef struct ALIGN_TO_EIGHT_BYTE_BOUNDARY
 {
   ovrPoseStatef HeadPose;
@@ -600,27 +1118,62 @@ typedef struct ALIGN_TO_EIGHT_BYTE_BOUNDARY
   unsigned HandStatusFlags[2];
   ovrPosef CalibratedOrigin;
 } ovrTrackingState13;
+#else
+typedef ovrTrackingState ovrTrackingState13;
+#endif
 
+// 0.7 to 0.8
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION < 7
 typedef struct
 {
   double TimeInSeconds;
   unsigned ConnectedControllerTypes, Buttons, Touches;
   ovrScalar IndexTrigger[2], HandTrigger[2];
   ovrVector2f Thumbstick[2];
-} ovrInputState;
+} ovrInputState7;
+#else
+typedef ovrInputState ovrInputState7;
+#endif
+
+// 1.3 and above
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION == 0
+typedef struct
+{
+  double TimeInSeconds;
+  unsigned Buttons, Touches;
+  ovrScalar IndexTrigger[2], HandTrigger[2];
+  ovrVector2f Thumbstick[2];
+} ovrInputState13;
+#else
+typedef ovrInputState ovrInputState13;
+#endif
 
 // runtime 0.8
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION < 8
 typedef struct
 {
   char HasVrFocus, HmdPresent;
 } ovrSessionStatus8;
+#else
+typedef ovrSessionStatus ovrSessionStatus8;
+#endif
 
 // runtime 1.3, but backwards compatible with runtime 0.8
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION == 0
 typedef struct
 {
   char HasVrFocus, HmdPresent, HmdMounted, DisplayLost, ShouldQuit, ShouldRecenter;
-} ovrSessionStatus13, ovrSessionStatus;
+} ovrSessionStatus13;
+#else
+typedef ovrSessionStatus ovrSessionStatus13;
+#endif
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 8)
+typedef ovrSessionStatus13 ovrSessionStatus;
+#endif
 
+// 0.3 to 0.5
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 5 ||                \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 3)
 typedef struct
 {
   ovrVector2f ScreenPosNDC;
@@ -634,9 +1187,9 @@ typedef struct
   unsigned short* pIndexData;
   unsigned VertexCount, IndexCount;
 } ovrDistortionMesh;
-
 #endif
 
+// 0.7 and above
 #if !defined(HAVE_OCULUSSDK) || (OVR_MAJOR_VERSION < 7 && OVR_PRODUCT_VERSION == 0)
 
 typedef struct
@@ -646,8 +1199,8 @@ typedef struct
 
 #endif
 
-#ifndef HAVE_OCULUSSDK
-
+// 0.6 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 6)
 typedef struct ALIGN_TO_FOUR_BYTE_BOUNDARY
 {
   ovrScalar Projection22, Projection23, Projection32;
@@ -664,6 +1217,9 @@ typedef struct ALIGN_TO_POINTER_BOUNDARY
   unsigned Type, Flags;
 } ovrLayerHeader;
 
+#endif
+
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION != 6
 typedef struct ALIGN_TO_POINTER_BOUNDARY
 {
   ovrLayerHeader Header;
@@ -672,17 +1228,6 @@ typedef struct ALIGN_TO_POINTER_BOUNDARY
   ovrFovPort Fov[2];
   ovrPosef RenderPose[2];
 } ovrLayerEyeFov6;
-
-// runtime 0.8 but backwards compatible
-typedef struct ALIGN_TO_POINTER_BOUNDARY
-{
-  ovrLayerHeader Header;
-  ovrSwapTextureSet* ColorTexture[2];
-  ovrRecti Viewport[2];
-  ovrFovPort Fov[2];
-  ovrPosef RenderPose[2];
-  double SensorSampleTime;
-} ovrLayerEyeFov8, ovrLayerEyeFov;
 
 typedef struct ALIGN_TO_POINTER_BOUNDARY
 {
@@ -693,8 +1238,26 @@ typedef struct ALIGN_TO_POINTER_BOUNDARY
   ovrPosef RenderPose[2];
   ovrSwapTextureSet* DepthTexture[2];
   ovrTimewarpProjectionDesc ProjectionDesc;
-} ovrLayerEyeFovDepth6, ovrLayerEyeFovDepth;
+} ovrLayerEyeFovDepth6;
 
+#else
+typedef ovrLayerEyeFov ovrLayerEyeFov6;
+typedef ovrLayerEyeFovDepth ovrLayerEyeFovDepth6;
+#endif
+
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION < 8
+// runtime 0.8 but backwards compatible
+typedef struct ALIGN_TO_POINTER_BOUNDARY
+{
+  ovrLayerHeader Header;
+  ovrSwapTextureSet* ColorTexture[2];
+  ovrRecti Viewport[2];
+  ovrFovPort Fov[2];
+  ovrPosef RenderPose[2];
+  double SensorSampleTime;
+} ovrLayerEyeFov8;
+
+// not backwards compatible
 typedef struct ALIGN_TO_POINTER_BOUNDARY
 {
   ovrLayerHeader Header;
@@ -706,7 +1269,16 @@ typedef struct ALIGN_TO_POINTER_BOUNDARY
   ovrSwapTextureSet* DepthTexture[2];
   ovrTimewarpProjectionDesc ProjectionDesc;
 } ovrLayerEyeFovDepth8;
+#else
+typedef ovrLayerEyeFov ovrLayerEyeFov8;
+typedef ovrLayerEyeFovDepth ovrLayerEyeFovDepth8;
+#endif
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 6)
+typedef ovrLayerEyeFov8 ovrLayerEyeFov;
+#endif
 
+// 0.8 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 8)
 typedef struct ALIGN_TO_POINTER_BOUNDARY
 {
   ovrLayerHeader Header;
@@ -716,7 +1288,10 @@ typedef struct ALIGN_TO_POINTER_BOUNDARY
   ovrMatrix4f Matrix[2];
   double SensorSampleTime;
 } ovrLayerEyeMatrix;
+#endif
 
+// 0.6 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 6)
 typedef struct ALIGN_TO_POINTER_BOUNDARY
 {
   ovrLayerHeader Header;
@@ -725,14 +1300,20 @@ typedef struct ALIGN_TO_POINTER_BOUNDARY
   ovrPosef QuadPoseCenter;
   ovrVector2f QuadSize;
 } ovrLayerQuad;
+#endif
 
+// 0.6 to 0.8
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION < 6
 typedef struct ALIGN_TO_POINTER_BOUNDARY
 {
   ovrLayerHeader Header;
   ovrSwapTextureSet* ColorTexture[2];
   ovrRecti Viewport[2];
 } ovrLayerDirect;
+#endif
 
+// 0.6 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 6)
 typedef union {
   ovrLayerHeader Header;
   ovrLayerEyeFov EyeFov;
@@ -741,7 +1322,11 @@ typedef union {
   ovrLayerQuad Quad;
   ovrLayerDirect Direct;
 } ovrLayer_Union;
+#endif
 
+// 0.3 to 0.5
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 5 ||                \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 3)
 #ifdef _WIN32
 
 typedef struct
@@ -751,8 +1336,7 @@ typedef struct
   HDC DC;
 } ovrGLConfigData;
 
-#else
-#ifdef __linux__
+#elif defined(__linux__)
 
 typedef struct
 {
@@ -768,12 +1352,15 @@ typedef struct
 } ovrGLConfigData;
 
 #endif
-#endif
 
 typedef union {
   ovrGLConfigData OGL;
   ovrRenderAPIConfig Config;
 } ovrGLConfig;
+
+#endif
+
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 5
 
 typedef struct
 {
@@ -786,6 +1373,16 @@ typedef union {
   ovrTexture5 Texture;
 } ovrGLTexture5;
 
+#else
+
+#define ovrGLTextureData5 ovrGLTextureData
+#define ovrGLTexture5 ovrGLTexture
+
+#endif
+
+// 0.6 to 0.8
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION < 6
+
 typedef struct
 {
   ovrTextureHeader6 Header;
@@ -796,6 +1393,13 @@ typedef union {
   ovrGLTextureData6 OGL;
   ovrTexture6 Texture;
 } ovrGLTexture6;
+
+#else
+
+#define ovrGLTextureData6 ovrGLTextureData
+#define ovrGLTexture6 ovrGLTexture
+
+#endif
 
 typedef ovrResult(__cdecl* PFUNC_INIT)(void* InitParams);
 typedef void(__cdecl* PFUNC_VOID)(void);
@@ -875,21 +1479,12 @@ typedef char(__cdecl* PFUNC_SETSTRING)(ovrHmd hmd, const char* property, const c
 typedef int(__cdecl* PFUNC_TRACE)(int ovrloglevel, const char* message);
 
 typedef ovrResult(__cdecl* PFUNC_CREATE6)(int number, ovrHmd* hmd_pointer);
-#endif
-
-#if !defined(HAVE_OCULUSSDK) || OVR_MAJOR_VERSION != 6 || OVR_PRODUCT_VERSION > 0
-
 typedef ovrResult(__cdecl* PFUNC_CREATEMIRRORD3D116)(ovrHmd hmd, void* id3d11device,
                                                      const void* d3d11_texture2d_desc,
                                                      ovrTexture6** mirror_texture_result_pointer);
 typedef ovrResult(__cdecl* PFUNC_CREATESWAPD3D116)(
     ovrHmd hmd, void* id3d11device, const void* d3d11_texture2d_desc,
     ovrSwapTextureSet** swap_texture_set_result_pointer);
-
-#endif
-
-#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION < 6
-
 typedef ovrResult(__cdecl* PFUNC_CREATEMIRRORGL)(ovrHmd hmd, unsigned gl_colour_format, int width,
                                                  int height,
                                                  ovrTexture6** mirror_texture_result_pointer);
@@ -898,11 +1493,6 @@ typedef ovrResult(__cdecl* PFUNC_CREATESWAPGL)(ovrHmd hmd, unsigned gl_colour_fo
                                                ovrSwapTextureSet** swap_texture_set_result_pointer);
 typedef ovrResult(__cdecl* PFUNC_DESTROYMIRROR)(ovrHmd hmd, ovrTexture6* mirror_texture);
 typedef ovrResult(__cdecl* PFUNC_DESTROYSWAP)(ovrHmd hmd, ovrSwapTextureSet* swap_texture_set);
-
-#endif
-
-#ifndef HAVE_OCULUSSDK
-
 typedef ovrResult(__cdecl* PFUNC_CALC)(ovrPosef head_pose,
                                        const ovrVector3f hmd_to_eye_view_offset[2],
                                        ovrPosef out_eye_poses[2]);
@@ -915,14 +1505,17 @@ typedef ovrResult(__cdecl* PFUNC_SUBMIT)(ovrHmd hmd, unsigned frame_number,
 typedef ovrHmdDesc7(__cdecl* PFUNC_HMDDESC)(ovrHmd hmd);
 typedef ovrResult(__cdecl* PFUNC_CREATE7)(ovrHmd* hmd_pointer, ovrGraphicsLuid* LUID_pointer);
 typedef ovrResult(__cdecl* PFUNC_CREATEMIRRORD3D117)(ovrHmd hmd, void* id3d11device,
-                                                     unsigned ovrswaptexturesetd3d11_typeless_flag,
                                                      const void* d3d11_texture2d_desc,
+                                                     unsigned ovrswaptexturesetd3d11_typeless_flag,
                                                      ovrTexture6** mirror_texture_result_pointer);
 typedef ovrResult(__cdecl* PFUNC_CREATESWAPD3D117)(
-    ovrHmd hmd, void* id3d11device, unsigned ovrswaptexturesetd3d11_typeless_flag,
-    const void* d3d11_texture2d_desc, ovrSwapTextureSet** swap_texture_set_result_pointer);
+    ovrHmd hmd, void* id3d11device, const void* d3d11_texture2d_desc,
+    unsigned ovrswaptexturesetd3d11_typeless_flag,
+    ovrSwapTextureSet** swap_texture_set_result_pointer);
 typedef ovrResult(__cdecl* PFUNC_INPUT)(ovrHmd hmd, unsigned controller_type_mask,
-                                        ovrInputState* input_state_result);
+                                        ovrInputState7* input_state_result);
+typedef ovrResult(__cdecl* PFUNC_INPUT13)(ovrHmd hmd, unsigned controller_type_mask,
+                                          ovrInputState13* input_state_result);
 typedef ovrResult(__cdecl* PFUNC_LOOKUP)(const char* name, void** data_result_pointer);
 typedef ovrResult(__cdecl* PFUNC_VIBE)(ovrHmd hmd, unsigned controller_types_mask,
                                        ovrScalar frequency_zero_half_or_one,
@@ -940,8 +1533,6 @@ typedef ovrResult(__cdecl* PFUNC_SUBMIT8)(ovrHmd hmd, long long frame_number,
                                           ovrLayerHeader const* const* layer_ptr_list,
                                           unsigned layer_count);
 typedef double(__cdecl* PFUNC_DISPLAYTIME)(ovrHmd hmd, long long frame_number);
-
-#endif
 
 #ifndef HAVE_OCULUSSDK
 
@@ -966,14 +1557,11 @@ ovrResult ovrHmd_DismissHSWDisplay(ovrHmd hmd);
 extern PFUNC_VOID_HMD ovrHmd_RecenterPose, ovrHmd_EndFrameTiming, ovrHmd_Destroy,
     ovr_ResetBackOfHeadTracking, ovr_ResetMulticameraTracking;
 extern PFUNC_PCHAR_HMD ovrHmd_GetLastError, ovrHmd_GetLatencyTestResult;
-extern PFUNC_ATTACH ovrHmd_AttachToWindow;
 extern PFUNC_UINT_HMD ovrHmd_GetEnabledCaps;
 extern PFUNC_HMD_UINT ovrHmd_SetEnabledCaps, ovrHmd_ResetFrameTiming;
 extern PFUNC_TRACKING_STATE5 ovrHmd_GetTrackingState;
 extern PFUNC_FOV ovrHmd_GetFovTextureSize;
-extern PFUNC_CONFIG ovrHmd_ConfigureRendering;
-extern PFUNC_BEGIN ovrHmd_BeginFrame, ovrHmd_GetFrameTiming, ovrHmd_BeginFrameTiming;
-extern PFUNC_END ovrHmd_EndFrame;
+extern PFUNC_BEGIN ovrHmd_BeginFrameTiming;
 extern PFUNC_EYEPOSES ovrHmd_GetEyePoses;
 extern PFUNC_EYEPOSE ovrHmd_GetHmdPosePerEye;
 extern PFUNC_RENDERDESC ovrHmd_GetRenderDesc;
@@ -981,13 +1569,11 @@ extern PFUNC_DISTORTIONMESH ovrHmd_CreateDistortionMesh;
 extern PFUNC_DISTORTIONMESHDEBUG ovrHmd_CreateDistortionMeshDebug;
 extern PFUNC_DESTROYMESH ovrHmd_DestroyDistortionMesh;
 extern PFUNC_SCALEOFFSET ovrHmd_GetRenderScaleAndOffset;
-extern PFUNC_FRAMETIMING ovr_GetFrameTiming;
 extern PFUNC_TIMEWARP ovrHmd_GetEyeTimewarpMatrices;
 extern PFUNC_TIMEWARPDEBUG ovrHmd_GetEyeTimewarpMatricesDebug;
 extern PFUNC_DOUBLE ovr_GetTimeInSeconds;
 extern PFUNC_HMD_HSW ovrHmd_GetHSWDisplayState;
 extern PFUNC_LATENCY ovrHmd_ProcessLatencyTest, ovrHmd_GetLatencyTest2DrawColor;
-extern PFUNC_DOUBLE_DOUBLE ovr_WaitTillTime;
 extern PFUNC_PROJECTION ovrMatrix4f_Projection;
 extern PFUNC_GETBOOL ovrHmd_GetBool;
 extern PFUNC_GETFLOAT ovrHmd_GetFloat;
@@ -1006,29 +1592,86 @@ extern PFUNC_CREATEMIRRORGL ovrHmd_CreateMirrorTextureGL;
 
 #endif
 
-#if !defined(HAVE_OCULUSSDK) || OVR_MAJOR_VERSION != 6 || OVR_PRODUCT_VERSION > 0
-
-extern PFUNC_CREATESWAPGL ovrHmd_CreateSwapTextureSetGL;
-extern PFUNC_CREATEMIRRORD3D116 ovrHmd_CreateMirrorTextureD3D11;
-extern PFUNC_CREATESWAPD3D116 ovrHmd_CreateSwapTextureSetD3D11;
-
+// 0.3 to 0.5
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 5 ||                \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 3)
+extern PFUNC_CONFIG ovrHmd_ConfigureRendering;
+extern PFUNC_BEGIN ovrHmd_BeginFrame;
+extern PFUNC_END ovrHmd_EndFrame;
 #endif
 
-#if !defined(HAVE_OCULUSSDK) || (OVR_MAJOR_VERSION < 6 && OVR_PRODUCT_VERSION == 0)
+// 0.3 to 0.6, but 0.6 version is different
+#if !defined(OVR_MAJOR_VERSION) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 6 ||             \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 3)
+extern PFUNC_BEGIN ovrHmd_GetFrameTiming;
+#endif
 
+// 0.3 to 0.6
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 6 ||                \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 3)
+extern PFUNC_DOUBLE_DOUBLE ovr_WaitTillTime;
+#endif
+
+// 0.4 only
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 0 ||                \
+    OVR_MINOR_VERSION < 4
+void ovrhmd_EnableHSWDisplaySDKRender(ovrHmd hmd, char enabled);
+#endif
+
+// 0.4 to 0.5
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 5 ||                \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 4)
+extern PFUNC_ATTACH ovrHmd_AttachToWindow;
+#endif
+
+#if !defined(HAVE_OCULUSSDK) || OVR_MAJOR_VERSION != 6 || OVR_PRODUCT_VERSION > 0
+extern PFUNC_CREATEMIRRORD3D116 ovrHmd_CreateMirrorTextureD3D11;
+extern PFUNC_CREATESWAPD3D116 ovrHmd_CreateSwapTextureSetD3D11;
+#endif
+
+// 0.6 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_MAJOR_VERSION < 6 && OVR_PRODUCT_VERSION == 0)
 extern PFUNC_DESTROYMIRROR ovrHmd_DestroyMirrorTexture;
 extern PFUNC_DESTROYSWAP ovrHmd_DestroySwapTextureSet;
+extern PFUNC_SUBMIT ovrHmd_SubmitFrame;
+#endif
 
+// 0.6 to 0.7
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION < 6 ||                \
+    OVR_MAJOR_VERSION > 7
+extern PFUNC_FRAMETIMING ovr_GetFrameTiming;
+#endif
+
+// no SDK, or SDK < 6 or SDK > 8: our ovrHmd_CreateSwapTextureSetGL and #defined
+// ovr_CreateSwapTextureSetGL
+// SDK 0.6: #defined ovr_CreateSwapTextureSetGL
+// SDK 0.7, 0.8: #defined ovrHmd_CreateSwapTextureSetGL
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION < 6
+extern PFUNC_CREATESWAPGL ovrHmd_CreateSwapTextureSetGL;
+#endif
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION == 6)
+#define ovr_CreateSwapTextureSetGL ovrHmd_CreateSwapTextureSetGL
+#endif
+#if defined(HAVE_OCULUSSDK) && OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION >= 7
+#define ovrHmd_CreateSwapTextureSetGL ovr_CreateSwapTextureSetGL
+#endif
+
+// 0.6 only
+#if defined(HAVE_OCULUSSDK) && OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION == 6
+#define ovr_GetFrameTiming ovrHmd_GetFrameTiming
+#endif
+
+// 0.7 and above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 7)
+extern PFUNC_CREATESWAPD3D117 ovr_CreateSwapTextureSetD3D11;
+extern PFUNC_CREATEMIRRORD3D117 ovr_CreateMirrorTextureD3D11;
 #endif
 
 #ifndef HAVE_OCULUSSDK
 
 extern PFUNC_CALC ovr_CalcEyePoses;
 extern PFUNC_ERRORINFO ovr_GetLastErrorInfo;
-extern PFUNC_SUBMIT ovrHmd_SubmitFrame;
 
-extern PFUNC_CREATEMIRRORD3D117 ovr_CreateMirrorTextureD3D11;
-extern PFUNC_CREATESWAPD3D117 ovr_CreateSwapTextureSetD3D11;
 extern PFUNC_INPUT ovr_GetInputState;
 extern PFUNC_LOOKUP ovr_Lookup;
 extern PFUNC_VIBE ovr_SetControllerVibration;
@@ -1045,7 +1688,6 @@ extern PFUNC_DISPLAYTIME ovr_GetPredictedDisplayTime;
 #define ovr_DestroyMirrorTexture ovrHmd_DestroyMirrorTexture
 #define ovr_DestroySwapTextureSet ovrHmd_DestroySwapTextureSet
 #define ovr_CreateMirrorTextureGL ovrHmd_CreateMirrorTextureGL
-#define ovr_CreateSwapTextureSetGL ovrHmd_CreateSwapTextureSetGL
 #define ovr_GetBool ovrHmd_GetBool
 #define ovr_GetFloat ovrHmd_GetFloat
 #define ovr_GetFloatArray ovrHmd_GetFloatArray
@@ -1066,10 +1708,17 @@ extern PFUNC_DISPLAYTIME ovr_GetPredictedDisplayTime;
 
 #endif
 
+// 0.7 to 0.8
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION < 7
+#define ovr_CreateSwapTextureSetGL ovrHmd_CreateSwapTextureSetGL
+#endif
+
+// 0.13 and above
 #ifndef HAVE_OCULUSSDK
 
 namespace OVR
 {
+typedef ovrSizei Sizei;
 enum Axis
 {
   Axis_X,

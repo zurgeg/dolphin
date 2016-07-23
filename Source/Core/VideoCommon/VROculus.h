@@ -65,8 +65,8 @@ void ovrhmd_EnableHSWDisplaySDKRender(ovrHmd hmd, ovrBool enabled);
 
 #include "OculusSystemLibraryHeader.h"
 
-#define ovrGLTexture5 ovrGLTexture
-#define ovrGLTexture6 ovrGLTexture
+// This is neccessary on SDK 0.4 and above because they are all returned by the same function and
+// will generate compiler errors otherwise
 #define ovrTrackingState5 ovrTrackingState
 #define ovrTrackingState7 ovrTrackingState
 #define ovrTrackingState8 ovrTrackingState

@@ -91,14 +91,18 @@ struct OculusTexture
           size.w, size.h, res, e.ErrorString);
       return;
     }
-#elif OVR_MAJOR_VERSION >= 7
-    unsigned int miscFlags = ovrSwapTextureSetD3D11_Typeless;  // ovrSwapTextureSetD3D11_Typeless
-                                                               // just causes a black screen on both
-                                                               // the mirror and the HMD
-    res = ovr_CreateSwapTextureSetD3D11(hmd, DX11::D3D::device, &dsDesc, miscFlags, &TextureSet);
-    length = TextureSet->TextureCount;
 #else
-    res = ovrHmd_CreateSwapTextureSetD3D11(hmd, DX11::D3D::device, &dsDesc, &TextureSet);
+    if (g_libovr_version >= libovr_070)
+    {
+      unsigned int miscFlags = ovrSwapTextureSetD3D11_Typeless;  // ovrSwapTextureSetD3D11_Typeless
+      // just causes a black screen on both
+      // the mirror and the HMD
+      res = ovr_CreateSwapTextureSetD3D11(hmd, DX11::D3D::device, &dsDesc, miscFlags, &TextureSet);
+    }
+    else
+    {
+      res = ovrHmd_CreateSwapTextureSetD3D11(hmd, DX11::D3D::device, &dsDesc, &TextureSet);
+    }
     length = TextureSet->TextureCount;
 #endif
     for (int i = 0; i < length; ++i)
@@ -115,14 +119,17 @@ struct OculusTexture
       tex->Release();
 #else
       ovrD3D11Texture6* tex = (ovrD3D11Texture6*)&TextureSet->Textures[i];
-#if OVR_MAJOR_VERSION >= 7
-      D3D11_RENDER_TARGET_VIEW_DESC rtvd = {};
-      rtvd.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-      rtvd.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
-      DX11::D3D::device->CreateRenderTargetView(tex->D3D11.pTexture, &rtvd, &TexRtv[i]);
-#else
-      DX11::D3D::device->CreateRenderTargetView(tex->D3D11.pTexture, nullptr, &TexRtv[i]);
-#endif
+      if (g_libovr_version >= libovr_070)
+      {
+        D3D11_RENDER_TARGET_VIEW_DESC rtvd = {};
+        rtvd.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        rtvd.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+        DX11::D3D::device->CreateRenderTargetView(tex->D3D11.pTexture, &rtvd, &TexRtv[i]);
+      }
+      else
+      {
+        DX11::D3D::device->CreateRenderTargetView(tex->D3D11.pTexture, nullptr, &TexRtv[i]);
+      }
 #endif
     }
   }
@@ -193,62 +200,61 @@ void VR_ConfigureHMD()
   }
 #endif
 #ifdef OVR_MAJOR_VERSION
-#if OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION <= 5
-  ovrD3D11Config cfg;
-  cfg.D3D11.Header.API = ovrRenderAPI_D3D11;
-#ifdef OCULUSSDK044ORABOVE
-  cfg.D3D11.Header.BackBufferSize.w = hmdDesc.Resolution.w;
-  cfg.D3D11.Header.BackBufferSize.h = hmdDesc.Resolution.h;
-#else
-  cfg.D3D11.Header.RTSize.w = hmdDesc.Resolution.w;
-  cfg.D3D11.Header.RTSize.h = hmdDesc.Resolution.h;
-#endif
-  cfg.D3D11.Header.Multisample = 0;
-  cfg.D3D11.pDevice = D3D::device;
-  cfg.D3D11.pDeviceContext = D3D::context;
-  cfg.D3D11.pSwapChain = D3D::swapchain;
-  cfg.D3D11.pBackBufferRT = D3D::GetBackBuffer()->GetRTV();
-  if (g_is_direct_mode)  // If Rift is in Direct Mode
+  if (g_libovr_version <= libovr_050)
   {
-    // To do: This is a bit of a hack, but I haven't found any problems with this.
-    // If we don't want to do this, large changes will be needed to init sequence.
-    D3D::UnloadDXGI();  // Unload CreateDXGIFactory() before ovrHmd_AttachToWindow, or else direct
-                        // mode won't work.
-    ovrHmd_AttachToWindow(hmd, D3D::hWnd, nullptr, nullptr);  // Attach to Direct Mode.
-    D3D::LoadDXGI();
-  }
-  int caps = 0;
-#if OVR_MAJOR_VERSION <= 4
-  if (g_Config.bChromatic)
-    caps |= ovrDistortionCap_Chromatic;
-#endif
-  if (g_Config.bTimewarp)
-    caps |= ovrDistortionCap_TimeWarp;
-  if (g_Config.bVignette)
-    caps |= ovrDistortionCap_Vignette;
-  if (g_Config.bNoRestore)
-    caps |= ovrDistortionCap_NoRestore;
-  if (g_Config.bFlipVertical)
-    caps |= ovrDistortionCap_FlipInput;
-  if (g_Config.bSRGB)
-    caps |= ovrDistortionCap_SRGB;
-  if (g_Config.bOverdrive)
-    caps |= ovrDistortionCap_Overdrive;
-  if (g_Config.bHqDistortion)
-    caps |= ovrDistortionCap_HqDistortion;
-  ovrHmd_ConfigureRendering(hmd, &cfg.Config, caps, g_eye_fov, g_eye_render_desc);
-#if OVR_MAJOR_VERSION <= 4
-  ovrhmd_EnableHSWDisplaySDKRender(hmd, false);  // Disable Health and Safety Warning.
-#endif
-
+    ovrD3D11Config cfg;
+    cfg.D3D11.Header.API = ovrRenderAPI_D3D11;
+#ifdef OCULUSSDK044ORABOVE
+    cfg.D3D11.Header.BackBufferSize.w = hmdDesc.Resolution.w;
+    cfg.D3D11.Header.BackBufferSize.h = hmdDesc.Resolution.h;
 #else
-  for (int i = 0; i < ovrEye_Count; ++i)
-    g_eye_render_desc[i] = ovrHmd_GetRenderDesc(hmd, (ovrEyeType)i, g_eye_fov[i]);
+    cfg.D3D11.Header.RTSize.w = hmdDesc.Resolution.w;
+    cfg.D3D11.Header.RTSize.h = hmdDesc.Resolution.h;
 #endif
+    cfg.D3D11.Header.Multisample = 0;
+    cfg.D3D11.pDevice = D3D::device;
+    cfg.D3D11.pDeviceContext = D3D::context;
+    cfg.D3D11.pSwapChain = D3D::swapchain;
+    cfg.D3D11.pBackBufferRT = D3D::GetBackBuffer()->GetRTV();
+    if (g_is_direct_mode)  // If Rift is in Direct Mode
+    {
+      // To do: This is a bit of a hack, but I haven't found any problems with this.
+      // If we don't want to do this, large changes will be needed to init sequence.
+      D3D::UnloadDXGI();  // Unload CreateDXGIFactory() before ovrHmd_AttachToWindow, or else direct
+      // mode won't work.
+      ovrHmd_AttachToWindow(hmd, D3D::hWnd, nullptr, nullptr);  // Attach to Direct Mode.
+      D3D::LoadDXGI();
+    }
+    int caps = 0;
+    if (g_libovr_version < libovr_050 && g_Config.bChromatic)
+      caps |= ovrDistortionCap_Chromatic;
+    if (g_Config.bTimewarp)
+      caps |= ovrDistortionCap_TimeWarp;
+    if (g_Config.bVignette)
+      caps |= ovrDistortionCap_Vignette;
+    if (g_Config.bNoRestore)
+      caps |= ovrDistortionCap_NoRestore;
+    if (g_Config.bFlipVertical)
+      caps |= ovrDistortionCap_FlipInput;
+    if (g_Config.bSRGB)
+      caps |= ovrDistortionCap_SRGB;
+    if (g_Config.bOverdrive)
+      caps |= ovrDistortionCap_Overdrive;
+    if (g_Config.bHqDistortion)
+      caps |= ovrDistortionCap_HqDistortion;
+    ovrHmd_ConfigureRendering(hmd, &cfg.Config, caps, g_eye_fov, g_eye_render_desc);
+#if OVR_MAJOR_VERSION <= 4
+    ovrhmd_EnableHSWDisplaySDKRender(hmd, false);  // Disable Health and Safety Warning.
+#endif
+  }
+  else
+  {
+    for (int i = 0; i < ovrEye_Count; ++i)
+      g_eye_render_desc[i] = ovrHmd_GetRenderDesc(hmd, (ovrEyeType)i, g_eye_fov[i]);
+  }
 #endif
 }
 
-#if defined(OVR_MAJOR_VERSION) && (OVR_PRODUCT_VERSION >= 1 || OVR_MAJOR_VERSION >= 6)
 void RecreateMirrorTextureIfNeeded()
 {
   int w = Renderer::GetBackbufferWidth();
@@ -263,6 +269,7 @@ void RecreateMirrorTextureIfNeeded()
     }
     if (!g_ActiveConfig.bNoMirrorToWindow)
     {
+      ovrResult result;
 #if OVR_PRODUCT_VERSION >= 1
       // Create a mirror, to see Rift output on a monitor
       mirrorTexture = nullptr;
@@ -272,7 +279,7 @@ void RecreateMirrorTextureIfNeeded()
       desc.Height = h;
       mirror_width = w;
       mirror_height = h;
-      ovrResult result = ovr_CreateMirrorTextureDX(hmd, D3D::device, &desc, &mirrorTexture);
+      result = ovr_CreateMirrorTextureDX(hmd, D3D::device, &desc, &mirrorTexture);
 #else
       // Create a mirror to see on the monitor.
       texdesc.ArraySize = 1;
@@ -285,15 +292,17 @@ void RecreateMirrorTextureIfNeeded()
       mirror_width = texdesc.Width;
       mirror_height = texdesc.Height;
       mirrorTexture = nullptr;
-#if OVR_MAJOR_VERSION >= 7
-      unsigned int miscFlags =
-          ovrSwapTextureSetD3D11_Typeless;  // could also be ovrSwapTextureSetD3D11_Typeless
-      ovrResult result =
-          ovr_CreateMirrorTextureD3D11(hmd, D3D::device, &texdesc, miscFlags, &mirrorTexture);
-#else
-      ovrResult result =
-          ovrHmd_CreateMirrorTextureD3D11(hmd, D3D::device, &texdesc, &mirrorTexture);
-#endif
+      if (g_libovr_version >= libovr_070)
+      {
+        unsigned int miscFlags =
+            ovrSwapTextureSetD3D11_Typeless;  // could also be ovrSwapTextureSetD3D11_Typeless
+        result =
+            ovr_CreateMirrorTextureD3D11(hmd, D3D::device, &texdesc, miscFlags, &mirrorTexture);
+      }
+      else
+      {
+        result = ovrHmd_CreateMirrorTextureD3D11(hmd, D3D::device, &texdesc, &mirrorTexture);
+      }
 #endif
       if (!OVR_SUCCESS(result))
       {
@@ -303,7 +312,6 @@ void RecreateMirrorTextureIfNeeded()
     }
   }
 }
-#endif
 
 void VR_StartFramebuffer()
 {
@@ -332,8 +340,6 @@ void VR_StartFramebuffer()
     VR920_StartStereo3D();
 #endif
   }
-#if (defined(OVR_MAJOR_VERSION) && OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION <= 5) ||          \
-    defined(HAVE_OPENVR)
   else if (g_has_rift || g_has_openvr)
   {
     for (int eye = 0; eye < 2; ++eye)
@@ -382,9 +388,7 @@ void VR_StartFramebuffer()
     D3D::SetDebugObjectName(
         (ID3D11DeviceChild*)FramebufferManager::m_efb.m_frontBuffer[1]->GetRTV(),
         "Right eye color texture render target view");
-
-#if defined(OVR_MAJOR_VERSION) && OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION <= 5
-    if (g_has_rift)
+    if (g_has_rift && g_libovr_version <= libovr_050)
     {
       // In Oculus SDK 0.5.0.1 and below, we need to keep descriptions of our eye textures to pass
       // to ovrHmd_EndFrame()
@@ -406,7 +410,6 @@ void VR_StartFramebuffer()
         g_eye_texture[1].D3D11.pSRView = FramebufferManager::m_efb.m_frontBuffer[1]->GetSRV();
       }
     }
-#endif
 #if defined(HAVE_OPENVR)
     if (g_has_openvr)
     {
@@ -415,7 +418,6 @@ void VR_StartFramebuffer()
     }
 #endif
   }
-#endif
 }
 
 void VR_StopFramebuffer()
@@ -437,13 +439,11 @@ void VR_StopFramebuffer()
     }
   }
 #endif
-#if defined(OVR_MAJOR_VERSION) && OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION <= 5
-  if (g_has_rift)
+  if (g_has_rift && g_libovr_version <= libovr_050)
   {
     SAFE_RELEASE(FramebufferManager::m_efb.m_frontBuffer[0]);
     SAFE_RELEASE(FramebufferManager::m_efb.m_frontBuffer[1]);
   }
-#endif
 #if defined(HAVE_OPENVR)
   if (g_has_openvr)
   {
@@ -462,10 +462,10 @@ void VR_BeginFrame()
 #if OVR_PRODUCT_VERSION >= 1 || OVR_MAJOR_VERSION >= 6
     RecreateMirrorTextureIfNeeded();
     ++g_ovr_frameindex;
-// On Oculus SDK 0.6.0 and above, we get the frame timing manually, then swap each eye texture
-#if OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION <= 7
-    g_rift_frame_timing6 = ovrHmd_GetFrameTiming(hmd, 0);
-#endif
+    // On Oculus SDK 0.6.0 and above, we get the frame timing manually, then swap each eye texture
+
+    if (g_libovr_version <= libovr_070)
+      g_rift_frame_timing6 = ovr_GetFrameTiming(hmd, 0);
     for (int eye = 0; eye < 2; eye++)
     {
       // Increment to use next texture, just before writing
@@ -488,13 +488,18 @@ void VR_RenderToEyebuffer(int eye)
     ID3D11RenderTargetView* rtv = pEyeRenderTexture[eye]->GetRTV();
     D3D::context->OMSetRenderTargets(1, &rtv, nullptr);
     rtv = nullptr;
-#elif OVR_MAJOR_VERSION >= 6
-    D3D::context->OMSetRenderTargets(
-        1, &pEyeRenderTexture[eye]->TexRtv[pEyeRenderTexture[eye]->TextureSet->CurrentIndex],
-        nullptr);
 #else
-    D3D::context->OMSetRenderTargets(1, &FramebufferManager::m_efb.m_frontBuffer[eye]->GetRTV(),
-                                     nullptr);
+    if (g_libovr_version >= libovr_060)
+    {
+      D3D::context->OMSetRenderTargets(
+          1, &pEyeRenderTexture[eye]->TexRtv[pEyeRenderTexture[eye]->TextureSet->CurrentIndex],
+          nullptr);
+    }
+    else
+    {
+      D3D::context->OMSetRenderTargets(1, &FramebufferManager::m_efb.m_frontBuffer[eye]->GetRTV(),
+                                       nullptr);
+    }
 #endif
   }
 #endif
@@ -576,58 +581,62 @@ void VR_PresentHMDFrame()
 
     D3D::context->OMSetBlendState(g_pOculusRiftBlendState, NULL, 0xFFFFFFFF);
 
-#if OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION <= 5
-    // Let OVR do distortion rendering, Present and flush/sync.
-    ovrHmd_EndFrame(hmd, g_eye_poses, &g_eye_texture[0].Texture);
-#else
-    ovrLayerEyeFov ld;
-    ld.Header.Type = ovrLayerType_EyeFov;
-    ld.Header.Flags = (g_ActiveConfig.bFlipVertical ? ovrLayerFlag_TextureOriginAtBottomLeft : 0) |
-                      (g_ActiveConfig.bHqDistortion ? ovrLayerFlag_HighQuality : 0);
-    for (int eye = 0; eye < 2; eye++)
+    if (g_libovr_version <= libovr_050)
     {
-#if OVR_PRODUCT_VERSION >= 1
-      ld.ColorTexture[eye] = pEyeRenderTexture[eye]->TextureChain;
-#else
-      ld.ColorTexture[eye] = pEyeRenderTexture[eye]->TextureSet;
-#endif
-      ld.Viewport[eye] = eyeRenderViewport[eye];
-      ld.Fov[eye] = g_eye_fov[eye];
-      ld.RenderPose[eye] = g_eye_poses[eye];
+      // Let OVR do distortion rendering, Present and flush/sync.
+      ovrHmd_EndFrame(hmd, g_eye_poses, &g_eye_texture[0].Texture);
     }
-    ovrLayerHeader* layers = &ld.Header;
-    ovrResult result = ovrHmd_SubmitFrame(hmd, 0, nullptr, &layers, 1);
-
-    // Render mirror
-    if (mirrorTexture && !g_ActiveConfig.bNoMirrorToWindow)
+    else
     {
+      ovrLayerEyeFov ld;
+      ld.Header.Type = ovrLayerType_EyeFov;
+      ld.Header.Flags =
+          (g_ActiveConfig.bFlipVertical ? ovrLayerFlag_TextureOriginAtBottomLeft : 0) |
+          (g_ActiveConfig.bHqDistortion ? ovrLayerFlag_HighQuality : 0);
+      for (int eye = 0; eye < 2; eye++)
+      {
 #if OVR_PRODUCT_VERSION >= 1
-      ID3D11Texture2D* tex = nullptr;
-      ovr_GetMirrorTextureBufferDX(hmd, mirrorTexture, IID_PPV_ARGS(&tex));
-      D3D::context->CopyResource(D3D::GetBackBuffer()->GetTex(), tex);
-      tex->Release();
+        ld.ColorTexture[eye] = pEyeRenderTexture[eye]->TextureChain;
 #else
-      ovrD3D11Texture* tex = (ovrD3D11Texture*)mirrorTexture;
-      TargetRectangle sourceRc;
-      sourceRc.left = 0;
-      sourceRc.top = 0;
-      sourceRc.right = mirror_width;
-      sourceRc.bottom = mirror_height;
+        ld.ColorTexture[eye] = pEyeRenderTexture[eye]->TextureSet;
+#endif
+        ld.Viewport[eye] = eyeRenderViewport[eye];
+        ld.Fov[eye] = g_eye_fov[eye];
+        ld.RenderPose[eye] = g_eye_poses[eye];
+      }
+      ovrLayerHeader* layers = &ld.Header;
+      ovrResult result = ovrHmd_SubmitFrame(hmd, 0, nullptr, &layers, 1);
 
-      D3D::context->OMSetRenderTargets(1, &D3D::GetBackBuffer()->GetRTV(), nullptr);
-      D3D11_VIEWPORT vp =
-          CD3D11_VIEWPORT((float)0, (float)0, (float)mirror_width, (float)mirror_height);
-      D3D::context->RSSetViewports(1, &vp);
-      D3D::drawShadedTexQuad(tex->D3D11.pSRView, sourceRc.AsRECT(), mirror_width, mirror_height,
-                             PixelShaderCache::GetColorCopyProgram(false),
-                             VertexShaderCache::GetSimpleVertexShader(),
-                             VertexShaderCache::GetSimpleInputLayout(), nullptr);
+      // Render mirror
+      if (mirrorTexture && !g_ActiveConfig.bNoMirrorToWindow)
+      {
+#if OVR_PRODUCT_VERSION >= 1
+        ID3D11Texture2D* tex = nullptr;
+        ovr_GetMirrorTextureBufferDX(hmd, mirrorTexture, IID_PPV_ARGS(&tex));
+        D3D::context->CopyResource(D3D::GetBackBuffer()->GetTex(), tex);
+        tex->Release();
+#else
+        ovrD3D11Texture6* tex = (ovrD3D11Texture6*)mirrorTexture;
+        TargetRectangle sourceRc;
+        sourceRc.left = 0;
+        sourceRc.top = 0;
+        sourceRc.right = mirror_width;
+        sourceRc.bottom = mirror_height;
+
+        D3D::context->OMSetRenderTargets(1, &D3D::GetBackBuffer()->GetRTV(), nullptr);
+        D3D11_VIEWPORT vp =
+            CD3D11_VIEWPORT((float)0, (float)0, (float)mirror_width, (float)mirror_height);
+        D3D::context->RSSetViewports(1, &vp);
+        D3D::drawShadedTexQuad(tex->D3D11.pSRView, sourceRc.AsRECT(), mirror_width, mirror_height,
+                               PixelShaderCache::GetColorCopyProgram(false),
+                               VertexShaderCache::GetSimpleVertexShader(),
+                               VertexShaderCache::GetSimpleInputLayout(), nullptr);
 #endif
 
-      // D3D::context->CopyResource(D3D::GetBackBuffer()->GetTex(), tex->D3D11.pTexture);
-      D3D::swapchain->Present(0, 0);
+        // D3D::context->CopyResource(D3D::GetBackBuffer()->GetTex(), tex->D3D11.pTexture);
+        D3D::swapchain->Present(0, 0);
+      }
     }
-#endif
   }
 #endif
 }
@@ -637,51 +646,56 @@ void VR_DrawTimewarpFrame()
 #ifdef OVR_MAJOR_VERSION
   if (g_has_rift)
   {
-#if OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION <= 5
-    ovrFrameTiming5 frameTime;
-    frameTime = ovrHmd_BeginFrame(hmd, ++g_ovr_frameindex);
-    // const ovrTexture* new_eye_texture = new
-    // ovrTexture(FramebufferManager::m_eye_texture[0].Texture);
-    // ovrD3D11Texture new_eye_texture;
-    // memcpy((void*)&new_eye_texture, &FramebufferManager::m_eye_texture[0],
-    // sizeof(ovrD3D11Texture));
-
-    // ovrPosef new_eye_poses[2];
-    // memcpy((void*)&new_eye_poses, g_eye_poses, sizeof(ovrPosef)*2);
-
-    ovr_WaitTillTime(frameTime.NextFrameSeconds - g_ActiveConfig.fTimeWarpTweak);
-
-    ovrHmd_EndFrame(hmd, g_eye_poses, &g_eye_texture[0].Texture);
-#else
-    ++g_ovr_frameindex;
-#if OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION <= 7
-    // On Oculus SDK 0.6.0 and above, we get the frame timing manually, then swap each eye texture
-    ovrFrameTiming frameTime;
-    frameTime = ovrHmd_GetFrameTiming(hmd, 0);
-#endif
-
-    // ovr_WaitTillTime(frameTime.NextFrameSeconds - g_ActiveConfig.fTimeWarpTweak);
-    Sleep(1);
-
-    ovrLayerEyeFov ld;
-    ld.Header.Type = ovrLayerType_EyeFov;
-    ld.Header.Flags = (g_ActiveConfig.bFlipVertical ? ovrLayerFlag_TextureOriginAtBottomLeft : 0) |
-                      (g_ActiveConfig.bHqDistortion ? ovrLayerFlag_HighQuality : 0);
-    for (int eye = 0; eye < 2; eye++)
+    if (g_libovr_version <= libovr_050)
     {
-#if OVR_PRODUCT_VERSION >= 1
-      ld.ColorTexture[eye] = pEyeRenderTexture[eye]->TextureChain;
-#else
-      ld.ColorTexture[eye] = pEyeRenderTexture[eye]->TextureSet;
-#endif
-      ld.Viewport[eye] = eyeRenderViewport[eye];
-      ld.Fov[eye] = g_eye_fov[eye];
-      ld.RenderPose[eye] = g_eye_poses[eye];
-    }
-    ovrLayerHeader* layers = &ld.Header;
-    ovrResult result = ovrHmd_SubmitFrame(hmd, 0, nullptr, &layers, 1);
+      ovrFrameTiming5 frameTime;
+      frameTime = ovrHmd_BeginFrame(hmd, ++g_ovr_frameindex);
+      // const ovrTexture* new_eye_texture = new
+      // ovrTexture(FramebufferManager::m_eye_texture[0].Texture);
+      // ovrD3D11Texture new_eye_texture;
+      // memcpy((void*)&new_eye_texture, &FramebufferManager::m_eye_texture[0],
+      // sizeof(ovrD3D11Texture));
 
+      // ovrPosef new_eye_poses[2];
+      // memcpy((void*)&new_eye_poses, g_eye_poses, sizeof(ovrPosef)*2);
+
+      ovr_WaitTillTime(frameTime.NextFrameSeconds - g_ActiveConfig.fTimeWarpTweak);
+
+      ovrHmd_EndFrame(hmd, g_eye_poses, &g_eye_texture[0].Texture);
+    }
+    else
+    {
+      ++g_ovr_frameindex;
+      if (g_libovr_version <= libovr_070)
+      {
+        // On Oculus SDK 0.6.0 and above, we get the frame timing manually, then swap each eye
+        // texture
+        ovrFrameTiming6 frameTime;
+        frameTime = ovr_GetFrameTiming(hmd, 0);
+      }
+
+      // ovr_WaitTillTime(frameTime.NextFrameSeconds - g_ActiveConfig.fTimeWarpTweak);
+      Sleep(1);
+
+      ovrLayerEyeFov ld;
+      ld.Header.Type = ovrLayerType_EyeFov;
+      ld.Header.Flags =
+          (g_ActiveConfig.bFlipVertical ? ovrLayerFlag_TextureOriginAtBottomLeft : 0) |
+          (g_ActiveConfig.bHqDistortion ? ovrLayerFlag_HighQuality : 0);
+      for (int eye = 0; eye < 2; eye++)
+      {
+#if OVR_PRODUCT_VERSION >= 1
+        ld.ColorTexture[eye] = pEyeRenderTexture[eye]->TextureChain;
+#else
+        ld.ColorTexture[eye] = pEyeRenderTexture[eye]->TextureSet;
 #endif
+        ld.Viewport[eye] = eyeRenderViewport[eye];
+        ld.Fov[eye] = g_eye_fov[eye];
+        ld.RenderPose[eye] = g_eye_poses[eye];
+      }
+      ovrLayerHeader* layers = &ld.Header;
+      ovrResult result = ovrHmd_SubmitFrame(hmd, 0, nullptr, &layers, 1);
+    }
   }
 #endif
 }

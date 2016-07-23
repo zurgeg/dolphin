@@ -84,15 +84,12 @@ static PFUNC_CREATE7 ovr_Create_Real;
 PFUNC_VOID_HMD ovrHmd_RecenterPose, ovrHmd_EndFrameTiming, ovrHmd_Destroy,
     ovr_ResetBackOfHeadTracking, ovr_ResetMulticameraTracking;
 PFUNC_PCHAR_HMD ovrHmd_GetLastError, ovrHmd_GetLatencyTestResult;
-PFUNC_ATTACH ovrHmd_AttachToWindow;
 PFUNC_UINT_HMD ovrHmd_GetEnabledCaps;
 PFUNC_HMD_UINT ovrHmd_SetEnabledCaps, ovrHmd_ResetFrameTiming;
 
 PFUNC_TRACKING_STATE5 ovrHmd_GetTrackingState;
 PFUNC_FOV ovrHmd_GetFovTextureSize;
-PFUNC_CONFIG ovrHmd_ConfigureRendering;
-PFUNC_BEGIN ovrHmd_BeginFrame, ovrHmd_GetFrameTiming, ovrHmd_BeginFrameTiming;
-PFUNC_END ovrHmd_EndFrame;
+PFUNC_BEGIN ovrHmd_BeginFrameTiming;
 PFUNC_EYEPOSES ovrHmd_GetEyePoses;
 PFUNC_EYEPOSE ovrHmd_GetHmdPosePerEye;
 PFUNC_RENDERDESC ovrHmd_GetRenderDesc;
@@ -100,12 +97,10 @@ PFUNC_DISTORTIONMESH ovrHmd_CreateDistortionMesh;
 PFUNC_DISTORTIONMESHDEBUG ovrHmd_CreateDistortionMeshDebug;
 PFUNC_DESTROYMESH ovrHmd_DestroyDistortionMesh;
 PFUNC_SCALEOFFSET ovrHmd_GetRenderScaleAndOffset;
-PFUNC_FRAMETIMING ovr_GetFrameTiming;
 PFUNC_TIMEWARP ovrHmd_GetEyeTimewarpMatrices;
 PFUNC_TIMEWARPDEBUG ovrHmd_GetEyeTimewarpMatricesDebug;
 PFUNC_DOUBLE ovr_GetTimeInSeconds;
 PFUNC_LATENCY ovrHmd_ProcessLatencyTest, ovrHmd_GetLatencyTest2DrawColor;
-PFUNC_DOUBLE_DOUBLE ovr_WaitTillTime;
 PFUNC_PROJECTION ovrMatrix4f_Projection;
 PFUNC_GETBOOL ovrHmd_GetBool;
 PFUNC_GETFLOAT ovrHmd_GetFloat;
@@ -130,18 +125,70 @@ PFUNC_CREATESWAPD3D116 ovrHmd_CreateSwapTextureSetD3D11;
 
 #endif
 
+// 0.3 to 0.5
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 5 ||                \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 3)
+PFUNC_CONFIG ovrHmd_ConfigureRendering;
+PFUNC_BEGIN ovrHmd_BeginFrame;
+PFUNC_END ovrHmd_EndFrame;
+#endif
+
+// 0.3 and above have some version of this
+#if !defined(HAVE_OCULUSSDK) ||                                                                    \
+    (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 3)
+PFUNC_BEGIN ovrHmd_GetFrameTiming;
+#endif
+
+// 0.3 to 0.6
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 6 ||                \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 3)
+PFUNC_DOUBLE_DOUBLE ovr_WaitTillTime;
+#endif
+
+// 0.4 to 0.5
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 5 ||                \
+    (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 4)
+PFUNC_ATTACH ovrHmd_AttachToWindow;
+#endif
+
+// 0.6 to 0.7
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION < 6 ||                \
+    OVR_MAJOR_VERSION > 7
+PFUNC_FRAMETIMING ovr_GetFrameTiming;
+#endif
+
+// 0.7 or above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 7)
+PFUNC_CREATESWAPD3D117 ovr_CreateSwapTextureSetD3D11;
+PFUNC_CREATEMIRRORD3D117 ovr_CreateMirrorTextureD3D11;
+#endif
+
+// 0.6 or above
+#if !defined(HAVE_OCULUSSDK) || (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 6)
+PFUNC_SUBMIT ovrHmd_SubmitFrame;
+PFUNC_DESTROYMIRROR ovrHmd_DestroyMirrorTexture;
+PFUNC_DESTROYSWAP ovrHmd_DestroySwapTextureSet;
+#endif
+
+// 0.6 to 0.8
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION < 6
+PFUNC_CREATESWAPGL ovrHmd_CreateSwapTextureSetGL;
+#endif
+
+// 0.4 only
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 0 ||                \
+    OVR_MINOR_VERSION < 4
+void ovrhmd_EnableHSWDisplaySDKRender(ovrHmd hmd, char enabled)
+{
+}
+#endif
+
 #ifndef HAVE_OCULUSSDK
 
 PFUNC_CREATEMIRRORGL ovrHmd_CreateMirrorTextureGL;
-PFUNC_CREATESWAPGL ovrHmd_CreateSwapTextureSetGL;
-PFUNC_DESTROYMIRROR ovrHmd_DestroyMirrorTexture;
-PFUNC_DESTROYSWAP ovrHmd_DestroySwapTextureSet;
 PFUNC_CALC ovr_CalcEyePoses;
 PFUNC_ERRORINFO ovr_GetLastErrorInfo;
-PFUNC_SUBMIT ovrHmd_SubmitFrame;
 
-PFUNC_CREATEMIRRORD3D117 ovr_CreateMirrorTextureD3D11;
-PFUNC_CREATESWAPD3D117 ovr_CreateSwapTextureSetD3D11;
 PFUNC_INPUT ovr_GetInputState;
 PFUNC_LOOKUP ovr_Lookup;
 PFUNC_VIBE ovr_SetControllerVibration;
@@ -878,6 +925,9 @@ ovrHmdDescComplete ovr_GetHmdDesc(ovrHmd hmd)
     case ovrHmd_CB:
     case ovrHmd_E3_2015:
     case ovrHmd_ES06:
+    case ovrHmd_ES09:
+    case ovrHmd_ES11:
+    case ovrHmd_CV1:
     case ovrHmd_Other:
       result.DisplayRefreshRate = 90;
     default:
