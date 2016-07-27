@@ -90,7 +90,6 @@ void ovrhmd_EnableHSWDisplaySDKRender(ovrHmd hmd, ovrBool enabled);
 #endif
 #endif
 
-#ifdef OVR_MAJOR_VERSION
 extern ovrHmd hmd;
 extern ovrHmdDesc hmdDesc;
 extern ovrFovPort g_eye_fov[2];
@@ -98,7 +97,6 @@ extern ovrEyeRenderDesc g_eye_render_desc[2];
 extern ovrFrameTiming5 g_rift_frame_timing5;
 extern ovrFrameTiming6 g_rift_frame_timing6;
 extern ovrPosef g_eye_poses[2], g_front_eye_poses[2];
-#endif
 
 #if defined(OVR_MAJOR_VERSION) && (OVR_PRODUCT_VERSION >= 1 || OVR_MAJOR_VERSION >= 7)
 #define ovrHmd_GetFrameTiming ovr_GetFrameTiming
@@ -106,9 +104,6 @@ extern ovrPosef g_eye_poses[2], g_front_eye_poses[2];
 #define ovrHmd_GetRenderDesc ovr_GetRenderDesc
 #define ovrHmd_DestroySwapTextureSet ovr_DestroySwapTextureSet
 #define ovrHmd_DestroyMirrorTexture ovr_DestroyMirrorTexture
-#define ovrHmd_SetEnabledCaps ovr_SetEnabledCaps
-#define ovrHmd_GetEnabledCaps ovr_GetEnabledCaps
-#define ovrHmd_ConfigureTracking ovr_ConfigureTracking
 #if OVR_PRODUCT_VERSION >= 1
 #define ovrHmd_RecenterPose ovr_RecenterTrackingOrigin
 #else

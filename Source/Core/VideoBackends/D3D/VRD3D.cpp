@@ -23,7 +23,6 @@
 namespace DX11
 {
 // Oculus Rift
-#ifdef OVR_MAJOR_VERSION
 
 ovrD3D11Texture5 g_eye_texture[2];
 
@@ -184,7 +183,6 @@ ovrTexture6* mirrorTexture = nullptr;
 #endif
 int mirror_width = 0, mirror_height = 0;
 D3D11_TEXTURE2D_DESC texdesc = {};
-#endif
 
 #ifdef HAVE_OPENVR
 ID3D11Texture2D* m_left_texture = nullptr;
@@ -456,7 +454,6 @@ void VR_StopFramebuffer()
 void VR_BeginFrame()
 {
 // At the start of a frame, we get the frame timing and begin the frame.
-#ifdef OVR_MAJOR_VERSION
   if (g_has_rift)
   {
 #if OVR_PRODUCT_VERSION >= 1 || OVR_MAJOR_VERSION >= 6
@@ -476,12 +473,10 @@ void VR_BeginFrame()
     g_rift_frame_timing5 = ovrHmd_BeginFrame(hmd, ++g_ovr_frameindex);
 #endif
   }
-#endif
 }
 
 void VR_RenderToEyebuffer(int eye)
 {
-#ifdef OVR_MAJOR_VERSION
   if (g_has_rift)
   {
 #if OVR_PRODUCT_VERSION >= 1
@@ -502,7 +497,6 @@ void VR_RenderToEyebuffer(int eye)
     }
 #endif
   }
-#endif
 #if defined(HAVE_OPENVR)
   if (g_has_openvr)
     D3D::context->OMSetRenderTargets(1, &FramebufferManager::m_efb.m_frontBuffer[eye]->GetRTV(),
@@ -546,7 +540,6 @@ void VR_PresentHMDFrame()
     }
   }
 #endif
-#ifdef OVR_MAJOR_VERSION
   if (g_has_rift)
   {
 #if OVR_PRODUCT_VERSION >= 1
@@ -638,12 +631,10 @@ void VR_PresentHMDFrame()
       }
     }
   }
-#endif
 }
 
 void VR_DrawTimewarpFrame()
 {
-#ifdef OVR_MAJOR_VERSION
   if (g_has_rift)
   {
     if (g_libovr_version <= libovr_050)
@@ -697,6 +688,5 @@ void VR_DrawTimewarpFrame()
       ovrResult result = ovrHmd_SubmitFrame(hmd, 0, nullptr, &layers, 1);
     }
   }
-#endif
 }
 }

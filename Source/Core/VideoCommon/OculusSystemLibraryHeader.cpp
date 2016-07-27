@@ -84,9 +84,7 @@ static PFUNC_CREATE7 ovr_Create_Real;
 PFUNC_VOID_HMD ovrHmd_RecenterPose, ovrHmd_EndFrameTiming, ovrHmd_Destroy,
     ovr_ResetBackOfHeadTracking, ovr_ResetMulticameraTracking;
 PFUNC_PCHAR_HMD ovrHmd_GetLastError, ovrHmd_GetLatencyTestResult;
-PFUNC_UINT_HMD ovrHmd_GetEnabledCaps;
-PFUNC_HMD_UINT ovrHmd_SetEnabledCaps, ovrHmd_ResetFrameTiming;
-
+PFUNC_HMD_UINT ovrHmd_ResetFrameTiming;
 PFUNC_TRACKING_STATE5 ovrHmd_GetTrackingState;
 PFUNC_FOV ovrHmd_GetFovTextureSize;
 PFUNC_BEGIN ovrHmd_BeginFrameTiming;
@@ -143,6 +141,12 @@ PFUNC_BEGIN ovrHmd_GetFrameTiming;
 #if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 6 ||                \
     (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 3)
 PFUNC_DOUBLE_DOUBLE ovr_WaitTillTime;
+#endif
+
+// 0.3 to 0.8
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 3)
+PFUNC_UINT_HMD ovrHmd_GetEnabledCaps;
+PFUNC_HMD_UINT ovrHmd_SetEnabledCaps;
 #endif
 
 // 0.4 to 0.5
@@ -1031,4 +1035,49 @@ ovrResult ovrHmd_DismissHSWDisplay(ovrHmd hmd)
     return ovrSuccess;
 }
 
+#endif
+
+#if defined(HAVE_OCULUSSDK) && OVR_PRODUCT_VERSION > 0
+ovrResult ovrHmd_ConfigureTracking(ovrHmd hmd, unsigned supported_ovrTrackingCap,
+  unsigned required_ovrTrackingCap)
+{
+  return ovrSuccess;
+}
+#endif
+
+#if defined(HAVE_OCULUSSDK) && (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION < 6)
+ovrResult ovrHmd_CreateDebug(int version_ovrHmd, ovrHmd* hmd_pointer)
+{
+  g_libovr_luid = nullptr;
+  *hmd_pointer = ovrHmd_CreateDebug(version_ovrHmd);
+  return *hmd_pointer != nullptr ? ovrSuccess : ovrError_NoHmd;
+}
+#elif defined(HAVE_OCULUSSDK) && (OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION == 6)
+ovrHmd ovrHmd_CreateDebug(int version_ovrHmd)
+{
+  g_libovr_luid = &s_libovr_luid;
+  ovrHmd result = nullptr;
+  if (OVR_SUCCESS(ovrHmd_CreateDebug(version_ovrHmd, &result)))
+    return result;
+  else
+    return nullptr;
+}
+#elif defined(HAVE_OCULUSSDK) && (OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION >=7)
+ovrHmd ovrHmd_CreateDebug(int version_ovrHmd)
+{
+  // can't create debug in this SDK version
+  g_libovr_luid = &s_libovr_luid;
+  ovrHmd result = nullptr;
+  if (OVR_SUCCESS(ovr_Create(&result, g_libovr_luid)))
+    return result;
+  else
+    return nullptr;
+}
+
+ovrResult ovrHmd_CreateDebug(int version_ovrHmd, ovrHmd* hmd_pointer)
+{
+  g_libovr_luid = &s_libovr_luid;
+  // can't create debug in this SDK version
+  return ovr_Create(hmd_pointer, g_libovr_luid);
+}
 #endif

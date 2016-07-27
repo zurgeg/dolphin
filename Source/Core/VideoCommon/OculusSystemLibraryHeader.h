@@ -1534,6 +1534,25 @@ typedef ovrResult(__cdecl* PFUNC_SUBMIT8)(ovrHmd hmd, long long frame_number,
                                           unsigned layer_count);
 typedef double(__cdecl* PFUNC_DISPLAYTIME)(ovrHmd hmd, long long frame_number);
 
+
+// These functions will work without the DLL
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 6
+ovrHmd ovrHmd_CreateDebug(int version_ovrHmd);
+#endif
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION !=6
+ovrResult ovrHmd_CreateDebug(int version_ovrHmd, ovrHmd* hmd_pointer);
+#endif
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 4)
+ovrResult ovrHmd_ConfigureTracking(ovrHmd hmd, unsigned supported_ovrTrackingCap,
+  unsigned required_ovrTrackingCap);
+#endif
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION < 7
+#define ovr_ConfigureTracking ovrHmd_ConfigureTracking
+#endif
+#if defined(HAVE_OCULUSSDK) && OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION >= 7 && OVR_MAJOR_VERSION <= 8
+#define ovrHmd_ConfigureTracking ovr_ConfigureTracking
+#endif
+
 #ifndef HAVE_OCULUSSDK
 
 // These functions will work without the DLL
@@ -1542,23 +1561,18 @@ bool ovr_InitializeRenderingShim(void);
 ovrResult ovr_Initialize(void* initParams = nullptr);
 void ovr_Shutdown(void);
 ovrHmd ovrHmd_Create(int number);
-ovrHmd ovrHmd_CreateDebug(int version_ovrHmd);
 ovrResult ovrHmd_Create(int number, ovrHmd* hmd_pointer);
-ovrResult ovrHmd_CreateDebug(int version_ovrHmd, ovrHmd* hmd_pointer);
 ovrResult ovr_Create(ovrHmd* hmd_pointer, ovrGraphicsLuid* LUID_pointer);
 int ovrHmd_Detect(void);
 const char* ovr_GetVersionString(void);
 ovrHmdDescComplete ovr_GetHmdDesc(ovrHmd hmd);
-ovrResult ovrHmd_ConfigureTracking(ovrHmd hmd, unsigned supported_ovrTrackingCap,
-                                   unsigned required_ovrTrackingCap);
 ovrResult ovrHmd_DismissHSWDisplay(ovrHmd hmd);
 
 // These functions will crash unless ovr_Initialize returned successfully
 extern PFUNC_VOID_HMD ovrHmd_RecenterPose, ovrHmd_EndFrameTiming, ovrHmd_Destroy,
     ovr_ResetBackOfHeadTracking, ovr_ResetMulticameraTracking;
 extern PFUNC_PCHAR_HMD ovrHmd_GetLastError, ovrHmd_GetLatencyTestResult;
-extern PFUNC_UINT_HMD ovrHmd_GetEnabledCaps;
-extern PFUNC_HMD_UINT ovrHmd_SetEnabledCaps, ovrHmd_ResetFrameTiming;
+extern PFUNC_HMD_UINT ovrHmd_ResetFrameTiming;
 extern PFUNC_TRACKING_STATE5 ovrHmd_GetTrackingState;
 extern PFUNC_FOV ovrHmd_GetFovTextureSize;
 extern PFUNC_BEGIN ovrHmd_BeginFrameTiming;
@@ -1611,6 +1625,24 @@ extern PFUNC_BEGIN ovrHmd_GetFrameTiming;
     (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 3)
 extern PFUNC_DOUBLE_DOUBLE ovr_WaitTillTime;
 #endif
+
+// 0.3 to 0.8
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || (OVR_MAJOR_VERSION == 0 && OVR_MINOR_VERSION < 3)
+extern PFUNC_UINT_HMD ovrHmd_GetEnabledCaps;
+extern PFUNC_HMD_UINT ovrHmd_SetEnabledCaps;
+#endif
+
+// 0.7 to 0.8
+#if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION < 7
+#define ovr_GetEnabledCaps ovrHmd_GetEnabledCaps
+#define ovr_SetEnabledCaps ovrHmd_SetEnabledCaps
+#endif
+
+#if defined(HAVE_OCULUSSDK) && OVR_PRODUCT_VERSION == 0 && OVR_MAJOR_VERSION >= 7 && OVR_MAJOR_VERSION <= 8
+#define ovrHmd_GetEnabledCaps ovr_GetEnabledCaps
+#define ovrHmd_SetEnabledCaps ovr_SetEnabledCaps
+#endif
+
 
 // 0.4 only
 #if !defined(HAVE_OCULUSSDK) || OVR_PRODUCT_VERSION > 0 || OVR_MAJOR_VERSION > 0 ||                \
