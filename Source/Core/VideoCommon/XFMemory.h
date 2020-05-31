@@ -299,3 +299,6 @@ extern XFMemory xfmem;
 void LoadXFReg(u32 transferSize, u32 address, DataReader src);
 void LoadIndexedXF(u32 val, int array);
 void PreprocessIndexedXF(u32 val, int refarray);
+int GetXFTransferInfo(const u8* data, std::string* name, std::string* desc);
+int GetXFRegInfo(u32 newValue, u32 address, std::string* name, std::string* desc);
+void SimulateXFTransfer(const u8* data, XFMemory* xf, bool* projection_set, bool* viewport_set);

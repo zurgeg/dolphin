@@ -28,6 +28,7 @@ struct CPMemory
 };
 
 void LoadCPReg(u32 subCmd, u32 value, CPMemory& cpMem);
+std::array<int, 21> CalculateVertexElementSizes(int vatIndex, const CPMemory& cpMem);
 
 extern bool s_DrawingObject;
 extern FifoAnalyzer::CPMemory s_CpMem;

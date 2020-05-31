@@ -751,9 +751,11 @@ void LoadBPRegPreprocess(u32 value0)
   }
 }
 
-void GetBPRegInfo(const u8* data, std::string* name, std::string* desc)
+int GetBPRegInfo(const u8* data, std::string* name, std::string* desc)
 {
   const char* no_yes[2] = {"No", "Yes"};
+
+  int color = 0;
 
   u8 cmd = data[0];
   u32 cmddata = Common::swap32(data) & 0xFFFFFF;
@@ -765,41 +767,61 @@ void GetBPRegInfo(const u8* data, std::string* name, std::string* desc)
   (void)(reg);
 
   case BPMEM_GENMODE:  // 0x00
+  {
     SetRegName(BPMEM_GENMODE);
-    // TODO: Description
+    // Set the Generation Mode
+    GenMode mode;
+    mode.hex = cmddata;
+    const char* cullmodes[] = {"none", "back", "front", "all"};
+    *desc = fmt::format("Generation Mode\n"
+                        "Texgens: {}\n"
+                        "Color channels: {}\n"
+                        "Flat shading (unconfirmed): {}\n"
+                        "Multisampling: {}\n"
+                        "Tev stages: {}\n"
+                        "Cull mode: {}\n"
+                        "Ind stages: {}\n"
+                        "Z freeze: {}\n",
+                        mode.numtexgens, mode.numcolchans, no_yes[mode.flat_shading],
+                        no_yes[mode.multisampling], mode.numtevstages + 1, cullmodes[mode.cullmode],
+                        mode.numindstages, no_yes[mode.zfreeze]);
     break;
+  }
 
   case BPMEM_DISPLAYCOPYFILTER:  // 0x01
-    // TODO: This is actually the sample pattern used for copies from an antialiased EFB
+  case 0x02:                     // 0x02
+  case 0x03:                     // 0x03
+  case 0x04:                     // 0x04
+  {
     SetRegName(BPMEM_DISPLAYCOPYFILTER);
-    // TODO: Description
+    *desc = "This is actually the sample pattern used for copies from an antialiased EFB\n";
+    if (cmddata == 0x666666)
+      *desc += "GX_SetCopyFilter(false, ...)";
+    else
+      *desc += fmt::format("GX_SetCopyFilter(true, ...{:x}...)", cmddata);
+    color = 1;
     break;
-
-  case 0x02:  // 0x02
-  case 0x03:  // 0x03
-  case 0x04:  // 0x04
-    // TODO: same as BPMEM_DISPLAYCOPYFILTER
-    break;
+  }
 
   case BPMEM_IND_MTXA:  // 0x06
   case BPMEM_IND_MTXA + 3:
   case BPMEM_IND_MTXA + 6:
     SetRegName(BPMEM_IND_MTXA);
-    // TODO: Description
+    *desc = "GXSetIndTexMtx() A\nSet the indirect texture matrices";
     break;
 
   case BPMEM_IND_MTXB:  // 0x07
   case BPMEM_IND_MTXB + 3:
   case BPMEM_IND_MTXB + 6:
     SetRegName(BPMEM_IND_MTXB);
-    // TODO: Descriptio
+    *desc = "GXSetIndTexMtx() B\nSet the indirect texture matrices";
     break;
 
   case BPMEM_IND_MTXC:  // 0x08
   case BPMEM_IND_MTXC + 3:
   case BPMEM_IND_MTXC + 6:
     SetRegName(BPMEM_IND_MTXC);
-    // TODO: Description
+    *desc = "GXSetIndTexMtx() C\nSet the indirect texture matrices";
     break;
 
   case BPMEM_IND_IMASK:  // 0x0F
@@ -829,18 +851,34 @@ void GetBPRegInfo(const u8* data, std::string* name, std::string* desc)
 
   case BPMEM_SCISSORTL:  // 0x20
     SetRegName(BPMEM_SCISSORTL);
-    // TODO: Description
+    *desc = fmt::format("Set scissor rectangle top left corner: ({}, {})", (cmddata >> 12) - 342,
+                        (cmddata & 0xFFF) - 342);
+    color = 2;
     break;
 
   case BPMEM_SCISSORBR:  // 0x21
     SetRegName(BPMEM_SCISSORBR);
-    // TODO: Description
+    *desc = fmt::format("Set scissor rectangle bottom right corner: ({}, {})",
+                        (cmddata >> 12) - 342, (cmddata & 0xFFF) - 342);
+    color = 2;
     break;
 
   case BPMEM_LINEPTWIDTH:  // 0x22
+  {
     SetRegName(BPMEM_LINEPTWIDTH);
-    // TODO: Description
-    break;
+    LPSize size;
+    size.hex = cmddata;
+    *desc = fmt::format("Line and point width\n"
+                        "Line Size: {}\n"
+                        "Point Size: {}\n"
+                        "Line Offset: {}\n"
+                        "Point Offset: {}\n"
+                        "Line Aspect: {}\n"
+                        "padding: {}",
+                        (u32)size.linesize, (u32)size.pointsize, (u32)size.lineoff,
+                        (u32)size.pointoff, no_yes[size.lineaspect], (u32)size.padding);
+  }
+  break;
 
   case BPMEM_PERF0_TRI:  // 0x23
     SetRegName(BPMEM_PERF0_TRI);
@@ -904,9 +942,19 @@ void GetBPRegInfo(const u8* data, std::string* name, std::string* desc)
     break;
 
   case BPMEM_ZMODE:  // 0x40
+  {
     SetRegName(BPMEM_ZMODE);
-    // TODO: Description
+
+    const char* functions[] = {"NEVER",   "LESS",   "EQUAL",  "LEQUAL",
+                               "GREATER", "NEQUAL", "GEQUAL", "ALWAYS"};
+    ZMode mode;
+    mode.hex = cmddata;
+    *desc = fmt::format("Depth Test Enable: {}\n"
+                        "Depth Test Function: {}\n"
+                        "Depth Update Enable: {}",
+                        no_yes[mode.testenable], functions[mode.func], no_yes[mode.updateenable]);
     break;
+  }
 
   case BPMEM_BLENDMODE:  // 0x41
   {
@@ -937,9 +985,16 @@ void GetBPRegInfo(const u8* data, std::string* name, std::string* desc)
   break;
 
   case BPMEM_CONSTANTALPHA:  // 0x42
+  {
     SetRegName(BPMEM_CONSTANTALPHA);
-    // TODO: Description
+    ConstantAlpha c;
+    c.hex = cmddata;
+    *desc = fmt::format("Constant Destination Alpha\n"
+                        "Alpha: 0x{:x}\n"
+                        "Enabled: {}",
+                        c.alpha, no_yes[c.enable]);
     break;
+  }
 
   case BPMEM_ZCOMPARE:  // 0x43
   {
@@ -960,28 +1015,47 @@ void GetBPRegInfo(const u8* data, std::string* name, std::string* desc)
   break;
 
   case BPMEM_FIELDMASK:  // 0x44
+  {
     SetRegName(BPMEM_FIELDMASK);
-    // TODO: Description
+    FieldMask m;
+    m.hex = cmddata;
+    const char* action[] = {"skip", "write"};
+    *desc = fmt::format("Determines if fields will be written to EFB (always computed)\n"
+                        "Even: {}\n"
+                        "Odd: {}",
+                        action[bpmem.fieldmask.even], action[bpmem.fieldmask.odd]);
     break;
+  }
 
   case BPMEM_SETDRAWDONE:  // 0x45
     SetRegName(BPMEM_SETDRAWDONE);
-    // TODO: Description
+    switch (cmddata & 0xFF)
+    {
+    case 0x02:
+      *desc = fmt::format("GXSetDrawDone SetPEFinish (value: 0x%{:x})", cmddata);
+      break;
+    default:
+      *desc = fmt::format("GXSetDrawDone ??? (value: 0x%{:x})", cmddata);
+      break;
+    }
+    color = 1;
     break;
 
   case BPMEM_BUSCLOCK0:  // 0x46
     SetRegName(BPMEM_BUSCLOCK0);
-    // TODO: Description
+    *desc = "Unimportant regs (Clock, Perf, ...)\n"
+            "TB Bus Clock ?";
     break;
 
   case BPMEM_PE_TOKEN_ID:  // 0x47
     SetRegName(BPMEM_PE_TOKEN_ID);
-    // TODO: Description
+    *desc = fmt::format("Pixel Engine Token Id\nSetPEToken 0x{:x}", cmddata & 0xFFFF);
     break;
 
   case BPMEM_PE_TOKEN_INT_ID:  // 0x48
     SetRegName(BPMEM_PE_TOKEN_INT_ID);
-    // TODO: Description
+    *desc =
+        fmt::format("Pixel Engine Interrupt Token Id\nSetPEToken + INT 0x{:x}", cmddata & 0xFFFF);
     break;
 
   case BPMEM_EFB_TL:  // 0x49
@@ -990,6 +1064,7 @@ void GetBPRegInfo(const u8* data, std::string* name, std::string* desc)
     X10Y10 left_top;
     left_top.hex = cmddata;
     *desc = fmt::format("Left: {}\nTop: {}", u32(left_top.x), u32(left_top.y));
+    color = 1;
   }
   break;
 
@@ -1000,38 +1075,48 @@ void GetBPRegInfo(const u8* data, std::string* name, std::string* desc)
     X10Y10 width_height;
     width_height.hex = cmddata;
     *desc = fmt::format("Width: {}\nHeight: {}", width_height.x + 1, width_height.y + 1);
+    color = 1;
   }
   break;
 
   case BPMEM_EFB_ADDR:  // 0x4B
     SetRegName(BPMEM_EFB_ADDR);
     *desc = fmt::format("Target address (32 byte aligned): 0x{:06X}", cmddata << 5);
+    color = 1;
     break;
 
   case BPMEM_MIPMAP_STRIDE:  // 0x4D
     SetRegName(BPMEM_MIPMAP_STRIDE);
-    // TODO: Description
+    *desc = fmt::format("copyMipMapStrideChannels = {}\nEFB Copy or XFB Copy destination stride = "
+                        "{} bytes\nusually set to 4 when dest is single channel, 8 when dest is 2 "
+                        "channel, 16 when dest is RGBA",
+                        cmddata, cmddata << 5);
+    color = 1;
     break;
 
   case BPMEM_COPYYSCALE:  // 0x4E
     SetRegName(BPMEM_COPYYSCALE);
     *desc = fmt::format("Scaling factor (XFB copy only): 0x{:X} ({} or inverted {})", cmddata,
                         static_cast<float>(cmddata) / 256.f, 256.f / static_cast<float>(cmddata));
+    color = 1;
     break;
 
   case BPMEM_CLEAR_AR:  // 0x4F
     SetRegName(BPMEM_CLEAR_AR);
     *desc = fmt::format("Alpha: 0x{:02X}\nRed: 0x{:02X}", (cmddata & 0xFF00) >> 8, cmddata & 0xFF);
+    color = 1;
     break;
 
   case BPMEM_CLEAR_GB:  // 0x50
     SetRegName(BPMEM_CLEAR_GB);
     *desc = fmt::format("Green: 0x{:02X}\nBlue: 0x{:02X}", (cmddata & 0xFF00) >> 8, cmddata & 0xFF);
+    color = 1;
     break;
 
   case BPMEM_CLEAR_Z:  // 0x51
     SetRegName(BPMEM_CLEAR_Z);
     *desc = fmt::format("Z value: 0x{:06X}", cmddata);
+    color = 1;
     break;
 
   case BPMEM_TRIGGER_EFB_COPY:  // 0x52
@@ -1061,8 +1146,9 @@ void GetBPRegInfo(const u8* data, std::string* name, std::string* desc)
         no_yes[copy.half_scale], no_yes[copy.scale_invert], no_yes[copy.clear],
         static_cast<u32>(copy.frame_to_field), no_yes[copy.copy_to_xfb], no_yes[copy.intensity_fmt],
         no_yes[copy.auto_conv]);
+    color = 1;
+    break;
   }
-  break;
 
   case BPMEM_COPYFILTER0:  // 0x53
     SetRegName(BPMEM_COPYFILTER0);
@@ -1097,6 +1183,7 @@ void GetBPRegInfo(const u8* data, std::string* name, std::string* desc)
   case BPMEM_SCISSOROFFSET:  // 0x59
     SetRegName(BPMEM_SCISSOROFFSET);
     // TODO: Description
+    color = 3;
     break;
 
   case BPMEM_PRELOAD_ADDR:  // 0x60
@@ -1146,7 +1233,8 @@ void GetBPRegInfo(const u8* data, std::string* name, std::string* desc)
 
   case BPMEM_BUSCLOCK1:  // 0x69
     SetRegName(BPMEM_BUSCLOCK1);
-    // TODO: Description
+    *desc = "Unimportant regs (Clock, Perf, ...)\n"
+            "TB Bus Clock ?";
     break;
 
   case BPMEM_TX_SETMODE0:  // 0x80
@@ -1400,9 +1488,14 @@ void GetBPRegInfo(const u8* data, std::string* name, std::string* desc)
     break;
 
   case BPMEM_FOGCOLOR:  // 0xF2
+  {
     SetRegName(BPMEM_FOGCOLOR);
-    // TODO: Description
+    FogParams::FogColor fog_color;
+    fog_color.hex = cmddata;
+    *desc = fmt::format("Fog color: red {:02x}, green {:02x}, blue {:02x}", fog_color.r,
+                        fog_color.g, fog_color.b);
     break;
+  }
 
   case BPMEM_ALPHACOMPARE:  // 0xF3
   {
@@ -1422,13 +1515,19 @@ void GetBPRegInfo(const u8* data, std::string* name, std::string* desc)
 
   case BPMEM_BIAS:  // 0xF4
     SetRegName(BPMEM_BIAS);
-    // TODO: Description
+    *desc = fmt::format("Z Texture Bias = {}", cmddata);
     break;
 
   case BPMEM_ZTEX2:  // 0xF5
+  {
     SetRegName(BPMEM_ZTEX2);
-    // TODO: Description
+    const char* pzop[] = {"DISABLE", "ADD", "REPLACE", "?"};
+    const char* pztype[] = {"Z8", "Z16", "Z24", "?"};
+    ZTex2 z;
+    z.hex = cmddata;
+    *desc = fmt::format("Z Texture Type op={}, type={}", pzop[z.op], pztype[z.type]);
     break;
+  }
 
   case BPMEM_TEV_KSEL:  // 0xF6
   case BPMEM_TEV_KSEL + 1:
@@ -1438,12 +1537,33 @@ void GetBPRegInfo(const u8* data, std::string* name, std::string* desc)
   case BPMEM_TEV_KSEL + 5:
   case BPMEM_TEV_KSEL + 6:
   case BPMEM_TEV_KSEL + 7:
+  {
     SetRegName(BPMEM_TEV_KSEL);
-    // TODO: Description
+    int i = cmd - BPMEM_TEV_KSEL;
+    *desc = fmt::format("Texture Environment Swap Mode Table {}", i);
     break;
-
+  }
 #undef SetRegName
   }
+  return color;
+}
+
+void SimulateBPReg(const u8* data, BPMemory* bp, bool* scissor_set, bool* scissor_offset_set,
+                   bool* efb_copied)
+{
+  u8 regNum = data[0];
+  u32 value0 = Common::swap32(data) & 0xFFFFFF;
+  int oldval = ((u32*)bp)[regNum];
+  int newval = (oldval & ~bp->bpMask) | (value0 & bp->bpMask);
+  if (regNum != BPMEM_BP_MASK)
+    bp->bpMask = 0xFFFFFF;
+  ((u32*)bp)[regNum] = newval;
+  if (BPMEM_SCISSORTL == regNum || regNum == BPMEM_SCISSORBR)
+    *scissor_set = true;
+  else if (regNum == BPMEM_SCISSOROFFSET)
+    *scissor_offset_set = true;
+  else if (regNum == BPMEM_TRIGGER_EFB_COPY)
+    *efb_copied = true;
 }
 
 // Called when loading a saved state.

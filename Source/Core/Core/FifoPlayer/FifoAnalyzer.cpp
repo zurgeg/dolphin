@@ -42,6 +42,7 @@ u32 ReadFifo32(const u8*& data)
   data += 4;
   return value;
 }
+}  // Anonymous namespace
 
 std::array<int, 21> CalculateVertexElementSizes(int vatIndex, const CPMemory& cpMem)
 {
@@ -150,7 +151,6 @@ std::array<int, 21> CalculateVertexElementSizes(int vatIndex, const CPMemory& cp
 
   return sizes;
 }
-}  // Anonymous namespace
 
 bool s_DrawingObject;
 FifoAnalyzer::CPMemory s_CpMem;
