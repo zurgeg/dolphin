@@ -19,6 +19,7 @@ enum class Platform
   WiiDisc,
   WiiWAD,
   ELFOrDOL,
+  VirtualBoyRom,
   NumberOfPlatforms
 };
 

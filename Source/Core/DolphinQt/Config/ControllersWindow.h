@@ -36,10 +36,12 @@ private:
   void OnWiimoteRefreshPressed();
   void OnGCPadConfigure();
   void OnWiimoteConfigure();
+  void OnVirtualBoyConfigure();
   void OnControllerInterfaceConfigure();
 
   void CreateGamecubeLayout();
   void CreateWiimoteLayout();
+  void CreateVirtualBoyLayout();
   void CreateCommonLayout();
   void CreateMainLayout();
   void ConnectWidgets();
@@ -73,6 +75,12 @@ private:
   QCheckBox* m_wiimote_speaker_data;
   QCheckBox* m_wiimote_ciface;
   QPushButton* m_wiimote_refresh;
+
+  // Virtual Boy
+  QGroupBox* m_vb_box;
+  QGridLayout* m_vb_layout;
+  QPushButton* m_vb_button;
+  QHBoxLayout* m_vb_group;
 
   // Common
   QGroupBox* m_common_box;

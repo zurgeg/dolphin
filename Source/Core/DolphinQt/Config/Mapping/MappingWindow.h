@@ -41,6 +41,8 @@ public:
     MAPPING_GC_MICROPHONE,
     // Wii
     MAPPING_WIIMOTE_EMU,
+    // Virtual Boy
+    MAPPING_VIRTUAL_BOY,
     // Hotkeys
     MAPPING_HOTKEYS
   };

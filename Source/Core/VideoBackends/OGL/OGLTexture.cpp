@@ -213,7 +213,7 @@ void OGLTexture::ResolveFromTexture(const AbstractTexture* src,
 }
 
 void OGLTexture::Load(u32 level, u32 width, u32 height, u32 row_length, const u8* buffer,
-                      size_t buffer_size)
+                      size_t buffer_size, u32 layers)
 {
   if (level >= m_config.levels)
     PanicAlert("Texture only has %d levels, can't update level %d", m_config.levels, level);
@@ -235,12 +235,12 @@ void OGLTexture::Load(u32 level, u32 width, u32 height, u32 row_length, const u8
   {
     if (g_ogl_config.bSupportsTextureStorage)
     {
-      glCompressedTexSubImage3D(target, level, 0, 0, 0, width, height, 1, gl_internal_format,
+      glCompressedTexSubImage3D(target, level, 0, 0, 0, width, height, layers, gl_internal_format,
                                 static_cast<GLsizei>(buffer_size), buffer);
     }
     else
     {
-      glCompressedTexImage3D(target, level, gl_internal_format, width, height, 1, 0,
+      glCompressedTexImage3D(target, level, gl_internal_format, width, height, layers, 0,
                              static_cast<GLsizei>(buffer_size), buffer);
     }
   }
@@ -250,11 +250,11 @@ void OGLTexture::Load(u32 level, u32 width, u32 height, u32 row_length, const u8
     GLenum gl_type = GetGLTypeForTextureFormat(m_config.format);
     if (g_ogl_config.bSupportsTextureStorage)
     {
-      glTexSubImage3D(target, level, 0, 0, 0, width, height, 1, gl_format, gl_type, buffer);
+      glTexSubImage3D(target, level, 0, 0, 0, width, height, layers, gl_format, gl_type, buffer);
     }
     else
     {
-      glTexImage3D(target, level, gl_internal_format, width, height, 1, 0, gl_format, gl_type,
+      glTexImage3D(target, level, gl_internal_format, width, height, layers, 0, gl_format, gl_type,
                    buffer);
     }
   }

@@ -22,6 +22,8 @@ private:
   void LoadSettings() override;
   void SaveSettings() override;
 
+  void OnEmulationStateChanged(bool running);
+
   void OnBackendChanged(const QString& backend_name);
 
   // EFB

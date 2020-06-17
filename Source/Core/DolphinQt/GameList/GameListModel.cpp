@@ -243,6 +243,8 @@ bool GameListModel::ShouldDisplayGameListItem(int index) const
       return SConfig::GetInstance().m_ListWad;
     case DiscIO::Platform::ELFOrDOL:
       return SConfig::GetInstance().m_ListElfDol;
+    case DiscIO::Platform::VirtualBoyRom:
+      return SConfig::GetInstance().m_ListVirtualBoy;
     default:
       return false;
     }

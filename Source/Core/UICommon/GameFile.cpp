@@ -34,6 +34,7 @@
 
 #include "Core/Config/UISettings.h"
 #include "Core/ConfigManager.h"
+#include "Core/Host.h"
 #include "Core/IOS/ES/Formats.h"
 #include "Core/TitleDatabase.h"
 
@@ -145,6 +146,15 @@ GameFile::GameFile(std::string path) : m_file_path(std::move(path))
     m_platform = DiscIO::Platform::ELFOrDOL;
     m_blob_type = DiscIO::BlobType::DIRECTORY;
   }
+  else if (!IsValid() && IsVirtualBoyRom())
+  {
+    m_valid = true;
+    m_file_size = m_volume_size = File::GetSize(m_file_path);
+    m_volume_size_is_accurate = true;
+    m_is_datel_disc = false;
+    m_platform = DiscIO::Platform::VirtualBoyRom;
+    m_blob_type = DiscIO::BlobType::PLAIN;
+  }
 }
 
 GameFile::~GameFile() = default;
@@ -194,12 +204,13 @@ void GameFile::DownloadDefaultCover()
 
   const auto cover_path = File::GetUserPath(D_COVERCACHE_IDX) + DIR_SEP;
   const auto png_path = cover_path + m_gametdb_id + ".png";
+  const auto jpg_path = cover_path + m_gametdb_id + ".jpg";
 
   // If the cover has already been downloaded, abort
-  if (File::Exists(png_path))
+  if (File::Exists(png_path) || File::Exists(jpg_path))
     return;
 
-  std::string region_code;
+  std::string ideal_region_code, region_code;
   switch (m_region)
   {
   case DiscIO::Region::NTSC_J:
@@ -236,7 +247,10 @@ void GameFile::DownloadDefaultCover()
       region_code = "EN";
       break;
     }
-    break;
+    // Australia, Portugal, Sweden, Denmark, Norway, Finland, Turkey, Taiwan, and Russia have their
+    // own covers, but not their own hardware language settings. If they're not available (they
+    // usually are for Australia, not so much for the others), it will fall back.
+    ideal_region_code = Host_SpecialCoverRegion();
   }
   case DiscIO::Region::Unknown:
     region_code = "EN";
@@ -244,8 +258,127 @@ void GameFile::DownloadDefaultCover()
   }
 
   Common::HttpRequest request;
-  constexpr char cover_url[] = "https://art.gametdb.com/wii/cover/{}/{}.png";
-  const auto response = request.Get(fmt::format(cover_url, region_code, m_gametdb_id));
+  Common::HttpRequest::Response response;
+  if (GetPlatform() == DiscIO::Platform::VirtualBoyRom)
+  {
+    std::string id = GetGameID();
+    if (id.length() < 4)
+      return;
+    u32 game_id = Common::swap32((u8*)id.data());
+    u32 tgdbid = 0;
+    switch (game_id)
+    {
+    case 'VPBE':  // 3D Tetris
+      tgdbid = 14736;
+      break;
+    case 'VBHE':  // Bound High!
+      tgdbid = 20556;
+      break;
+    case 'VGPM':  // Space pinball
+      tgdbid = 36351;
+      break;
+    case 'VGPJ':  // Galactic Pinball
+      tgdbid = 14738;
+      break;
+    case 'VVGE':  // Golf
+      tgdbid = 14739;
+      break;
+    case 'VIMJ':  // Innsmouth no Yakata
+      tgdbid = 19238;
+      break;
+    case 'VJBE':  // Jack Bros.
+      tgdbid = 14740;
+      break;
+    case 'VMCJ':  // Mario Clash
+      tgdbid = 14743;
+      break;
+    case 'VMTJ':  // Mario's Tennis
+      tgdbid = 14744;
+      break;
+    case 'VNFE':  // Nester's Funky Bowling
+      tgdbid = 14745;
+      break;
+    case 'VH2E':  // Panic Bomber
+      tgdbid = 14737;
+      break;
+    case 'VREE':  // Red Alarm
+      tgdbid = 14748;
+      break;
+    case 'VSDJ':  // SD GUNDAM Dimension War
+      tgdbid = 19239;
+      break;
+    case 'VSPJ':  // Space Invaders Virtual Collection
+      tgdbid = 19240;
+      break;
+    case 'VSSJ':  // Space Squash
+      tgdbid = 19179;
+      break;
+    case 'VTBJ':  // Teleroboxer
+      tgdbid = 14749;
+      break;
+    case 'VTRJ':  // Faceball? or V-Tetris?
+      if (GetName(Variant::LongAndNotCustom) == "Faceball")
+        tgdbid = 26772;
+      else
+        tgdbid = 19241;
+      break;
+    case 'VH3E':  // Vertical Force
+      tgdbid = 14750;
+      break;
+    case 'VVBJ':  // Virtual Bowling
+      tgdbid = 19242;
+      break;
+    case 'VWCJ' :  // VB Wario Land
+      tgdbid = 14734;
+      break;
+    case 'VVFJ':  // Virtual Fishing
+      tgdbid = 19243;
+      break;
+    case 'VJVJ':  // Virtual Lab
+      tgdbid = 19244;
+      break;
+    case 'VVPE':  // Virtual League Baseball
+      tgdbid = 14751;
+      break;
+    case 'VWEE':  // Water World
+      tgdbid = 14752;
+      break;
+    default:
+      return;
+    }
+    response = request.Get(
+        fmt::format("https://cdn.thegamesdb.net/images/small/boxart/front/{}-1.jpg", tgdbid));
+    if (response)
+      File::WriteStringToFile(jpg_path, std::string(response->begin(), response->end()));
+    return;
+  }
+  else
+  {
+    if (!ideal_region_code.empty())
+    {
+      response = request.Get(fmt::format("https://art.gametdb.com/wii/cover/{}/{}.png",
+                                         ideal_region_code, m_gametdb_id));
+      if (!response)
+      {
+        response = request.Get(fmt::format("https://art.gametdb.com/wii/cover/{}/{}.jpg",
+                                           ideal_region_code, m_gametdb_id));
+        if (response)
+          File::WriteStringToFile(jpg_path, std::string(response->begin(), response->end()));
+        return;
+      }
+    }
+    if (!response)
+      response = request.Get(
+          fmt::format("https://art.gametdb.com/wii/cover/{}/{}.png", region_code, m_gametdb_id));
+    if (!response)
+    {
+      response = request.Get(
+          fmt::format("https://art.gametdb.com/wii/cover/{}/{}.jpg", region_code, m_gametdb_id));
+      if (response)
+        File::WriteStringToFile(jpg_path, std::string(response->begin(), response->end()));
+      return;
+    }
+  }
 
   if (!response)
     return;
@@ -263,6 +396,9 @@ bool GameFile::DefaultCoverChanged()
   std::string contents;
 
   File::ReadFileToString(cover_path + m_gametdb_id + ".png", contents);
+
+  if (contents.empty())
+    File::ReadFileToString(cover_path + m_gametdb_id + ".jpg", contents);
 
   if (contents.empty())
     return false;
@@ -341,6 +477,14 @@ bool GameFile::IsElfOrDol() const
   std::string name_end = m_file_path.substr(m_file_path.size() - 4);
   std::transform(name_end.begin(), name_end.end(), name_end.begin(), ::tolower);
   return name_end == ".elf" || name_end == ".dol";
+}
+
+bool GameFile::IsVirtualBoyRom() const
+{
+  std::string name_end;
+  SplitPath(m_file_path, nullptr, nullptr, &name_end);
+  std::transform(name_end.begin(), name_end.end(), name_end.begin(), ::tolower);
+  return name_end == ".vb" || name_end == ".vboy";
 }
 
 bool GameFile::ReadXMLMetadata(const std::string& path)

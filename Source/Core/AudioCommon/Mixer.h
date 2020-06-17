@@ -31,6 +31,7 @@ public:
   void PushStreamingSamples(const short* samples, unsigned int num_samples);
   void PushWiimoteSpeakerSamples(const short* samples, unsigned int num_samples,
                                  unsigned int sample_rate);
+  void PushOtherSamples(const short* samples, unsigned int num_samples, unsigned int sample_rate);
   unsigned int GetSampleRate() const { return m_sampleRate; }
   void SetDMAInputSampleRate(unsigned int rate);
   void SetStreamInputSampleRate(unsigned int rate);
@@ -87,6 +88,7 @@ private:
   MixerFifo m_wiimote_speaker_mixer{this, 3000};
   unsigned int m_sampleRate;
 
+  bool m_other = false;
   bool m_is_stretching = false;
   AudioCommon::AudioStretcher m_stretcher;
   AudioCommon::SurroundDecoder m_surround_decoder;

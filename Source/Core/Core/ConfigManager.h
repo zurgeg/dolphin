@@ -145,6 +145,7 @@ struct SConfig
 
   bool bWii = false;
   bool m_is_mios = false;
+  bool bROM = false;
 
   // Interface settings
   bool bConfirmStop = false;
@@ -202,6 +203,8 @@ struct SConfig
   void ResetRunningGameMetadata();
   void SetRunningGameMetadata(const DiscIO::Volume& volume, const DiscIO::Partition& partition);
   void SetRunningGameMetadata(const IOS::ES::TMDReader& tmd, DiscIO::Platform platform);
+  void SetRunningGameMetadata(const std::string& game_id, const std::string& gametdb_id,
+                              u64 title_id, u16 revision, DiscIO::Region region);
 
   void LoadDefaults();
   // Replaces NTSC-K with some other region, and doesn't replace non-NTSC-K regions
@@ -243,6 +246,7 @@ struct SConfig
   bool m_ListElfDol;
   bool m_ListWii;
   bool m_ListGC;
+  bool m_ListVirtualBoy;
   bool m_ListPal;
   bool m_ListUsa;
   bool m_ListJap;
@@ -356,9 +360,6 @@ private:
   void LoadUSBPassthroughSettings(IniFile& ini);
   void LoadAutoUpdateSettings(IniFile& ini);
   void LoadJitDebugSettings(IniFile& ini);
-
-  void SetRunningGameMetadata(const std::string& game_id, const std::string& gametdb_id,
-                              u64 title_id, u16 revision, DiscIO::Region region);
 
   static SConfig* m_Instance;
 

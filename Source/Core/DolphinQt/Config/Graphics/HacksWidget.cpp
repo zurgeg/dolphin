@@ -13,6 +13,7 @@
 #include "Core/Config/GraphicsSettings.h"
 #include "Core/Config/MainSettings.h"
 #include "Core/ConfigManager.h"
+#include "Core/Core.h"
 
 #include "DolphinQt/Config/Graphics/GraphicsBool.h"
 #include "DolphinQt/Config/Graphics/GraphicsSlider.h"
@@ -20,6 +21,8 @@
 #include "DolphinQt/Settings.h"
 
 #include "VideoCommon/VideoConfig.h"
+
+#include "VirtualBoy/VirtualBoyPlayer.h"
 
 HacksWidget::HacksWidget(GraphicsWindow* parent) : GraphicsWidget(parent)
 {
@@ -31,6 +34,9 @@ HacksWidget::HacksWidget(GraphicsWindow* parent) : GraphicsWidget(parent)
   connect(parent, &GraphicsWindow::BackendChanged, this, &HacksWidget::OnBackendChanged);
   OnBackendChanged(QString::fromStdString(Config::Get(Config::MAIN_GFX_BACKEND)));
   connect(&Settings::Instance(), &Settings::ConfigChanged, this, &HacksWidget::LoadSettings);
+  connect(&Settings::Instance(), &Settings::EmulationStateChanged, this,
+          [=](Core::State state) { OnEmulationStateChanged(state != Core::State::Uninitialized); });
+  OnEmulationStateChanged(Core::GetState() != Core::State::Uninitialized);
 }
 
 void HacksWidget::CreateWidgets()
@@ -203,6 +209,12 @@ void HacksWidget::SaveSettings()
 
     Config::SetBaseOrCurrent(Config::GFX_SAFE_TEXTURE_CACHE_COLOR_SAMPLES, samples);
   }
+}
+
+void HacksWidget::OnEmulationStateChanged(bool running)
+{
+  bool vb = VirtualBoyPlayer::GetInstance().IsPlaying();
+  setEnabled(!vb);
 }
 
 void HacksWidget::AddDescriptions()

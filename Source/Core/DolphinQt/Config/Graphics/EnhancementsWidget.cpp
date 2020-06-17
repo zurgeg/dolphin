@@ -14,6 +14,7 @@
 
 #include "Core/Config/GraphicsSettings.h"
 #include "Core/ConfigManager.h"
+#include "Core/Core.h"
 
 #include "DolphinQt/Config/Graphics/GraphicsBool.h"
 #include "DolphinQt/Config/Graphics/GraphicsChoice.h"
@@ -30,6 +31,8 @@
 #include "VideoCommon/VideoCommon.h"
 #include "VideoCommon/VideoConfig.h"
 
+#include "VirtualBoy/VirtualBoyPlayer.h"
+
 EnhancementsWidget::EnhancementsWidget(GraphicsWindow* parent)
     : GraphicsWidget(parent), m_block_save(false)
 {
@@ -39,6 +42,9 @@ EnhancementsWidget::EnhancementsWidget(GraphicsWindow* parent)
   AddDescriptions();
   connect(parent, &GraphicsWindow::BackendChanged,
           [this](const QString& backend) { LoadSettings(); });
+  connect(&Settings::Instance(), &Settings::EmulationStateChanged, this,
+          [=](Core::State state) { OnEmulationStateChanged(state != Core::State::Uninitialized); });
+  OnEmulationStateChanged(Core::GetState() != Core::State::Uninitialized);
 }
 
 void EnhancementsWidget::CreateWidgets()
@@ -217,6 +223,7 @@ void EnhancementsWidget::LoadPPShaders()
 
 void EnhancementsWidget::LoadSettings()
 {
+  bool vb = VirtualBoyPlayer::GetInstance().IsPlaying();
   m_block_save = true;
   // Anti-Aliasing
 
@@ -229,7 +236,7 @@ void EnhancementsWidget::LoadSettings()
 
   m_aa_combo->setCurrentText(
       QString::fromStdString(std::to_string(aa_selection) + "x " + (ssaa ? "SSAA" : "MSAA")));
-  m_aa_combo->setEnabled(m_aa_combo->count() > 1);
+  m_aa_combo->setEnabled(m_aa_combo->count() > 1 && !vb);
 
   // Post Processing Shader
   LoadPPShaders();
@@ -237,8 +244,8 @@ void EnhancementsWidget::LoadSettings()
   // Stereoscopy
   const bool supports_stereoscopy = g_Config.backend_info.bSupportsGeometryShaders;
   m_3d_mode->setEnabled(supports_stereoscopy);
-  m_3d_convergence->setEnabled(supports_stereoscopy);
-  m_3d_depth->setEnabled(supports_stereoscopy);
+  m_3d_convergence->setEnabled(supports_stereoscopy && !vb);
+  m_3d_depth->setEnabled(supports_stereoscopy && !vb);
   m_3d_swap_eyes->setEnabled(supports_stereoscopy);
   m_block_save = false;
 }
@@ -285,6 +292,26 @@ void EnhancementsWidget::SaveSettings()
   }
 
   LoadSettings();
+}
+
+void EnhancementsWidget::OnEmulationStateChanged(bool running)
+{
+  bool vb = VirtualBoyPlayer::GetInstance().IsPlaying();
+  m_ir_combo->setEnabled(!vb);
+  m_aa_combo->setEnabled(m_aa_combo->count() > 1 && !vb);
+  m_af_combo->setEnabled(!vb);
+  m_scaled_efb_copy->setEnabled(!vb);
+  m_per_pixel_lighting->setEnabled(!vb);
+  m_force_texture_filtering->setEnabled(!vb);
+  m_widescreen_hack->setEnabled(!vb);
+  m_disable_fog->setEnabled(!vb);
+  m_force_24bit_color->setEnabled(!vb);
+  m_disable_copy_filter->setEnabled(!vb);
+  m_arbitrary_mipmap_detection->setEnabled(!vb);
+  // TODO: These SHOULD have an effect on Virtual Boy
+  const bool supports_stereoscopy = g_Config.backend_info.bSupportsGeometryShaders;
+  m_3d_convergence->setEnabled(supports_stereoscopy && !vb);
+  m_3d_depth->setEnabled(supports_stereoscopy && !vb);
 }
 
 void EnhancementsWidget::AddDescriptions()

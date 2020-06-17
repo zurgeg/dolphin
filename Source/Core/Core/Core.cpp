@@ -49,6 +49,7 @@
 #include "Core/HW/EXI/EXI.h"
 #include "Core/HW/GCKeyboard.h"
 #include "Core/HW/GCPad.h"
+#include "VirtualBoy/VBPad.h"
 #include "Core/HW/HW.h"
 #include "Core/HW/SystemTimers.h"
 #include "Core/HW/VideoInterface.h"
@@ -83,6 +84,8 @@
 #include "VideoCommon/RenderBase.h"
 #include "VideoCommon/VideoBackendBase.h"
 #include "VideoCommon/VideoConfig.h"
+
+#include "VirtualBoy/VirtualBoyPlayer.h"
 
 namespace Core
 {
@@ -409,6 +412,39 @@ static void FifoPlayerThread(const std::optional<std::string>& savestate_path,
   }
 }
 
+static void VirtualBoyPlayerThread(const std::optional<std::string>& savestate_path,
+                                   bool delete_savestate)
+{
+  DeclareAsCPUThread();
+
+  const SConfig& _CoreParameter = SConfig::GetInstance();
+  if (_CoreParameter.bCPUThread)
+    Common::SetCurrentThreadName("VirtualBoy player");
+  else
+    Common::SetCurrentThreadName("VirtualBoy-GPU");
+
+  // Enter CPU run loop. When we leave it - we are done.
+  if (auto cpu_core = VirtualBoyPlayer::GetInstance().GetCPUCore())
+  {
+    PowerPC::InjectExternalCPUCore(cpu_core.get());
+    s_is_started = true;
+
+    CPUSetInitialExecutionState();
+    CPU::Run();
+
+    s_is_started = false;
+    PowerPC::InjectExternalCPUCore(nullptr);
+    VirtualBoyPlayer::GetInstance().Close();
+  }
+  else
+  {
+    // Virtual Boy rom invalid, cannot continue.
+    PanicAlert("Virtual Boy rom is invalid, cannot start.");
+    VirtualBoyPlayer::GetInstance().Close();
+    return;
+  }
+}
+
 // Initialize and create emulation thread
 // Call browser: Init():s_emu_thread().
 // See the BootManager.cpp file description for a complete call schedule.
@@ -489,10 +525,16 @@ static void EmuThread(std::unique_ptr<BootParameters> boot, WindowSystemInfo wsi
   // entirely, we switch the window used for inputs to the render window. This way, the
   // cursor position is relative to the render window, instead of the main window.
   bool init_controllers = false;
+  bool init_vbpad = false;
   if (!g_controller_interface.IsInit())
   {
     g_controller_interface.Initialize(wsi);
     Pad::Initialize();
+    if (std::holds_alternative<BootParameters::VirtualBoy>(boot->parameters))
+    {
+      VBPad::Initialize();
+      init_vbpad = true;
+    }
     Keyboard::Initialize();
     init_controllers = true;
   }
@@ -500,6 +542,10 @@ static void EmuThread(std::unique_ptr<BootParameters> boot, WindowSystemInfo wsi
   {
     g_controller_interface.ChangeWindow(wsi.render_window);
     Pad::LoadConfig();
+    if (std::holds_alternative<BootParameters::VirtualBoy>(boot->parameters))
+    {
+      VBPad::LoadConfig();
+    }
     Keyboard::LoadConfig();
   }
 
@@ -525,7 +571,7 @@ static void EmuThread(std::unique_ptr<BootParameters> boot, WindowSystemInfo wsi
       NetPlay::SetupWiimotes();
   }
 
-  Common::ScopeGuard controller_guard{[init_controllers, init_wiimotes] {
+  Common::ScopeGuard controller_guard{[init_controllers, init_wiimotes, init_vbpad] {
     if (!init_controllers)
       return;
 
@@ -539,6 +585,8 @@ static void EmuThread(std::unique_ptr<BootParameters> boot, WindowSystemInfo wsi
 
     Keyboard::Shutdown();
     Pad::Shutdown();
+    if (init_vbpad)
+      VBPad::Shutdown();
     g_controller_interface.Shutdown();
   }};
 
@@ -560,6 +608,8 @@ static void EmuThread(std::unique_ptr<BootParameters> boot, WindowSystemInfo wsi
   void (*cpuThreadFunc)(const std::optional<std::string>& savestate_path, bool delete_savestate);
   if (std::holds_alternative<BootParameters::DFF>(boot->parameters))
     cpuThreadFunc = FifoPlayerThread;
+  else if (std::holds_alternative<BootParameters::VirtualBoy>(boot->parameters))
+    cpuThreadFunc = VirtualBoyPlayerThread;
   else
     cpuThreadFunc = CpuThread;
 

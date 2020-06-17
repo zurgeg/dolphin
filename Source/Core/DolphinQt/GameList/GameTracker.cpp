@@ -26,7 +26,8 @@ static const QStringList game_filters{
     QStringLiteral("*.[gG][cC][zZ]"), QStringLiteral("*.[wW][bB][fF][sS]"),
     QStringLiteral("*.[wW][iI][aA]"), QStringLiteral("*.[rR][vV][zZ]"),
     QStringLiteral("*.[wW][aA][dD]"), QStringLiteral("*.[eE][lL][fF]"),
-    QStringLiteral("*.[dD][oO][lL]")};
+    QStringLiteral("*.[dD][oO][lL]"), QStringLiteral("*.[vV][bB]"),
+    QStringLiteral("*.[vV][bB][oO][yY]")};
 
 GameTracker::GameTracker(QObject* parent) : QFileSystemWatcher(parent)
 {

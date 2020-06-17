@@ -220,6 +220,7 @@ public:
 
   // Finish up the current frame, print some stats
   void Swap(u32 xfb_addr, u32 fb_width, u32 fb_stride, u32 fb_height, u64 ticks);
+  void SwapPixelBuffer(const u8* data, unsigned width, unsigned height, const u8* data_right_eye = nullptr);
 
   void UpdateWidescreenHeuristic();
 
@@ -258,6 +259,11 @@ public:
   // change in the future.
   void BeginUIFrame();
   void EndUIFrame();
+
+  // For rendering software pixel buffers from host RAM, for emulating older 2D consoles
+  std::unique_ptr<AbstractTexture> m_pixelbuffer_texture;
+  unsigned m_pixelbuffer_width = 0, m_pixelbuffer_height = 0, m_pixelbuffer_eyes = 0;
+  std::vector<u8> m_pixelbuffer;
 
 protected:
   // Bitmask containing information about which configuration has changed for the backend.

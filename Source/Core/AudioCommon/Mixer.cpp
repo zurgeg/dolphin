@@ -37,6 +37,7 @@ Mixer::Mixer(unsigned int BackendSampleRate)
                          DPL2QualityToFrameBlockSize(Config::Get(Config::MAIN_DPL2_QUALITY)))
 {
   INFO_LOG(AUDIO_INTERFACE, "Mixer is initialized");
+  m_other = false;
 }
 
 Mixer::~Mixer()
@@ -151,14 +152,24 @@ unsigned int Mixer::Mix(short* samples, unsigned int num_samples)
 
   if (SConfig::GetInstance().m_audio_stretch)
   {
-    unsigned int available_samples =
-        std::min(m_dma_mixer.AvailableSamples(), m_streaming_mixer.AvailableSamples());
+    unsigned int available_samples;
+    if (m_other)
+    {
+      available_samples = m_streaming_mixer.AvailableSamples();
+      m_scratch_buffer.fill(0);
+      m_streaming_mixer.Mix(m_scratch_buffer.data(), available_samples, false);
+    }
+    else
+    {
+      available_samples =
+          std::min(m_dma_mixer.AvailableSamples(), m_streaming_mixer.AvailableSamples());
 
-    m_scratch_buffer.fill(0);
+      m_scratch_buffer.fill(0);
 
-    m_dma_mixer.Mix(m_scratch_buffer.data(), available_samples, false);
-    m_streaming_mixer.Mix(m_scratch_buffer.data(), available_samples, false);
-    m_wiimote_speaker_mixer.Mix(m_scratch_buffer.data(), available_samples, false);
+      m_dma_mixer.Mix(m_scratch_buffer.data(), available_samples, false);
+      m_streaming_mixer.Mix(m_scratch_buffer.data(), available_samples, false);
+      m_wiimote_speaker_mixer.Mix(m_scratch_buffer.data(), available_samples, false);
+    }
 
     if (!m_is_stretching)
     {
@@ -265,6 +276,14 @@ void Mixer::PushWiimoteSpeakerSamples(const short* samples, unsigned int num_sam
 
     m_wiimote_speaker_mixer.PushSamples(samples_stereo, num_samples);
   }
+}
+
+void Mixer::PushOtherSamples(const short* samples, unsigned int num_samples,
+                             unsigned int sample_rate)
+{
+  m_other = true;
+  m_streaming_mixer.SetInputSampleRate(sample_rate);
+  m_streaming_mixer.PushSamples(samples, num_samples);
 }
 
 void Mixer::SetDMAInputSampleRate(unsigned int rate)

@@ -1,12 +1,29 @@
-# Dolphin - A GameCube and Wii Emulator
+# Dolphin - A GameCube, Wii, and Virtual Boy Emulator
 
 [Homepage](https://dolphin-emu.org/) | [Project Site](https://github.com/dolphin-emu/dolphin) | [Forums](https://forums.dolphin-emu.org/) | [Wiki](https://wiki.dolphin-emu.org/) | [Issue Tracker](https://bugs.dolphin-emu.org/projects/emulator/issues) | [Coding Style](https://github.com/dolphin-emu/dolphin/blob/master/Contributing.md) | [Transifex Page](https://www.transifex.com/projects/p/dolphin-emu/)
 
-Dolphin is an emulator for running GameCube and Wii games on Windows,
+Dolphin is an emulator for running GameCube, Wii, and Virtual Boy games on Windows,
 Linux, macOS, and recent Android devices. It's licensed under the terms
 of the GNU General Public License, version 2 or later (GPLv2+).
 
 Please read the [FAQ](https://dolphin-emu.org/docs/faq/) before using Dolphin.
+
+## Virtual Boy support
+
+I added Virtual Boy support. Your Virtual Boy rom dumps must be saved as .vb or .vboy files.
+Before playing Virtual Boy games in Dolphin, you must configure the Virtual Boy Controller in
+the Controller options (in the Other Controllers box).
+You can switch to a stereoscopic 3D mode in the Graphics options, Enhancements tab. 
+The Depth (separation) and Convergence sliders are not implemented yet for Virtual Boy.
+By default, Virtual Boy games display in greyscale, but I added a virtualboy post-processing
+shader you can select in the Graphics options if you prefer the original red (this also works
+on GameCube and Wii games).
+Most Dolphin features work like normal for Virtual Boy, but some are specific to GC/Wii and have
+no effect in Virtual Boy games.
+Dolphin's Virtual Boy savestates are compatible with other Mednafen-based Virtual Boy savestates.
+Dolphin's Virtual Boy cartrige saves (battery backed cartridge RAM) are saved in your CartSaves
+folder within your Dolphin user folder, and are also compatible with other Mednafen-based VB
+emulators. Note that loading a savestate will overwrite your cartridge saves.
 
 ## System Requirements
 
@@ -220,6 +237,7 @@ List of user folders:
 * `Logs`: logs, if enabled
 * `ScreenShots`: screenshots taken via Dolphin
 * `StateSaves`: save states
+* `CartSaves` : Virtual Boy battery-backed cartridge saves
 * `Wii`: Wii NAND contents
 
 ## Custom Textures

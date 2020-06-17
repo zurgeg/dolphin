@@ -361,6 +361,12 @@ void GameList::ShowContextMenu(const QPoint&)
       menu->addSeparator();
     }
 
+    if (platform == DiscIO::Platform::VirtualBoyRom)
+    {
+      menu->addAction(tr("Open Cartridge &Save Folder"), this, &GameList::OpenCartSaveFolder);
+      menu->addSeparator();
+    }
+
     menu->addAction(tr("Open &Containing Folder"), this, &GameList::OpenContainingFolder);
     menu->addAction(tr("Delete File..."), this, &GameList::DeleteFile);
 
@@ -610,6 +616,23 @@ void GameList::OpenGCSaveFolder()
   }
 
   if (!found)
+    ModalMessageBox::information(this, tr("Information"), tr("No save data found."));
+}
+
+void GameList::OpenCartSaveFolder()
+{
+  const auto game = GetSelectedGame();
+  if (!game)
+    return;
+
+  QUrl url;
+  std::string path = File::GetUserPath(D_CARTSAVES_IDX);
+  if (File::Exists(path + game->GetGameID() + ".srm"))
+    url = QUrl::fromLocalFile(QString::fromStdString(path));
+
+  if (!url.isEmpty())
+    QDesktopServices::openUrl(url);
+  else
     ModalMessageBox::information(this, tr("Information"), tr("No save data found."));
 }
 

@@ -24,6 +24,8 @@
 
 #include "VideoCommon/VideoConfig.h"
 
+#include "VirtualBoy/VirtualBoyPlayer.h"
+
 AdvancedWidget::AdvancedWidget(GraphicsWindow* parent) : GraphicsWidget(parent)
 {
   CreateWidgets();
@@ -162,22 +164,24 @@ void AdvancedWidget::ConnectWidgets()
 
 void AdvancedWidget::LoadSettings()
 {
-  m_prefetch_custom_textures->setEnabled(Config::Get(Config::GFX_HIRES_TEXTURES));
+  bool vb = VirtualBoyPlayer::GetInstance().IsPlaying();
+  m_prefetch_custom_textures->setEnabled(Config::Get(Config::GFX_HIRES_TEXTURES) && !vb);
   m_dump_bitrate->setEnabled(!Config::Get(Config::GFX_USE_FFV1));
 
   m_enable_prog_scan->setChecked(Config::Get(Config::SYSCONF_PROGRESSIVE_SCAN));
 
-  m_freelook_control_type->setEnabled(Config::Get(Config::GFX_FREE_LOOK));
+  m_freelook_control_type->setEnabled(Config::Get(Config::GFX_FREE_LOOK) && !vb);
 }
 
 void AdvancedWidget::SaveSettings()
 {
-  m_prefetch_custom_textures->setEnabled(Config::Get(Config::GFX_HIRES_TEXTURES));
+  bool vb = VirtualBoyPlayer::GetInstance().IsPlaying();
+  m_prefetch_custom_textures->setEnabled(Config::Get(Config::GFX_HIRES_TEXTURES) && !vb);
   m_dump_bitrate->setEnabled(!Config::Get(Config::GFX_USE_FFV1));
 
   Config::SetBase(Config::SYSCONF_PROGRESSIVE_SCAN, m_enable_prog_scan->isChecked());
 
-  m_freelook_control_type->setEnabled(Config::Get(Config::GFX_FREE_LOOK));
+  m_freelook_control_type->setEnabled(Config::Get(Config::GFX_FREE_LOOK) && !vb);
 }
 
 void AdvancedWidget::OnBackendChanged()
@@ -186,7 +190,19 @@ void AdvancedWidget::OnBackendChanged()
 
 void AdvancedWidget::OnEmulationStateChanged(bool running)
 {
+  bool vb = VirtualBoyPlayer::GetInstance().IsPlaying();
   m_enable_prog_scan->setEnabled(!running);
+  m_enable_wireframe->setEnabled(!vb);
+  m_enable_format_overlay->setEnabled(!vb);
+  m_load_custom_textures->setEnabled(!vb);
+  m_prefetch_custom_textures->setEnabled(Config::Get(Config::GFX_HIRES_TEXTURES) && !vb);
+  m_disable_vram_copies->setEnabled(!vb);
+  m_dump_textures->setEnabled(!vb);
+  m_dump_efb_target->setEnabled(!vb);
+  m_enable_freelook->setEnabled(!vb);
+  m_freelook_control_type->setEnabled(Config::Get(Config::GFX_FREE_LOOK) && !vb);
+  m_backend_multithreading->setEnabled(!vb);
+  m_defer_efb_access_invalidation->setEnabled(!vb);
 }
 
 void AdvancedWidget::AddDescriptions()

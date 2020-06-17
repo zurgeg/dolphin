@@ -44,3 +44,4 @@ void Host_UpdateMainFrame();
 void Host_UpdateTitle(const std::string& title);
 void Host_YieldToUI();
 void Host_TitleChanged();
+std::string Host_SpecialCoverRegion();

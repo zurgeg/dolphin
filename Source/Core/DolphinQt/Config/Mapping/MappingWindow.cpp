@@ -33,6 +33,7 @@
 #include "DolphinQt/Config/Mapping/HotkeyStatesOther.h"
 #include "DolphinQt/Config/Mapping/HotkeyTAS.h"
 #include "DolphinQt/Config/Mapping/HotkeyWii.h"
+#include "DolphinQt/Config/Mapping/VBPadEmu.h"
 #include "DolphinQt/Config/Mapping/WiimoteEmuExtension.h"
 #include "DolphinQt/Config/Mapping/WiimoteEmuExtensionMotionInput.h"
 #include "DolphinQt/Config/Mapping/WiimoteEmuExtensionMotionSimulation.h"
@@ -375,6 +376,11 @@ void MappingWindow::SetMappingType(MappingWindow::Type type)
     ShowExtensionMotionTabs(false);
     break;
   }
+  case Type::MAPPING_VIRTUAL_BOY:
+    widget = new VBPadEmu(this);
+    setWindowTitle(tr("Virtual Boy Controller"));
+    AddWidget(tr("Virtual Boy Controller"), widget);
+    break;
   case Type::MAPPING_HOTKEYS:
   {
     widget = new HotkeyGeneral(this);

@@ -83,6 +83,7 @@
 #include "VideoCommon/VideoCommon.h"
 #include "VideoCommon/VideoConfig.h"
 #include "VideoCommon/XFMemory.h"
+#include "VirtualBoy/VirtualBoyPlayer.h"
 
 std::unique_ptr<Renderer> g_renderer;
 
@@ -129,6 +130,7 @@ void Renderer::Shutdown()
   ShutdownFrameDumping();
   ShutdownImGui();
   m_post_processor.reset();
+  m_pixelbuffer_texture.reset();
 }
 
 void Renderer::BeginUtilityDrawing()
@@ -566,6 +568,9 @@ float Renderer::CalculateDrawAspectRatio() const
   // If stretch is enabled, we prefer the aspect ratio of the window.
   if (aspect_mode == AspectMode::Stretch)
     return (static_cast<float>(m_backbuffer_width) / static_cast<float>(m_backbuffer_height));
+
+  if (VirtualBoyPlayer::GetInstance().IsPlaying())
+    return 384.0f / 224.0f;
 
   const float aspect_ratio = VideoInterface::GetAspectRatio();
 
@@ -1329,6 +1334,149 @@ void Renderer::Swap(u32 xfb_addr, u32 fb_width, u32 fb_stride, u32 fb_height, u6
     m_last_xfb_width = fb_width;
     m_last_xfb_stride = fb_stride;
     m_last_xfb_height = fb_height;
+  }
+  else
+  {
+    Flush();
+  }
+}
+
+void Renderer::SwapPixelBuffer(const u8* data, unsigned width, unsigned height,
+                               const u8* data_right_eye)
+{
+  // aspect ratio is 12/7 for now
+  // Ensure the last frame was written to the dump.
+  // This is required even if frame dumping has stopped, since the frame dump is one frame
+  // behind the renderer.
+  FlushFrameDump();
+
+  if (data && width && height)
+  {
+    // Get the current XFB from texture cache
+    MathUtil::Rectangle<int> xfb_rect(0, 0, width, height);
+    {
+      const bool is_duplicate_frame = false;
+
+      // Since we use the common pipelines here and draw vertices if a batch is currently being
+      // built by the vertex loader, we end up trampling over its pointer, as we share the buffer
+      // with the loader, and it has not been unmapped yet. Force a pipeline flush to avoid this.
+      g_vertex_manager->Flush();
+
+      // Render any UI elements to the draw list.
+      {
+        auto lock = GetImGuiLock();
+
+        DrawDebugText();
+        OSD::DrawMessages();
+        ImGui::Render();
+      }
+
+      // Render the XFB to the screen.
+      BeginUtilityDrawing();
+      if (!IsHeadless())
+      {
+        BindBackbuffer({{0.0f, 0.0f, 0.0f, 1.0f}});
+
+        unsigned eyes = (unsigned)(data_right_eye != nullptr) + 1;
+        if (m_pixelbuffer_width != width || m_pixelbuffer_height != height ||
+            m_pixelbuffer_eyes != eyes)
+        {
+          m_pixelbuffer_texture.reset();
+        }
+
+        if (!m_pixelbuffer_texture)
+        {
+          m_pixelbuffer_width = width;
+          m_pixelbuffer_height = height;
+          m_pixelbuffer_eyes = eyes;
+          u32 mipmap_levels = 1;
+          u32 size = width | height;
+          while (size >> mipmap_levels)
+            mipmap_levels++;
+          TextureConfig config(width, height, mipmap_levels, m_pixelbuffer_eyes, 1,
+                               AbstractTextureFormat::RGBA8, 0);
+          m_pixelbuffer_texture = g_renderer->CreateTexture(config);
+        }
+        if (eyes == 1)
+        {
+          m_pixelbuffer_texture->Load(0, width, height, width, data, width * height * eyes * 4,
+                                      eyes);
+        }
+        else if (eyes == 2)
+        {
+          if (m_pixelbuffer.size() != width * height * 2 * 4)
+            m_pixelbuffer.resize(width * height * 2 * 4);
+          if (!g_ActiveConfig.bStereoSwapEyes)
+          {
+            memcpy(m_pixelbuffer.data(), data, width * height * 4);
+            memcpy(m_pixelbuffer.data() + width * height * 4, data_right_eye, width * height * 4);
+          }
+          else
+          {
+            memcpy(m_pixelbuffer.data(), data_right_eye, width * height * 4);
+            memcpy(m_pixelbuffer.data() + width * height * 4, data, width * height * 4);
+          }
+          m_pixelbuffer_texture->Load(0, width, height, width, m_pixelbuffer.data(),
+                                      width * height * eyes * 4, eyes);
+        }
+
+        UpdateDrawRectangle();
+
+        // Adjust the source rectangle instead of using an oversized viewport to render the XFB.
+        auto render_target_rc = GetTargetRectangle();
+        auto render_source_rc = xfb_rect;
+        AdjustRectanglesToFitBounds(&render_target_rc, &render_source_rc, m_backbuffer_width,
+                                    m_backbuffer_height);
+        RenderXFBToScreen(render_target_rc, m_pixelbuffer_texture.get(), render_source_rc);
+
+        DrawImGui();
+
+        // Present to the window system.
+        {
+          std::lock_guard<std::mutex> guard(m_swap_mutex);
+          PresentBackbuffer();
+        }
+
+        // Update the window size based on the frame that was just rendered.
+        // Due to depending on guest state, we need to call this every frame.
+        SetWindowSize(xfb_rect.GetWidth(), xfb_rect.GetHeight());
+      }
+
+      if (!is_duplicate_frame)
+      {
+        m_fps_counter.Update();
+
+        if (IsFrameDumping())
+          DumpCurrentFrame(m_pixelbuffer_texture.get(), xfb_rect, 0);
+
+        // Begin new frame
+        m_frame_count++;
+        g_stats.ResetFrame();
+      }
+
+      g_shader_cache->RetrieveAsyncShaders();
+      g_vertex_manager->OnEndFrame();
+      BeginImGuiFrame();
+
+      // We invalidate the pipeline object at the start of the frame.
+      // This is for the rare case where only a single pipeline configuration is used,
+      // and hybrid ubershaders have compiled the specialized shader, but without any
+      // state changes the specialized shader will not take over.
+      g_vertex_manager->InvalidatePipelineObject();
+
+      if (!is_duplicate_frame)
+      {
+        // Remove stale EFB/XFB copies.
+        g_texture_cache->Cleanup(m_frame_count);
+        Core::Callback_FramePresented();
+      }
+
+      // Handle any config changes, this gets propogated to the backend.
+      CheckForConfigChanges();
+      g_Config.iSaveTargetId = 0;
+
+      EndUtilityDrawing();
+    }
   }
   else
   {

@@ -49,3 +49,7 @@ void Host_YieldToUI()
 void Host_TitleChanged()
 {
 }
+std::string Host_SpecialCoverRegion()
+{
+  return std::string();
+}

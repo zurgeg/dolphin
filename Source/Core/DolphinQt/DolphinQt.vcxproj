@@ -86,6 +86,7 @@
     <QtMoc Include="Config\Mapping\GCKeyboardEmu.h" />
     <QtMoc Include="Config\Mapping\GCMicrophone.h" />
     <QtMoc Include="Config\Mapping\GCPadEmu.h" />
+    <QtMoc Include="Config\Mapping\VBPadEmu.h" />
     <QtMoc Include="Config\Mapping\GCPadWiiUConfigDialog.h" />
     <QtMoc Include="Config\Mapping\Hotkey3D.h" />
     <QtMoc Include="Config\Mapping\HotkeyControllerProfile.h" />
@@ -231,6 +232,7 @@
     <ClCompile Include="$(QtMocOutPrefix)GCMemcardManager.cpp" />
     <ClCompile Include="$(QtMocOutPrefix)GCMicrophone.cpp" />
     <ClCompile Include="$(QtMocOutPrefix)GCPadEmu.cpp" />
+    <ClCompile Include="$(QtMocOutPrefix)VBPadEmu.cpp" />
     <ClCompile Include="$(QtMocOutPrefix)GCPadWiiUConfigDialog.cpp" />
     <ClCompile Include="$(QtMocOutPrefix)GCTASInputWindow.cpp" />
     <ClCompile Include="$(QtMocOutPrefix)GameConfigEdit.cpp" />
@@ -350,6 +352,7 @@
     <ClCompile Include="Config\Mapping\GCKeyboardEmu.cpp" />
     <ClCompile Include="Config\Mapping\GCMicrophone.cpp" />
     <ClCompile Include="Config\Mapping\GCPadEmu.cpp" />
+    <ClCompile Include="Config\Mapping\VBPadEmu.cpp" />
     <ClCompile Include="Config\Mapping\GCPadWiiUConfigDialog.cpp" />
     <ClCompile Include="Config\Mapping\Hotkey3D.cpp" />
     <ClCompile Include="Config\Mapping\HotkeyControllerProfile.cpp" />

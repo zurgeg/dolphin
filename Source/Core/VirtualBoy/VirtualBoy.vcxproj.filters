@@ -1,0 +1,207 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="$(ExternalsDir)BeetleVB\mednafen\vrvb.cpp" />
+    <ClCompile Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\v810_cpu.cpp">
+      <Filter>CPU</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\v810_cpuD.cpp">
+      <Filter>CPU</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ExternalsDir)BeetleVB\mednafen\sound\Blip_Buffer.c">
+      <Filter>Sound</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ExternalsDir)BeetleVB\mednafen\vb\vip.cpp">
+      <Filter>VB</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ExternalsDir)BeetleVB\mednafen\video\surface.cpp">
+      <Filter>Video</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ExternalsDir)BeetleVB\mednafen\vb\input.cpp">
+      <Filter>VB</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ExternalsDir)BeetleVB\mednafen\vb\timer.cpp">
+      <Filter>VB</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ExternalsDir)BeetleVB\mednafen\mempatcher.cpp">
+      <Filter>Mednafen</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ExternalsDir)BeetleVB\mednafen\settings.cpp">
+      <Filter>Mednafen</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\fpu-new\softfloat.c">
+      <Filter>Mednafen</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ExternalsDir)BeetleVB\mednafen\state.cpp">
+      <Filter>Mednafen</Filter>
+    </ClCompile>
+    <ClCompile Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\fpu-new\timesoftfloat.c">
+      <Filter>Mednafen</Filter>
+    </ClCompile>
+    <ClCompile Include="VirtualBoyPlayer.cpp" />
+    <ClCompile Include="VolumeRom.cpp" />
+    <ClCompile Include="$(ExternalsDir)BeetleVB\mednafen\vb\vsu.cpp">
+      <Filter>Sound</Filter>
+    </ClCompile>
+    <ClCompile Include="..\DolphinQt\Config\Mapping\VBPadEmu.cpp">
+      <Filter>GUI</Filter>
+    </ClCompile>
+    <ClCompile Include="VBPadEmu.cpp" />
+    <ClCompile Include="VBPad.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\vrvb.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\v810_cpu.h">
+      <Filter>CPU</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\v810_cpuD.h">
+      <Filter>CPU</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\v810_do_am.h">
+      <Filter>CPU</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\v810_opt.h">
+      <Filter>CPU</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\include\blip\Blip_Buffer.h">
+      <Filter>Sound</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\include\blargg_common.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\include\blargg_config.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\include\blargg_endian.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\include\blargg_source.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\vb\vip.h">
+      <Filter>VB</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\video\surface.h">
+      <Filter>Video</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\vb\debug.h">
+      <Filter>VB</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\vb\input.h">
+      <Filter>VB</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\vb\timer.h">
+      <Filter>VB</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\vb\vb.h">
+      <Filter>VB</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\driver.h">
+      <Filter>Mednafen</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\git.h">
+      <Filter>Mednafen</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\masmem.h">
+      <Filter>Mednafen</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\math_ops.h">
+      <Filter>Mednafen</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\mednafen.h">
+      <Filter>Mednafen</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\mednafen-driver.h">
+      <Filter>Mednafen</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\fpu-new\mednafen-gcc.h">
+      <Filter>Mednafen</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\mednafen-types.h">
+      <Filter>Mednafen</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\mempatcher.h">
+      <Filter>Mednafen</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\mempatcher-driver.h">
+      <Filter>Mednafen</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\fpu-new\milieu.h">
+      <Filter>Mednafen</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\msvc_compat.h">
+      <Filter>Mednafen</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\libretro-common\include\retro_inline.h">
+      <Filter>Mednafen</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\settings.h">
+      <Filter>Mednafen</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\settings-common.h">
+      <Filter>Mednafen</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\settings-driver.h">
+      <Filter>Mednafen</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\fpu-new\softfloat.h">
+      <Filter>Mednafen</Filter>
+    </ClInclude>
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\state.h">
+      <Filter>Mednafen</Filter>
+    </ClInclude>
+    <ClInclude Include="VolumeRom.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\vb\vsu.h">
+      <Filter>Sound</Filter>
+    </ClInclude>
+    <ClInclude Include="..\DolphinQt\Config\Mapping\VBPadEmu.h">
+      <Filter>GUI</Filter>
+    </ClInclude>
+    <ClInclude Include="VBPadStatus.h" />
+    <ClInclude Include="VBPadEmu.h" />
+    <ClInclude Include="VBPad.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CPU">
+      <UniqueIdentifier>{0bf7975b-28a8-422c-b74e-f84e6fbb42a5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Include">
+      <UniqueIdentifier>{374a8b4c-c2a3-4524-8f30-bf5f0ca36698}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Sound">
+      <UniqueIdentifier>{f55546ba-6a90-42b7-8dca-fbf3fc373e6b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="VB">
+      <UniqueIdentifier>{04627166-be16-4465-86d9-0e1917e0e956}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Video">
+      <UniqueIdentifier>{a8db7334-e8c8-41d3-888a-78a8588d87b8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Mednafen">
+      <UniqueIdentifier>{6a034f41-6e8d-41d4-afb4-a49725df2b8c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="GUI">
+      <UniqueIdentifier>{3d029123-e96f-4c43-908e-19e185c61001}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\v810_op_table.inc">
+      <Filter>CPU</Filter>
+    </None>
+    <None Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\v810_op_table_msvc.inc">
+      <Filter>CPU</Filter>
+    </None>
+    <None Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\v810_oploop.inc">
+      <Filter>CPU</Filter>
+    </None>
+    <None Include="$(ExternalsDir)BeetleVB\mednafen\vb\vip_draw.inc">
+      <Filter>VB</Filter>
+    </None>
+    <None Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\fpu-new\softfloat-macros">
+      <Filter>Mednafen</Filter>
+    </None>
+    <None Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\fpu-new\softfloat-specialize">
+      <Filter>Mednafen</Filter>
+    </None>
+  </ItemGroup>
+</Project>

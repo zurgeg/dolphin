@@ -176,6 +176,9 @@ private:
   void OnReadOnlyModeChanged(bool read_only);
   void OnDebugModeToggled(bool enabled);
 
+  void SetVBShowLayers(bool enabled);
+  void SetVBShowBG(bool enabled);
+
   QString GetSignatureSelector() const;
 
   static QPointer<MenuBar> s_menu_bar;
@@ -240,6 +243,10 @@ private:
   QAction* m_show_network;
   QAction* m_show_jit;
   QMenu* m_cols_menu;
+
+  // Virtual Boy
+  QAction* m_vb_show_layers;
+  QAction* m_vb_show_bg;
 
   // JIT
   QMenu* m_jit;

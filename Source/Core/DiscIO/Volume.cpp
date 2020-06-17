@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "Common/CommonTypes.h"
+#include "Common/MathUtil.h"
 #include "Common/StringUtil.h"
 
 #include "DiscIO/Blob.h"
@@ -20,6 +21,7 @@
 #include "DiscIO/VolumeGC.h"
 #include "DiscIO/VolumeWad.h"
 #include "DiscIO/VolumeWii.h"
+#include "VirtualBoy/VolumeRom.h"
 
 namespace DiscIO
 {
@@ -65,6 +67,54 @@ std::unique_ptr<VolumeDisc> CreateDisc(const std::string& path)
   return reader ? CreateDisc(reader) : nullptr;
 }
 
+static std::unique_ptr<VolumeRom> CreateRom(std::unique_ptr<BlobReader>& reader)
+{
+  // Check for Virtual Boy rom
+  u64 size = reader->GetDataSize();
+  if (MathUtil::IsPow2(size) && size >= 1024 && size <= 16 * 1024 * 1024)
+  {
+    char id[4];
+    if (reader->Read(size - 0x220 + 0x1B, 4, (u8*)id))
+    {
+      if (id[0] == 'V')
+      {
+        bool valid = true;
+        for (int i = 1; i < 4; i++)
+        {
+          char c = id[i];
+          if (!((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c=='?' || c=='-' || c==' '))
+          {
+            valid = false;
+            break;
+          }
+        }
+        if (valid)
+          return std::make_unique<VolumeRom>(std::move(reader));
+      }
+      else if (*((u32*)id) == (u32)0xFFFFFFFF && size == 2*1024*1024)
+      {
+        // Space Pinball prototype has all 0xFF in the header
+        return std::make_unique<VolumeRom>(std::move(reader));
+      }
+      else if (*((u32*)id) == 'XXXX' &&
+               reader->ReadSwapped<u32>(size - 0x220).value_or(0) != 'Samp')
+      {
+        return std::make_unique<VolumeRom>(std::move(reader));
+      }
+      else
+      {
+        u32 game = Common::swap32(*((u32*)id));
+        if (game == 'TSTR' || game == 'GPLO' || game == 'NBLP' || *((u32*)id) == 'HOME' || game == 'ESWG' || game == 'BNCE' || game == 'TRON')
+        {
+          return std::make_unique<VolumeRom>(std::move(reader));
+        }
+      }
+    }
+  }
+  // Doesn't appear to be a valid Virtual Boy rom
+  return nullptr;
+}
+
 static std::unique_ptr<VolumeWAD> CreateWAD(std::unique_ptr<BlobReader>& reader)
 {
   // Check for WAD
@@ -96,6 +146,10 @@ std::unique_ptr<Volume> CreateVolume(const std::string& path)
   std::unique_ptr<VolumeWAD> wad = CreateWAD(reader);
   if (wad)
     return wad;
+
+  std::unique_ptr<VolumeRom> rom = CreateRom(reader);
+  if (rom)
+    return rom;
 
   return nullptr;
 }

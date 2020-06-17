@@ -42,6 +42,8 @@
 
 #include "UICommon/UICommon.h"
 
+#include "VirtualBoy/VirtualBoyPlayer.h"
+
 static const std::map<SerialInterface::SIDevices, int> s_gc_types = {
     {SerialInterface::SIDEVICE_NONE, 0},         {SerialInterface::SIDEVICE_GC_CONTROLLER, 1},
     {SerialInterface::SIDEVICE_WIIU_ADAPTER, 2}, {SerialInterface::SIDEVICE_GC_STEERING, 3},
@@ -68,6 +70,7 @@ ControllersWindow::ControllersWindow(QWidget* parent) : QDialog(parent)
 
   CreateGamecubeLayout();
   CreateWiimoteLayout();
+  CreateVirtualBoyLayout();
   CreateCommonLayout();
   CreateMainLayout();
   LoadSettings();
@@ -201,6 +204,22 @@ void ControllersWindow::CreateWiimoteLayout()
   m_wiimote_layout->addWidget(m_wiimote_refresh, continuous_scanning_row, 3);
 }
 
+void ControllersWindow::CreateVirtualBoyLayout()
+{
+  m_vb_box = new QGroupBox(tr("Other Controllers"));
+  m_vb_layout = new QGridLayout();
+  m_vb_layout->setVerticalSpacing(7);
+  m_vb_layout->setColumnStretch(1, 1);
+
+  auto* vb_label = new QLabel(tr("Virtual Boy Controller"));
+  auto* vb_button = m_vb_button = new QPushButton(tr("Configure"));
+
+  int controller_row = m_vb_layout->rowCount();
+  m_vb_layout->addWidget(vb_label, controller_row, 0);
+  m_vb_layout->addWidget(vb_button, controller_row, 2);
+  m_vb_box->setLayout(m_vb_layout);
+}
+
 void ControllersWindow::CreateCommonLayout()
 {
   // i18n: This is "common" as in "shared", not the opposite of "uncommon"
@@ -222,6 +241,7 @@ void ControllersWindow::CreateMainLayout()
 
   layout->addWidget(m_gc_box);
   layout->addWidget(m_wiimote_box);
+  layout->addWidget(m_vb_box);
   layout->addWidget(m_common_box);
   layout->addStretch();
   layout->addWidget(m_button_box);
@@ -273,6 +293,8 @@ void ControllersWindow::ConnectWidgets()
             &ControllersWindow::OnGCTypeChanged);
     connect(m_gc_buttons[i], &QPushButton::clicked, this, &ControllersWindow::OnGCPadConfigure);
   }
+
+  connect(m_vb_button, &QPushButton::clicked, this, &ControllersWindow::OnVirtualBoyConfigure);
 }
 
 void ControllersWindow::OnWiimoteModeChanged()
@@ -292,6 +314,7 @@ void ControllersWindow::UpdateDisabledWiimoteControls()
   m_wiimote_emu->setEnabled(!running);
   m_wiimote_passthrough->setEnabled(!running);
 
+  const bool running_vb = VirtualBoyPlayer::GetInstance().IsPlaying();
   const bool running_gc = running && !SConfig::GetInstance().bWii;
   const bool enable_passthrough = m_wiimote_passthrough->isChecked() && !running_gc;
   const bool enable_emu_bt = !m_wiimote_passthrough->isChecked() && !running_gc;
@@ -319,6 +342,8 @@ void ControllersWindow::UpdateDisabledWiimoteControls()
   m_wiimote_refresh->setEnabled((enable_emu_bt || ciface_wiimotes) &&
                                 !m_wiimote_continuous_scanning->isChecked());
   m_wiimote_continuous_scanning->setEnabled(enable_emu_bt || ciface_wiimotes);
+
+  m_gc_box->setEnabled(!running_vb);
 }
 
 void ControllersWindow::OnGCTypeChanged(int type)
@@ -387,7 +412,7 @@ void ControllersWindow::OnGCPadConfigure()
   size_t index;
   for (index = 0; index < m_gc_groups.size(); index++)
   {
-    if (m_gc_buttons[index] == QObject::sender())
+    if (m_gc_buttons[index] == QObject::sender() || m_vb_button == QObject::sender())
       break;
   }
 
@@ -447,6 +472,17 @@ void ControllersWindow::OnWiimoteConfigure()
   default:
     return;
   }
+
+  MappingWindow* window = new MappingWindow(this, type, static_cast<int>(index));
+  window->setAttribute(Qt::WA_DeleteOnClose, true);
+  window->setWindowModality(Qt::WindowModality::WindowModal);
+  window->show();
+}
+
+void ControllersWindow::OnVirtualBoyConfigure()
+{
+  size_t index = 0;
+  MappingWindow::Type type = MappingWindow::Type::MAPPING_VIRTUAL_BOY;
 
   MappingWindow* window = new MappingWindow(this, type, static_cast<int>(index));
   window->setAttribute(Qt::WA_DeleteOnClose, true);

@@ -113,6 +113,7 @@ private:
   const std::string&
   LookupUsingConfigLanguage(const std::map<DiscIO::Language, std::string>& strings) const;
   bool IsElfOrDol() const;
+  bool IsVirtualBoyRom() const;
   bool ReadXMLMetadata(const std::string& path);
   bool ReadPNGBanner(const std::string& path);
 

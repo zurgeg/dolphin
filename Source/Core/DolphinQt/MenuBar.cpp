@@ -24,6 +24,7 @@
 #include "Core/ConfigManager.h"
 #include "Core/Core.h"
 #include "Core/Debugger/RSO.h"
+#include "Core/FifoPlayer/FifoPlayer.h"
 #include "Core/HLE/HLE.h"
 #include "Core/HW/AddressSpace.h"
 #include "Core/HW/Memmap.h"
@@ -56,6 +57,8 @@
 
 #include "UICommon/AutoUpdate.h"
 #include "UICommon/GameFile.h"
+
+#include "VirtualBoy/VirtualBoyPlayer.h"
 
 QPointer<MenuBar> MenuBar::s_menu_bar;
 
@@ -96,11 +99,13 @@ MenuBar::MenuBar(QWidget* parent) : QMenuBar(parent)
 void MenuBar::OnEmulationStateChanged(Core::State state)
 {
   bool running = state != Core::State::Uninitialized;
+  bool vb = VirtualBoyPlayer::GetInstance().IsPlaying();
+  bool running_gc_or_wii_game = running && (!vb && !FifoPlayer::GetInstance().IsPlaying());
   bool playing = running && state != Core::State::Paused;
 
   // File
-  m_eject_disc->setEnabled(running);
-  m_change_disc->setEnabled(running);
+  m_eject_disc->setEnabled(running_gc_or_wii_game);
+  m_change_disc->setEnabled(running_gc_or_wii_game);
 
   // Emulation
   m_play_action->setEnabled(!playing);
@@ -129,17 +134,22 @@ void MenuBar::OnEmulationStateChanged(Core::State state)
   // Options
   m_controllers_action->setEnabled(NetPlay::IsNetPlayRunning() ? !running : true);
 
+  // View
+  m_vb_show_layers->setVisible(vb);
+  m_vb_show_bg->setVisible(vb);
+
   // Tools
-  m_show_cheat_manager->setEnabled(Settings::Instance().GetCheatsEnabled() && running);
+  m_show_cheat_manager->setEnabled(Settings::Instance().GetCheatsEnabled() &&
+                                   running_gc_or_wii_game);
 
   // JIT
-  m_jit_interpreter_core->setEnabled(running);
+  m_jit_interpreter_core->setEnabled(running_gc_or_wii_game);
   m_jit_block_linking->setEnabled(!running);
   m_jit_disable_cache->setEnabled(!running);
   m_jit_disable_fastmem->setEnabled(!running);
-  m_jit_clear_cache->setEnabled(running);
+  m_jit_clear_cache->setEnabled(running_gc_or_wii_game);
   m_jit_log_coverage->setEnabled(!running);
-  m_jit_search_instruction->setEnabled(running);
+  m_jit_search_instruction->setEnabled(running_gc_or_wii_game);
 
   for (QAction* action :
        {m_jit_off, m_jit_loadstore_off, m_jit_loadstore_lbzx_off, m_jit_loadstore_lxz_off,
@@ -147,36 +157,38 @@ void MenuBar::OnEmulationStateChanged(Core::State state)
         m_jit_floatingpoint_off, m_jit_integer_off, m_jit_paired_off, m_jit_systemregisters_off,
         m_jit_branch_off, m_jit_register_cache_off})
   {
-    action->setEnabled(running && !playing);
+    action->setEnabled(running_gc_or_wii_game && !playing);
   }
 
   // Symbols
-  m_symbols->setEnabled(running);
+  m_symbols->setEnabled(running_gc_or_wii_game);
 
   UpdateStateSlotMenu();
-  UpdateToolsMenu(running);
+  UpdateToolsMenu(running_gc_or_wii_game);
 
   OnDebugModeToggled(Settings::Instance().IsDebugModeEnabled());
 }
 
 void MenuBar::OnDebugModeToggled(bool enabled)
 {
+  bool enabled_and_not_vb = enabled && !VirtualBoyPlayer::GetInstance().IsPlaying() && !FifoPlayer::GetInstance().IsPlaying();
+
   // Options
   m_boot_to_pause->setVisible(enabled);
   m_automatic_start->setVisible(enabled);
   m_change_font->setVisible(enabled);
 
   // View
-  m_show_code->setVisible(enabled);
-  m_show_registers->setVisible(enabled);
-  m_show_threads->setVisible(enabled);
-  m_show_watch->setVisible(enabled);
-  m_show_breakpoints->setVisible(enabled);
-  m_show_memory->setVisible(enabled);
-  m_show_network->setVisible(enabled);
-  m_show_jit->setVisible(enabled);
+  m_show_code->setVisible(enabled_and_not_vb);
+  m_show_registers->setVisible(enabled_and_not_vb);
+  m_show_threads->setVisible(enabled_and_not_vb);
+  m_show_watch->setVisible(enabled_and_not_vb);
+  m_show_breakpoints->setVisible(enabled_and_not_vb);
+  m_show_memory->setVisible(enabled_and_not_vb);
+  m_show_network->setVisible(enabled_and_not_vb);
+  m_show_jit->setVisible(enabled_and_not_vb);
 
-  if (enabled)
+  if (enabled_and_not_vb)
   {
     addMenu(m_jit);
     addMenu(m_symbols);
@@ -199,6 +211,7 @@ void MenuBar::AddDVDBackupMenu(QMenu* file_menu)
     auto drive = QString::fromStdString(drives[i]);
     m_backup_menu->addAction(drive, this, [this, drive] { emit BootDVDBackup(drive); });
   }
+  m_backup_menu->setEnabled(drives.size() > 0);
 }
 
 void MenuBar::AddFileMenu()
@@ -430,6 +443,16 @@ void MenuBar::AddViewMenu()
 
   view_menu->addSeparator();
 
+  m_vb_show_layers = view_menu->addAction(tr("Virtual Boy &Layer Viewer"));
+  m_vb_show_layers->setCheckable(true);
+  m_vb_show_layers->setChecked(false);
+  connect(m_vb_show_layers, &QAction::toggled, this, &MenuBar::SetVBShowLayers);
+
+  m_vb_show_bg = view_menu->addAction(tr("Virtual Boy &BG Viewer"));
+  m_vb_show_bg->setCheckable(true);
+  m_vb_show_bg->setChecked(false);
+  connect(m_vb_show_bg, &QAction::toggled, this, &MenuBar::SetVBShowBG);
+
   m_show_code = view_menu->addAction(tr("&Code"));
   m_show_code->setCheckable(true);
   m_show_code->setChecked(Settings::Instance().IsCodeVisible());
@@ -655,7 +678,8 @@ void MenuBar::AddShowPlatformsMenu(QMenu* view_menu)
       {tr("Show Wii"), &SConfig::GetInstance().m_ListWii},
       {tr("Show GameCube"), &SConfig::GetInstance().m_ListGC},
       {tr("Show WAD"), &SConfig::GetInstance().m_ListWad},
-      {tr("Show ELF/DOL"), &SConfig::GetInstance().m_ListElfDol}};
+      {tr("Show ELF/DOL"), &SConfig::GetInstance().m_ListElfDol},
+      {tr("Show Virtual Boy"), &SConfig::GetInstance().m_ListVirtualBoy}};
 
   QActionGroup* platform_group = new QActionGroup(this);
   QMenu* plat_menu = view_menu->addMenu(tr("Show Platforms"));
@@ -1589,4 +1613,14 @@ void MenuBar::SearchInstruction()
   }
   if (!found)
     NOTICE_LOG(POWERPC, "Opcode %s not found", op.toStdString().c_str());
+}
+
+void MenuBar::SetVBShowLayers(bool enabled)
+{
+  VirtualBoyPlayer::GetInstance().m_show_layer_window = enabled;
+}
+
+void MenuBar::SetVBShowBG(bool enabled)
+{
+  VirtualBoyPlayer::GetInstance().m_show_bg_window = enabled;
 }

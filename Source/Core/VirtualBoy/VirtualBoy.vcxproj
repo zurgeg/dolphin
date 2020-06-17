@@ -1,0 +1,148 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|ARM64">
+      <Configuration>Debug</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|ARM64">
+      <Configuration>Release</Configuration>
+      <Platform>ARM64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{A675A1B7-D6C3-4B34-B3E5-B13FD7E240EB}</ProjectGuid>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <PlatformToolset>v142</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'" Label="Configuration">
+    <UseDebugLibraries>false</UseDebugLibraries>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\VSProps\Base.props" />
+    <Import Project="..\..\VSProps\PCHUse.props" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(ExternalsDir)BeetleVB;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles>
+      </ForcedIncludeFiles>
+      <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>INLINE=inline;MEDNAFEN_VERSION_NUMERIC=931;WANT_32BPP;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <DisableSpecificWarnings>4002;4003;4101;4018;4146;4267;5033;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(ExternalsDir)BeetleVB;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <ForcedIncludeFiles>
+      </ForcedIncludeFiles>
+      <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>INLINE=inline;MEDNAFEN_VERSION_NUMERIC=931;WANT_32BPP;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <DisableSpecificWarnings>4002;4003;4101;4018;4146;4267;5033;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="$(ExternalsDir)BeetleVB\mednafen\mempatcher.cpp" />
+    <ClCompile Include="$(ExternalsDir)BeetleVB\mednafen\settings.cpp" />
+    <ClCompile Include="$(ExternalsDir)BeetleVB\mednafen\state.cpp" />
+    <ClCompile Include="$(ExternalsDir)BeetleVB\mednafen\vrvb.cpp" />
+    <ClCompile Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\fpu-new\softfloat.c" />
+    <ClCompile Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\fpu-new\timesoftfloat.c" />
+    <ClCompile Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\v810_cpu.cpp">
+      <ForcedIncludeFiles>algorithm</ForcedIncludeFiles>
+    </ClCompile>
+    <ClCompile Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\v810_cpuD.cpp" />
+    <ClCompile Include="$(ExternalsDir)BeetleVB\mednafen\sound\Blip_Buffer.c" />
+    <ClCompile Include="$(ExternalsDir)BeetleVB\mednafen\vb\input.cpp" />
+    <ClCompile Include="$(ExternalsDir)BeetleVB\mednafen\vb\timer.cpp" />
+    <ClCompile Include="$(ExternalsDir)BeetleVB\mednafen\vb\vip.cpp" />
+    <ClCompile Include="$(ExternalsDir)BeetleVB\mednafen\vb\vsu.cpp" />
+    <ClCompile Include="$(ExternalsDir)BeetleVB\mednafen\video\surface.cpp" />
+    <ClCompile Include="VBPad.cpp" />
+    <ClCompile Include="VBPadEmu.cpp" />
+    <ClCompile Include="..\DolphinQt\Config\Mapping\VBPadEmu.cpp">
+      <ExcludedFromBuild>true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="VirtualBoyPlayer.cpp" />
+    <ClCompile Include="VolumeRom.cpp" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\libretro-common\include\retro_inline.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\driver.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\git.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\fpu-new\mednafen-gcc.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\fpu-new\milieu.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\fpu-new\softfloat.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\v810_cpu.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\v810_cpuD.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\v810_do_am.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\v810_opt.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\include\blargg_common.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\include\blargg_config.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\include\blargg_endian.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\include\blargg_source.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\include\blip\Blip_Buffer.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\masmem.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\math_ops.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\mednafen-driver.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\mednafen-types.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\mednafen.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\mempatcher-driver.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\mempatcher.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\msvc_compat.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\settings-common.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\settings-driver.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\settings.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\state.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\vb\debug.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\vb\input.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\vb\timer.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\vb\vb.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\vb\vip.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\vb\vsu.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\video\surface.h" />
+    <ClInclude Include="$(ExternalsDir)BeetleVB\mednafen\vrvb.h" />
+    <ClInclude Include="VBPad.h" />
+    <ClInclude Include="VBPadEmu.h" />
+    <ClInclude Include="..\DolphinQt\Config\Mapping\VBPadEmu.h">
+      <ExcludedFromBuild>true</ExcludedFromBuild>
+    </ClInclude>
+    <ClInclude Include="VBPadStatus.h" />
+    <ClInclude Include="VolumeRom.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\fpu-new\softfloat-macros" />
+    <None Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\fpu-new\softfloat-specialize" />
+    <None Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\v810_oploop.inc" />
+    <None Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\v810_op_table.inc" />
+    <None Include="$(ExternalsDir)BeetleVB\mednafen\hw_cpu\v810\v810_op_table_msvc.inc" />
+    <None Include="$(ExternalsDir)BeetleVB\mednafen\vb\vip_draw.inc" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

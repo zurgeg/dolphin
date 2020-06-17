@@ -324,7 +324,7 @@ bool BootCore(std::unique_ptr<BootParameters> boot, const WindowSystemInfo& wsi)
   if (Movie::IsPlayingInput() && Movie::IsConfigSaved())
   {
     // TODO: remove this once ConfigManager starts using OnionConfig.
-    StartUp.bCPUThread = Config::Get(Config::MAIN_CPU_THREAD);
+    StartUp.bCPUThread = Config::Get(Config::MAIN_CPU_THREAD) && !StartUp.bROM;
     StartUp.bJITFollowBranch = Config::Get(Config::MAIN_JIT_FOLLOW_BRANCH);
     StartUp.bDSPHLE = Config::Get(Config::MAIN_DSP_HLE);
     StartUp.bFastDiscSpeed = Config::Get(Config::MAIN_FAST_DISC_SPEED);

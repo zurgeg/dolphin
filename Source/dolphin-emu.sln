@@ -105,6 +105,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "liblzma", "..\Externals\lib
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "zstd", "..\Externals\zstd\zstd.vcxproj", "{1BEA10F3-80CE-4BC4-9331-5769372CDF99}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "VirtualBoy", "Core\VirtualBoy\VirtualBoy.vcxproj", "{A675A1B7-D6C3-4B34-B3E5-B13FD7E240EB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|ARM64 = Debug|ARM64
@@ -489,6 +491,16 @@ Global
 		{1BEA10F3-80CE-4BC4-9331-5769372CDF99}.Release|ARM64.Build.0 = Release|ARM64
 		{1BEA10F3-80CE-4BC4-9331-5769372CDF99}.Release|x64.ActiveCfg = Release|x64
 		{1BEA10F3-80CE-4BC4-9331-5769372CDF99}.Release|x64.Build.0 = Release|x64
+		{A675A1B7-D6C3-4B34-B3E5-B13FD7E240EB}.Debug|ARM64.ActiveCfg = Debug|ARM64
+		{A675A1B7-D6C3-4B34-B3E5-B13FD7E240EB}.Debug|ARM64.Build.0 = Debug|ARM64
+		{A675A1B7-D6C3-4B34-B3E5-B13FD7E240EB}.Debug|x64.ActiveCfg = Debug|x64
+		{A675A1B7-D6C3-4B34-B3E5-B13FD7E240EB}.Debug|x64.Build.0 = Debug|x64
+		{A675A1B7-D6C3-4B34-B3E5-B13FD7E240EB}.Debug|x86.ActiveCfg = Debug|x64
+		{A675A1B7-D6C3-4B34-B3E5-B13FD7E240EB}.Release|ARM64.ActiveCfg = Release|ARM64
+		{A675A1B7-D6C3-4B34-B3E5-B13FD7E240EB}.Release|ARM64.Build.0 = Release|ARM64
+		{A675A1B7-D6C3-4B34-B3E5-B13FD7E240EB}.Release|x64.ActiveCfg = Release|x64
+		{A675A1B7-D6C3-4B34-B3E5-B13FD7E240EB}.Release|x64.Build.0 = Release|x64
+		{A675A1B7-D6C3-4B34-B3E5-B13FD7E240EB}.Release|x86.ActiveCfg = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

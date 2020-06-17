@@ -196,7 +196,7 @@ bool DXTexture::CreateUAVDescriptor()
 }
 
 void DXTexture::Load(u32 level, u32 width, u32 height, u32 row_length, const u8* buffer,
-                     size_t buffer_size)
+                     size_t buffer_size, u32 layers)
 {
   // Textures greater than 1024*1024 will be put in staging textures that are released after
   // execution instead. A 2048x2048 texture is 16MB, and we'd only fit four of these in our
@@ -210,7 +210,7 @@ void DXTexture::Load(u32 level, u32 width, u32 height, u32 row_length, const u8*
   const u32 num_rows = Common::AlignUp(height, block_size) / block_size;
   const u32 source_stride = CalculateStrideForFormat(m_config.format, row_length);
   const u32 upload_stride = Common::AlignUp(source_stride, D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
-  const u32 upload_size = upload_stride * num_rows;
+  const u32 upload_size = upload_stride * num_rows * layers;
 
   // Both paths need us in COPY_DEST state, and avoids switching back and forth for mips.
   TransitionToState(D3D12_RESOURCE_STATE_COPY_DEST);
@@ -260,7 +260,7 @@ void DXTexture::Load(u32 level, u32 width, u32 height, u32 row_length, const u8*
     const u8* src_ptr = buffer;
     const u32 copy_size = std::min(source_stride, upload_stride);
     u8* dst_ptr = reinterpret_cast<u8*>(upload_buffer_ptr);
-    for (u32 i = 0; i < num_rows; i++)
+    for (u32 i = 0; i < num_rows * layers; i++)
     {
       std::memcpy(dst_ptr, src_ptr, copy_size);
       src_ptr += source_stride;
@@ -292,8 +292,8 @@ void DXTexture::Load(u32 level, u32 width, u32 height, u32 row_length, const u8*
       upload_buffer_resource,
       D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT,
       {{upload_buffer_offset, D3DCommon::GetDXGIFormatForAbstractFormat(m_config.format, false),
-        aligned_width, aligned_height, 1, upload_stride}}};
-  const D3D12_BOX src_box{0, 0, 0, aligned_width, aligned_height, 1};
+        aligned_width, aligned_height, layers, upload_stride}}};
+  const D3D12_BOX src_box{0, 0, 0, aligned_width, aligned_height, layers};
   g_dx_context->GetCommandList()->CopyTextureRegion(&dst_loc, 0, 0, 0, &src_loc, &src_box);
 
   // Preemptively transition to shader read only after uploading the last mip level, as we're

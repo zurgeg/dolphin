@@ -9,11 +9,13 @@
 #include <QIcon>
 
 #include "Core/Core.h"
+#include "Core/FifoPlayer/FifoPlayer.h"
 #include "Core/NetPlayProto.h"
 #include "DolphinQt/Host.h"
 #include "DolphinQt/Resources.h"
 #include "DolphinQt/Settings.h"
 #include "DolphinQt/ToolBar.h"
+#include "VirtualBoy/VirtualBoyPlayer.h"
 
 static QSize ICON_SIZE(32, 32);
 
@@ -64,12 +66,15 @@ void ToolBar::OnEmulationStateChanged(Core::State state)
   bool playing = running && state != Core::State::Paused;
   UpdatePausePlayButtonState(playing);
 
-  bool paused = Core::GetState() == Core::State::Paused;
-  m_step_action->setEnabled(paused);
-  m_step_over_action->setEnabled(paused);
-  m_step_out_action->setEnabled(paused);
-  m_skip_action->setEnabled(paused);
-  m_set_pc_action->setEnabled(paused);
+  bool gc_or_wii_game_paused = Core::GetState() == Core::State::Paused &&
+                               !FifoPlayer::GetInstance().IsPlaying() &&
+                               !VirtualBoyPlayer::GetInstance().IsPlaying();
+  m_step_action->setEnabled(gc_or_wii_game_paused);
+  m_step_over_action->setEnabled(gc_or_wii_game_paused);
+  m_step_out_action->setEnabled(gc_or_wii_game_paused);
+  m_skip_action->setEnabled(gc_or_wii_game_paused);
+  m_show_pc_action->setEnabled(gc_or_wii_game_paused);
+  m_set_pc_action->setEnabled(gc_or_wii_game_paused);
 }
 
 void ToolBar::closeEvent(QCloseEvent*)
@@ -86,12 +91,15 @@ void ToolBar::OnDebugModeToggled(bool enabled)
   m_show_pc_action->setVisible(enabled);
   m_set_pc_action->setVisible(enabled);
 
-  bool paused = Core::GetState() == Core::State::Paused;
-  m_step_action->setEnabled(paused);
-  m_step_over_action->setEnabled(paused);
-  m_step_out_action->setEnabled(paused);
-  m_skip_action->setEnabled(paused);
-  m_set_pc_action->setEnabled(paused);
+  bool gc_or_wii_game_paused = Core::GetState() == Core::State::Paused &&
+                               !FifoPlayer::GetInstance().IsPlaying() &&
+                               !VirtualBoyPlayer::GetInstance().IsPlaying();
+  m_step_action->setEnabled(gc_or_wii_game_paused);
+  m_step_over_action->setEnabled(gc_or_wii_game_paused);
+  m_step_out_action->setEnabled(gc_or_wii_game_paused);
+  m_skip_action->setEnabled(gc_or_wii_game_paused);
+  m_show_pc_action->setEnabled(gc_or_wii_game_paused);
+  m_set_pc_action->setEnabled(gc_or_wii_game_paused);
 }
 
 void ToolBar::MakeActions()

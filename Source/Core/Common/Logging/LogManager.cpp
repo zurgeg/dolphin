@@ -138,6 +138,7 @@ LogManager::LogManager()
   m_log[SERIALINTERFACE] = {"SI", "Serial Interface"};
   m_log[SP1] = {"SP1", "Serial Port 1"};
   m_log[SYMBOLS] = {"SYMBOLS", "Symbols"};
+  m_log[VB] = {"VB", "Virtual Boy"};
   m_log[VIDEO] = {"Video", "Video Backend"};
   m_log[VIDEOINTERFACE] = {"VI", "Video Interface"};
   m_log[WIIMOTE] = {"Wiimote", "Wii Remote"};

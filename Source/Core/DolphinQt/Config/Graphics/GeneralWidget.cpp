@@ -31,6 +31,8 @@
 #include "VideoCommon/VideoBackendBase.h"
 #include "VideoCommon/VideoConfig.h"
 
+#include "VirtualBoy/VirtualBoyPlayer.h"
+
 GeneralWidget::GeneralWidget(X11Utils::XRRConfiguration* xrr_config, GraphicsWindow* parent)
     : GraphicsWidget(parent), m_xrr_config(xrr_config)
 {
@@ -188,6 +190,11 @@ void GeneralWidget::OnEmulationStateChanged(bool running)
 
   const bool supports_adapters = !g_Config.backend_info.Adapters.empty();
   m_adapter_combo->setEnabled(!running && supports_adapters);
+
+  bool vb = VirtualBoyPlayer::GetInstance().IsPlaying();
+  for (auto mode : m_shader_compilation_mode)
+    mode->setEnabled(!vb);
+  m_wait_for_shaders->setEnabled(!vb);
 }
 
 void GeneralWidget::AddDescriptions()

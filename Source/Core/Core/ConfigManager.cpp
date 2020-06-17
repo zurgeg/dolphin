@@ -164,6 +164,7 @@ void SConfig::SaveGameListSettings(IniFile& ini)
   gamelist->Set("ListElfDol", m_ListElfDol);
   gamelist->Set("ListWii", m_ListWii);
   gamelist->Set("ListGC", m_ListGC);
+  gamelist->Set("ListVirtualBoy", m_ListVirtualBoy);
   gamelist->Set("ListJap", m_ListJap);
   gamelist->Set("ListPal", m_ListPal);
   gamelist->Set("ListUsa", m_ListUsa);
@@ -426,6 +427,7 @@ void SConfig::LoadGameListSettings(IniFile& ini)
   gamelist->Get("ListElfDol", &m_ListElfDol, true);
   gamelist->Get("ListWii", &m_ListWii, true);
   gamelist->Get("ListGC", &m_ListGC, true);
+  gamelist->Get("ListVirtualBoy", &m_ListVirtualBoy, true);
   gamelist->Get("ListJap", &m_ListJap, true);
   gamelist->Get("ListPal", &m_ListPal, true);
   gamelist->Get("ListUsa", &m_ListUsa, true);
@@ -912,6 +914,31 @@ struct SetGameMetadata
 
     config->bWii = dff_file->GetIsWii();
     *region = DiscIO::Region::NTSC_U;
+    return true;
+  }
+
+  bool operator()(const BootParameters::VirtualBoy& vb) const
+  {
+    std::unique_ptr<DiscIO::Volume> volume = DiscIO::CreateVolume(vb.vb_path);
+    // std::unique_ptr<FifoDataFile> vb_file(FifoDataFile::Load(vb.vb_path, true));
+    // if (!vb_file)
+    //  return false;
+    if (volume)
+    {
+      config->SetRunningGameMetadata(*volume, DiscIO::PARTITION_NONE);
+      *region = volume->GetRegion();
+    }
+    else
+    {
+      std::string name;
+      SplitPath(vb.vb_path, nullptr, &name, nullptr);
+      name = std::string("V") + name;
+      config->SetRunningGameMetadata(name, name, 0, 0, DiscIO::Region::Unknown);
+      *region = DiscIO::Region::Unknown;
+    }
+    config->bWii = false;
+    config->bCPUThread = false;
+    config->bROM = true;
     return true;
   }
 

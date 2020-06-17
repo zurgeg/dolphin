@@ -115,6 +115,9 @@
 #include "VideoCommon/NetPlayChatUI.h"
 #include "VideoCommon/VideoConfig.h"
 
+#include "VirtualBoy/VBPad.h"
+#include "VirtualBoy/VirtualBoyPlayer.h"
+
 #if defined(HAVE_XRANDR) && HAVE_XRANDR
 #include "UICommon/X11Utils.h"
 // This #define within X11/X.h conflicts with our WiimoteSource enum.
@@ -298,6 +301,7 @@ void MainWindow::InitControllers()
 
   g_controller_interface.Initialize(GetWindowSystemInfo(windowHandle()));
   Pad::Initialize();
+  VBPad::Initialize();
   Keyboard::Initialize();
   Wiimote::Initialize(Wiimote::InitializeMode::DO_NOT_WAIT_FOR_WIIMOTES);
   m_hotkey_scheduler = new HotkeyScheduler();
@@ -319,6 +323,7 @@ void MainWindow::ShutdownControllers()
 {
   m_hotkey_scheduler->Stop();
 
+  VBPad::Shutdown();
   Pad::Shutdown();
   Keyboard::Shutdown();
   Wiimote::Shutdown();
@@ -686,8 +691,9 @@ QStringList MainWindow::PromptFileNames()
   QStringList paths = QFileDialog::getOpenFileNames(
       this, tr("Select a File"),
       settings.value(QStringLiteral("mainwindow/lastdir"), QString{}).toString(),
-      tr("All GC/Wii files (*.elf *.dol *.gcm *.iso *.tgc *.wbfs *.ciso *.gcz *.wia *.rvz *.wad "
-         "*.dff *.m3u);;All Files (*)"));
+      tr("All GC/Wii/U/VB files (*.elf *.dol *.gcm *.iso *.tgc *.wbfs *.ciso *.gcz *.wad *.dff "
+         "*.vb *.vboy);;"
+         "All Files (*)"));
 
   if (!paths.isEmpty())
   {
@@ -875,6 +881,7 @@ void MainWindow::Reset()
   if (Movie::IsRecordingInput())
     Movie::SetReset(true);
   ProcessorInterface::ResetButton_Tap();
+  VirtualBoyPlayer::GetInstance().Reset();
 }
 
 void MainWindow::FrameAdvance()
@@ -1199,15 +1206,17 @@ void MainWindow::ShowFIFOPlayer()
 
 void MainWindow::StateLoad()
 {
-  QString path = QFileDialog::getOpenFileName(this, tr("Select a File"), QDir::currentPath(),
-                                              tr("All Save States (*.sav *.s##);; All Files (*)"));
+  QString path =
+      QFileDialog::getOpenFileName(this, tr("Select a File"), QDir::currentPath(),
+                                   tr("All Save States (*.sav *.state *.s??);; All Files (*)"));
   State::LoadAs(path.toStdString());
 }
 
 void MainWindow::StateSave()
 {
-  QString path = QFileDialog::getSaveFileName(this, tr("Select a File"), QDir::currentPath(),
-                                              tr("All Save States (*.sav *.s##);; All Files (*)"));
+  QString path =
+      QFileDialog::getSaveFileName(this, tr("Select a File"), QDir::currentPath(),
+                                   tr("All Save States (*.sav *.state *.s??);; All Files (*)"));
   State::SaveAs(path.toStdString());
 }
 

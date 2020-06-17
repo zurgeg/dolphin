@@ -69,13 +69,19 @@ struct BootParameters
     std::string dff_path;
   };
 
+  struct VirtualBoy
+  {
+    std::string vb_path;
+  };
+
   static std::unique_ptr<BootParameters>
   GenerateFromFile(std::string boot_path, const std::optional<std::string>& savestate_path = {});
   static std::unique_ptr<BootParameters>
   GenerateFromFile(std::vector<std::string> paths,
                    const std::optional<std::string>& savestate_path = {});
 
-  using Parameters = std::variant<Disc, Executable, DiscIO::VolumeWAD, NANDTitle, IPL, DFF>;
+  using Parameters =
+      std::variant<Disc, Executable, DiscIO::VolumeWAD, NANDTitle, IPL, DFF, VirtualBoy>;
   BootParameters(Parameters&& parameters_, const std::optional<std::string>& savestate_path_ = {});
 
   Parameters parameters;

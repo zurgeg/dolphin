@@ -58,6 +58,7 @@ private:
   void OpenProperties();
   void OpenWiiSaveFolder();
   void OpenGCSaveFolder();
+  void OpenCartSaveFolder();
   void OpenWiki();
   void SetDefaultISO();
   void DeleteFile();

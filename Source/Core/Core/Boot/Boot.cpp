@@ -61,6 +61,8 @@ namespace fs = std::filesystem;
 #include "DiscIO/Volume.h"
 #include "DiscIO/VolumeWad.h"
 
+#include "VirtualBoy/VirtualBoyPlayer.h"
+
 static std::vector<std::string> ReadM3UFile(const std::string& m3u_path,
                                             const std::string& folder_path)
 {
@@ -207,6 +209,9 @@ BootParameters::GenerateFromFile(std::vector<std::string> paths,
     if (wad)
       return std::make_unique<BootParameters>(std::move(*wad), savestate_path);
   }
+
+  if (extension == ".vb" || extension == ".vboy")
+    return std::make_unique<BootParameters>(VirtualBoy{std::move(path)}, savestate_path);
 
   PanicAlertT("Could not recognize file %s", path.c_str());
   return {};
@@ -525,6 +530,12 @@ bool CBoot::BootUp(std::unique_ptr<BootParameters> boot)
     {
       NOTICE_LOG(BOOT, "Booting DFF: %s", dff.dff_path.c_str());
       return FifoPlayer::GetInstance().Open(dff.dff_path);
+    }
+
+    bool operator()(const BootParameters::VirtualBoy& vb) const
+    {
+      NOTICE_LOG(BOOT, "Booting VirtualBoy: %s", vb.vb_path.c_str());
+      return VirtualBoyPlayer::GetInstance().Open(vb.vb_path);
     }
 
   private:

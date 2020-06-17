@@ -6,6 +6,7 @@
 
 #include <QAbstractEventDispatcher>
 #include <QApplication>
+#include <QLocale>
 
 #include <imgui.h>
 
@@ -172,4 +173,40 @@ void Host_TitleChanged()
   if (!NetPlay::IsNetPlayRunning())
     Discord::UpdateDiscordPresence();
 #endif
+}
+
+std::string Host_SpecialCoverRegion()
+{
+  QLocale::Country country = QLocale::system().country();
+  switch (country)
+  {
+  case QLocale::Country::Australia:
+  case QLocale::Country::ChristmasIsland:
+  case QLocale::Country::NewZealand:
+    return "AU";
+  case QLocale::Country::Portugal:
+  case QLocale::Country::Brazil:
+    return "PT";
+  case QLocale::Country::Sweden:
+    return "SE";
+  case QLocale::Country::Denmark:
+    return "DK";
+  case QLocale::Country::Norway:
+    return "NO";
+  case QLocale::Country::Finland:
+    return "FI";
+  case QLocale::Country::Turkey:
+    return "TR";
+  case QLocale::Country::Russia:
+  case QLocale::Country::Belarus:
+  case QLocale::Country::Kyrgyzstan:
+  case QLocale::Country::Kazakhstan:
+  case QLocale::Country::Tajikistan:
+  case QLocale::Country::Ukraine:
+  case QLocale::Country::Moldova:
+  case QLocale::Country::Uzbekistan:
+    return "RU";
+  default:
+    return std::string();
+  }
 }

@@ -48,3 +48,7 @@ bool Host_UIBlocksControllerState()
 {
   return false;
 }
+std::string Host_SpecialCoverRegion()
+{
+  return std::string();
+}

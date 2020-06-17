@@ -3,3 +3,8 @@
 	url = https://github.com/dolphin-emu/ext-win-qt.git
 	branch = master
 	shallow = true
+[submodule "Externals/BeetleVB"]
+	path = Externals/BeetleVB
+	url = https://github.com/CarlKenner/BeetleVBLibretroGo.git
+	branch = Dolphin
+

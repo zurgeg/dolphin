@@ -41,6 +41,8 @@
 #include "VideoCommon/OnScreenDisplay.h"
 #include "VideoCommon/VideoBackendBase.h"
 
+#include "VirtualBoy/VirtualBoyPlayer.h"
+
 namespace State
 {
 #if defined(__LZO_STRICT_16BIT)
@@ -413,44 +415,76 @@ void SaveAs(const std::string& filename, bool wait)
 
   s_load_or_save_in_progress = true;
 
-  Core::RunOnCPUThread(
-      [&] {
-        // Measure the size of the buffer.
-        u8* ptr = nullptr;
-        PointerWrap p(&ptr, PointerWrap::MODE_MEASURE);
-        DoState(p);
-        const size_t buffer_size = reinterpret_cast<size_t>(ptr);
+  if (VirtualBoyPlayer::GetInstance().IsPlaying())
+  {
+    Core::RunOnCPUThread(
+        [&] {
+          // Moving to last overwritten save-state
+          if (File::Exists(filename))
+          {
+            if (File::Exists(File::GetUserPath(D_STATESAVES_IDX) + "lastState.sav"))
+              File::Delete((File::GetUserPath(D_STATESAVES_IDX) + "lastState.sav"));
+            if (File::Exists(File::GetUserPath(D_STATESAVES_IDX) + "lastState.sav.dtm"))
+              File::Delete((File::GetUserPath(D_STATESAVES_IDX) + "lastState.sav.dtm"));
 
-        // Then actually do the write.
-        {
-          std::lock_guard<std::mutex> lk(g_cs_current_buffer);
-          g_current_buffer.resize(buffer_size);
-          ptr = &g_current_buffer[0];
-          p.SetMode(PointerWrap::MODE_WRITE);
+            if (!File::Rename(filename, File::GetUserPath(D_STATESAVES_IDX) + "lastState.sav"))
+              Core::DisplayMessage("Failed to move previous state to state undo backup", 1000);
+            else if (File::Exists(filename + ".dtm"))
+              File::Rename(filename + ".dtm",
+                           File::GetUserPath(D_STATESAVES_IDX) + "lastState.sav.dtm");
+          }
+
+          if ((Movie::IsMovieActive()) && !Movie::IsJustStartingRecordingInputFromSaveState())
+            Movie::SaveRecording(filename + ".dtm");
+          else if (!Movie::IsMovieActive())
+            File::Delete(filename + ".dtm");
+
+          // Actually save the state
+          VirtualBoyPlayer::GetInstance().SaveState(filename);
+        },
+        true);
+  }
+  else
+  {
+    Core::RunOnCPUThread(
+        [&] {
+          // Measure the size of the buffer.
+          u8* ptr = nullptr;
+          PointerWrap p(&ptr, PointerWrap::MODE_MEASURE);
           DoState(p);
-        }
+          const size_t buffer_size = reinterpret_cast<size_t>(ptr);
 
-        if (p.GetMode() == PointerWrap::MODE_WRITE)
-        {
-          Core::DisplayMessage("Saving State...", 1000);
+          // Then actually do the write.
+          {
+            std::lock_guard<std::mutex> lk(g_cs_current_buffer);
+            g_current_buffer.resize(buffer_size);
+            ptr = &g_current_buffer[0];
+            p.SetMode(PointerWrap::MODE_WRITE);
+            DoState(p);
+          }
 
-          CompressAndDumpState_args save_args;
-          save_args.buffer_vector = &g_current_buffer;
-          save_args.buffer_mutex = &g_cs_current_buffer;
-          save_args.filename = filename;
-          save_args.wait = wait;
+          if (p.GetMode() == PointerWrap::MODE_WRITE)
+          {
+            Core::DisplayMessage("Saving State...", 1000);
 
-          Flush();
-          g_save_thread = std::thread(CompressAndDumpState, save_args);
-          g_compressAndDumpStateSyncEvent.Wait();
-        }
-        else
-        {
-          // someone aborted the save by changing the mode?
-          Core::DisplayMessage("Unable to save: Internal DoState Error", 4000);
-        }
-      },
-      true);
+            CompressAndDumpState_args save_args;
+            save_args.buffer_vector = &g_current_buffer;
+            save_args.buffer_mutex = &g_cs_current_buffer;
+            save_args.filename = filename;
+            save_args.wait = wait;
+
+            Flush();
+            g_save_thread = std::thread(CompressAndDumpState, save_args);
+            g_compressAndDumpStateSyncEvent.Wait();
+          }
+          else
+          {
+            // someone aborted the save by changing the mode?
+            Core::DisplayMessage("Unable to save: Internal DoState Error", 4000);
+          }
+        },
+        true);
+  }
 
   s_load_or_save_in_progress = false;
 }
@@ -564,61 +598,83 @@ void LoadAs(const std::string& filename)
 
   s_load_or_save_in_progress = true;
 
-  Core::RunOnCPUThread(
-      [&] {
-        // Save temp buffer for undo load state
-        if (!Movie::IsJustStartingRecordingInputFromSaveState())
-        {
-          std::lock_guard<std::mutex> lk(g_cs_undo_load_buffer);
-          SaveToBuffer(g_undo_load_buffer);
-          if (Movie::IsMovieActive())
-            Movie::SaveRecording(File::GetUserPath(D_STATESAVES_IDX) + "undo.dtm");
-          else if (File::Exists(File::GetUserPath(D_STATESAVES_IDX) + "undo.dtm"))
-            File::Delete(File::GetUserPath(D_STATESAVES_IDX) + "undo.dtm");
-        }
-
-        bool loaded = false;
-        bool loadedSuccessfully = false;
-
-        // brackets here are so buffer gets freed ASAP
-        {
-          std::vector<u8> buffer;
-          LoadFileStateData(filename, buffer);
-
-          if (!buffer.empty())
+  if (VirtualBoyPlayer::GetInstance().IsPlaying())
+  {
+    Core::RunOnCPUThread(
+        [&] {
+          // Save temp buffer for undo load state
+          if (!Movie::IsJustStartingRecordingInputFromSaveState())
           {
-            u8* ptr = &buffer[0];
-            PointerWrap p(&ptr, PointerWrap::MODE_READ);
-            DoState(p);
-            loaded = true;
-            loadedSuccessfully = (p.GetMode() == PointerWrap::MODE_READ);
+            std::lock_guard<std::mutex> lk(g_cs_undo_load_buffer);
+            VirtualBoyPlayer::GetInstance().SaveStateToBuffer(g_undo_load_buffer);
+            if (Movie::IsMovieActive())
+              Movie::SaveRecording(File::GetUserPath(D_STATESAVES_IDX) + "undo.dtm");
+            else if (File::Exists(File::GetUserPath(D_STATESAVES_IDX) + "undo.dtm"))
+              File::Delete(File::GetUserPath(D_STATESAVES_IDX) + "undo.dtm");
           }
-        }
-
-        if (loaded)
-        {
-          if (loadedSuccessfully)
+          // Actually load it
+          VirtualBoyPlayer::GetInstance().LoadState(filename);
+        },
+        true);
+  }
+  else
+  {
+    Core::RunOnCPUThread(
+        [&] {
+          // Save temp buffer for undo load state
+          if (!Movie::IsJustStartingRecordingInputFromSaveState())
           {
-            Core::DisplayMessage(fmt::format("Loaded state from {}", filename), 2000);
-            if (File::Exists(filename + ".dtm"))
-              Movie::LoadInput(filename + ".dtm");
-            else if (!Movie::IsJustStartingRecordingInputFromSaveState() &&
-                     !Movie::IsJustStartingPlayingInputFromSaveState())
-              Movie::EndPlayInput(false);
+            std::lock_guard<std::mutex> lk(g_cs_undo_load_buffer);
+            SaveToBuffer(g_undo_load_buffer);
+            if (Movie::IsMovieActive())
+              Movie::SaveRecording(File::GetUserPath(D_STATESAVES_IDX) + "undo.dtm");
+            else if (File::Exists(File::GetUserPath(D_STATESAVES_IDX) + "undo.dtm"))
+              File::Delete(File::GetUserPath(D_STATESAVES_IDX) + "undo.dtm");
           }
-          else
+
+          bool loaded = false;
+          bool loadedSuccessfully = false;
+
+          // brackets here are so buffer gets freed ASAP
           {
-            Core::DisplayMessage("The savestate could not be loaded", OSD::Duration::NORMAL);
+            std::vector<u8> buffer;
+            LoadFileStateData(filename, buffer);
 
-            // since we could be in an inconsistent state now (and might crash or whatever), undo.
-            UndoLoadState();
+            if (!buffer.empty())
+            {
+              u8* ptr = &buffer[0];
+              PointerWrap p(&ptr, PointerWrap::MODE_READ);
+              DoState(p);
+              loaded = true;
+              loadedSuccessfully = (p.GetMode() == PointerWrap::MODE_READ);
+            }
           }
-        }
 
-        if (s_on_after_load_callback)
-          s_on_after_load_callback();
-      },
-      true);
+          if (loaded)
+          {
+            if (loadedSuccessfully)
+            {
+              Core::DisplayMessage(fmt::format("Loaded state from {}", filename), 2000);
+              if (File::Exists(filename + ".dtm"))
+                Movie::LoadInput(filename + ".dtm");
+              else if (!Movie::IsJustStartingRecordingInputFromSaveState() &&
+                       !Movie::IsJustStartingPlayingInputFromSaveState())
+                Movie::EndPlayInput(false);
+            }
+            else
+            {
+              Core::DisplayMessage("The savestate could not be loaded", OSD::Duration::NORMAL);
+
+              // since we could be in an inconsistent state now (and might crash or whatever), undo.
+              UndoLoadState();
+            }
+          }
+
+          if (s_on_after_load_callback)
+            s_on_after_load_callback();
+        },
+        true);
+  }
 
   s_load_or_save_in_progress = false;
 }
@@ -712,9 +768,12 @@ void UndoLoadState()
   std::lock_guard<std::mutex> lk(g_cs_undo_load_buffer);
   if (!g_undo_load_buffer.empty())
   {
-    if (File::Exists(File::GetUserPath(D_STATESAVES_IDX) + "undo.dtm") || (!Movie::IsMovieActive()))
+    if ((!Movie::IsMovieActive()) || File::Exists(File::GetUserPath(D_STATESAVES_IDX) + "undo.dtm"))
     {
-      LoadFromBuffer(g_undo_load_buffer);
+      if (VirtualBoyPlayer::GetInstance().IsPlaying())
+        VirtualBoyPlayer::GetInstance().LoadStateFromBuffer(g_undo_load_buffer);
+      else
+        LoadFromBuffer(g_undo_load_buffer);
       if (Movie::IsMovieActive())
         Movie::LoadInput(File::GetUserPath(D_STATESAVES_IDX) + "undo.dtm");
     }
