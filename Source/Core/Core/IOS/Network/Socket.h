@@ -186,16 +186,19 @@ private:
   {
     Request request;
     bool is_ssl;
+    bool is_aborted = false;
     union
     {
       NET_IOCTL net_type;
       SSL_IOCTL ssl_type;
     };
+    void Abort(s32 value);
   };
 
   friend class WiiSockMan;
   void SetFd(s32 s);
   void SetWiiFd(s32 s);
+  s32 Shutdown(u32 how);
   s32 CloseFd();
   s32 FCntl(u32 cmd, u32 arg);
 
@@ -212,6 +215,20 @@ private:
 class WiiSockMan
 {
 public:
+  enum class ConvertDirection
+  {
+    WiiToNative,
+    NativeToWii
+  };
+
+  struct PollCommand
+  {
+    u32 request_addr;
+    u32 buffer_out;
+    std::vector<pollfd_t> wii_fds;
+    s64 timeout;
+  };
+
   static s32 GetNetErrorCode(s32 ret, const char* caller, bool isRW);
   static char* DecodeError(s32 ErrorCode);
 
@@ -223,11 +240,17 @@ public:
   void Update();
   static void Convert(WiiSockAddrIn const& from, sockaddr_in& to);
   static void Convert(sockaddr_in const& from, WiiSockAddrIn& to, s32 addrlen = -1);
+  static s32 ConvertEvents(s32 events, ConvertDirection dir);
+
+  void DoState(PointerWrap& p);
+  void AddPollCommand(const PollCommand& cmd);
   // NON-BLOCKING FUNCTIONS
   s32 NewSocket(s32 af, s32 type, s32 protocol);
   s32 AddSocket(s32 fd, bool is_rw);
+  bool IsSocketBlocking(s32 wii_fd) const;
   s32 GetHostSocket(s32 wii_fd) const;
-  s32 DeleteSocket(s32 s);
+  s32 ShutdownSocket(s32 wii_fd, u32 how);
+  s32 DeleteSocket(s32 wii_fd);
   s32 GetLastNetError() const { return errno_last; }
   void SetLastNetError(s32 error) { errno_last = error; }
   void Clean() { WiiSockets.clear(); }
@@ -256,7 +279,12 @@ private:
   WiiSockMan(WiiSockMan&&) = delete;
   WiiSockMan& operator=(WiiSockMan&&) = delete;
 
+  void UpdatePollCommands();
+
   std::unordered_map<s32, WiiSocket> WiiSockets;
   s32 errno_last;
+  std::vector<PollCommand> pending_polls;
+  std::chrono::time_point<std::chrono::high_resolution_clock> last_time =
+      std::chrono::high_resolution_clock::now();
 };
 }  // namespace IOS::HLE

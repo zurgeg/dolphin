@@ -35,6 +35,7 @@ option(ENABLE_ALSA "Enables ALSA sound backend" ON)
 option(ENABLE_PULSEAUDIO "Enables PulseAudio sound backend" ON)
 option(ENABLE_LLVM "Enables LLVM support, for disassembly" ON)
 option(ENABLE_TESTS "Enables building the unit tests" ON)
+option(ENABLE_VULKAN "Enables vulkan video backend" ON)
 option(USE_DISCORD_PRESENCE "Enables Discord Rich Presence, show the current game on Discord" ON)
 
 # Maintainers: if you consider blanket disabling this for your users, please
@@ -114,8 +115,8 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/Binaries)
 if (WIN32)
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/Binary)
 
-	if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
-	  string(APPEND CMAKE_RUNTIME_OUTPUT_DIRECTORY /ARM64)
+  if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+    string(APPEND CMAKE_RUNTIME_OUTPUT_DIRECTORY /ARM64)
   endif()
 
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
@@ -241,6 +242,8 @@ if(CMAKE_C_COMPILER_ID MATCHES "MSVC")
   add_compile_options(/Zc:throwingNew)
   # Enforce strict volatile semantics as per ISO C++
   add_compile_options(/volatile:iso)
+  # Fix non-conformant lambda behavior (constexpr variables shouldn't need capturing)
+  add_compile_options(/experimental:newLambdaProcessor)
 
   string(APPEND CMAKE_EXE_LINKER_FLAGS " /NXCOMPAT")
 else()
@@ -305,6 +308,14 @@ if(CMAKE_SYSTEM_NAME MATCHES "Darwin")
   # Linker flags.
   # Drop unreachable code and data.
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-dead_strip,-dead_strip_dylibs")
+
+  # Set -fno-objc-exceptions, for consistency with -fno-exceptions earlier.
+  # If we set only -fno-exceptions, fmt fails to compile when included from
+  # Objective-C++ because fmt tries try to use throw because __EXCEPTIONS is defined.
+  #
+  # TODO: Only enable this for Objective-C(++).
+  # We get warnings if we enable this when building regular C(++) code.
+  check_and_add_flag(NO_OBJC_EXCEPTIONS -fno-objc-exceptions)
 
   find_library(APPKIT_LIBRARY AppKit)
   find_library(APPSERV_LIBRARY ApplicationServices)
@@ -483,8 +494,8 @@ if(OPROFILING)
 endif()
 
 if(ENABLE_EVDEV)
-  find_package(Libudev REQUIRED)
-  find_package(Libevdev REQUIRED)
+  find_package(LIBUDEV REQUIRED)
+  find_package(LIBEVDEV REQUIRED)
   if(LIBUDEV_FOUND AND LIBEVDEV_FOUND)
     message(STATUS "libevdev/libudev found, enabling evdev controller backend")
     add_definitions(-DHAVE_LIBUDEV=1)
@@ -533,7 +544,8 @@ if (_M_X86)
   add_subdirectory(Externals/Bochs_disasm)
 endif()
 add_subdirectory(Externals/cpp-optparse)
-find_package(fmt 6.0)
+
+find_package(fmt 7.0)
 if(fmt_FOUND)
   message(STATUS "Using shared fmt ${fmt_VERSION}")
 else()
@@ -541,8 +553,17 @@ else()
   message(STATUS "Using static fmt from Externals")
   add_subdirectory(Externals/fmt EXCLUDE_FROM_ALL)
 endif()
-add_subdirectory(Externals/glslang)
 add_subdirectory(Externals/imgui)
+add_subdirectory(Externals/glslang)
+
+if(ENABLE_VULKAN)
+  add_definitions(-DHAS_VULKAN)
+endif()
+
+if(NOT WIN32 OR (NOT (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")))
+  # OpenGL is available on all platforms except windows-arm64
+  add_definitions(-DHAS_OPENGL)
+endif()
 
 find_package(pugixml)
 if(NOT pugixml_FOUND)
@@ -608,9 +629,9 @@ else()
   add_subdirectory(Externals/liblzma)
 endif()
 
-find_package(zstd)
+pkg_check_modules(ZSTD QUIET libzstd>=1.4.0)
 if(ZSTD_FOUND)
-  message(STATUS "Using shared zstd")
+  message(STATUS "Using shared zstd version: " ${ZSTD_VERSION})
 else()
   check_vendoring_approved(zstd)
   message(STATUS "Shared zstd not found, falling back to the static library")
@@ -629,6 +650,7 @@ endif()
 pkg_check_modules(MINIZIP minizip>=2.0.0)
 if(MINIZIP_FOUND)
   message(STATUS "Using shared minizip")
+	include_directories(${MINIZIP_INCLUDE_DIRS})
 else()
   check_vendoring_approved(minizip)
   message(STATUS "Shared minizip not found, falling back to the static library")
@@ -676,7 +698,7 @@ endif()
 add_subdirectory(Externals/soundtouch)
 include_directories(Externals/soundtouch)
 
-find_package(Cubeb)
+find_package(CUBEB)
 if(CUBEB_FOUND)
   message(STATUS "Using the system cubeb")
 else()
@@ -718,7 +740,7 @@ endif()
 
 if(USE_UPNP)
   if(NOT APPLE)
-    find_package(Miniupnpc)
+    find_package(MINIUPNPC)
   endif()
   if(MINIUPNPC_FOUND AND MINIUPNPC_API_VERSION GREATER 8)
     message(STATUS "Using shared miniupnpc")
@@ -731,7 +753,7 @@ if(USE_UPNP)
 endif()
 
 if(NOT APPLE)
-  find_package(MbedTLS)
+  find_package(MBEDTLS)
 endif()
 if(MBEDTLS_FOUND)
   message(STATUS "Using shared mbed TLS")
@@ -786,7 +808,7 @@ if(USE_DISCORD_PRESENCE)
   include_directories(Externals/discord-rpc/include)
 endif()
 
-find_package(Libsystemd)
+find_package(SYSTEMD)
 if(SYSTEMD_FOUND)
   message(STATUS "libsystemd found, enabling traversal server watchdog support")
   add_definitions(-DHAVE_LIBSYSTEMD)
@@ -799,6 +821,8 @@ if (WIN32)
 endif()
 
 include_directories(Externals/picojson)
+
+add_subdirectory(Externals/rangeset)
 
 ########################################
 # Pre-build events: Define configuration variables and write SCM info header

@@ -15,6 +15,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+
 #include <zlib.h>
 
 #include "Common/Assert.h"
@@ -24,7 +25,6 @@
 #include "Common/Hash.h"
 #include "Common/Logging/Log.h"
 #include "Common/MsgHandler.h"
-#include "Common/StringUtil.h"
 #include "DiscIO/Blob.h"
 #include "DiscIO/CompressedBlob.h"
 #include "DiscIO/DiscScrubber.h"
@@ -206,7 +206,7 @@ static ConversionResult<OutputParameters> Compress(CompressThreadState* state,
 
   if (retval != Z_OK)
   {
-    ERROR_LOG(DISCIO, "Deflate failed");
+    ERROR_LOG_FMT(DISCIO, "Deflate failed");
     return ConversionResultCode::InternalError;
   }
 
@@ -238,7 +238,7 @@ static ConversionResult<OutputParameters> Compress(CompressThreadState* state,
 
 static ConversionResultCode Output(OutputParameters parameters, File::IOFile* outfile,
                                    u64* position, std::vector<u64>* offsets, int progress_monitor,
-                                   u32 num_blocks, CompressCB callback, void* arg)
+                                   u32 num_blocks, CompressCB callback)
 {
   u64 offset = *position;
   if (!parameters.compressed)
@@ -255,13 +255,12 @@ static ConversionResultCode Output(OutputParameters parameters, File::IOFile* ou
     const int ratio =
         parameters.inpos == 0 ? 0 : static_cast<int>(100 * *position / parameters.inpos);
 
-    const std::string text =
-        StringFromFormat(Common::GetStringT("%i of %i blocks. Compression ratio %i%%").c_str(),
-                         parameters.block_number, num_blocks, ratio);
+    const std::string text = Common::FmtFormatT("{0} of {1} blocks. Compression ratio {2}%",
+                                                parameters.block_number, num_blocks, ratio);
 
     const float completion = static_cast<float>(parameters.block_number) / num_blocks;
 
-    if (!callback(text, completion, arg))
+    if (!callback(text, completion))
       return ConversionResultCode::Canceled;
   }
 
@@ -270,7 +269,7 @@ static ConversionResultCode Output(OutputParameters parameters, File::IOFile* ou
 
 bool ConvertToGCZ(BlobReader* infile, const std::string& infile_path,
                   const std::string& outfile_path, u32 sub_type, int block_size,
-                  CompressCB callback, void* arg)
+                  CompressCB callback)
 {
   ASSERT(infile->IsDataSizeAccurate());
 
@@ -284,7 +283,7 @@ bool ConvertToGCZ(BlobReader* infile, const std::string& infile_path,
     return false;
   }
 
-  callback(Common::GetStringT("Files opened, ready to compress."), 0, arg);
+  callback(Common::GetStringT("Files opened, ready to compress."), 0);
 
   CompressedBlobHeader header;
   header.magic_cookie = GCZ_MAGIC;
@@ -317,7 +316,7 @@ bool ConvertToGCZ(BlobReader* infile, const std::string& infile_path,
 
   const auto output = [&](OutputParameters parameters) {
     return Output(std::move(parameters), &outfile, &position, &offsets, progress_monitor,
-                  header.num_blocks, callback, arg);
+                  header.num_blocks, callback);
   };
 
   MultithreadedCompressor<CompressThreadState, CompressParameters, OutputParameters> compressor(
@@ -364,7 +363,7 @@ bool ConvertToGCZ(BlobReader* infile, const std::string& infile_path,
     outfile.WriteArray(offsets.data(), header.num_blocks);
     outfile.WriteArray(hashes.data(), header.num_blocks);
 
-    callback(Common::GetStringT("Done compressing disc image."), 1.0f, arg);
+    callback(Common::GetStringT("Done compressing disc image."), 1.0f);
   }
 
   if (result == ConversionResultCode::ReadFailed)

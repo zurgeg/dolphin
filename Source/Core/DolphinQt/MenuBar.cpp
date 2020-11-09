@@ -136,6 +136,7 @@ void MenuBar::OnEmulationStateChanged(Core::State state)
   m_jit_interpreter_core->setEnabled(running);
   m_jit_block_linking->setEnabled(!running);
   m_jit_disable_cache->setEnabled(!running);
+  m_jit_disable_fastmem->setEnabled(!running);
   m_jit_clear_cache->setEnabled(running);
   m_jit_log_coverage->setEnabled(!running);
   m_jit_search_instruction->setEnabled(running);
@@ -228,7 +229,7 @@ void MenuBar::AddToolsMenu()
   m_show_cheat_manager =
       tools_menu->addAction(tr("&Cheats Manager"), this, [this] { emit ShowCheatsManager(); });
 
-  connect(&Settings::Instance(), &Settings::EnableCheatsChanged, [this](bool enabled) {
+  connect(&Settings::Instance(), &Settings::EnableCheatsChanged, this, [this](bool enabled) {
     m_show_cheat_manager->setEnabled(Core::GetState() != Core::State::Uninitialized && enabled);
   });
 
@@ -266,7 +267,7 @@ void MenuBar::AddToolsMenu()
 
   m_boot_sysmenu->setEnabled(false);
 
-  connect(&Settings::Instance(), &Settings::NANDRefresh, [this] { UpdateToolsMenu(false); });
+  connect(&Settings::Instance(), &Settings::NANDRefresh, this, [this] { UpdateToolsMenu(false); });
 
   m_perform_online_update_menu = tools_menu->addMenu(tr("Perform Online System Update"));
   m_perform_online_update_for_current_region = m_perform_online_update_menu->addAction(
@@ -629,6 +630,9 @@ void MenuBar::AddListColumnsMenu(QMenu* view_menu)
       {tr("Game ID"), &SConfig::GetInstance().m_showIDColumn},
       {tr("Region"), &SConfig::GetInstance().m_showRegionColumn},
       {tr("File Size"), &SConfig::GetInstance().m_showSizeColumn},
+      {tr("File Format"), &SConfig::GetInstance().m_showFileFormatColumn},
+      {tr("Block Size"), &SConfig::GetInstance().m_showBlockSizeColumn},
+      {tr("Compression"), &SConfig::GetInstance().m_showCompressionColumn},
       {tr("Tags"), &SConfig::GetInstance().m_showTagsColumn}};
 
   QActionGroup* column_group = new QActionGroup(this);
@@ -807,6 +811,14 @@ void MenuBar::AddJITMenu()
   m_jit_disable_cache->setChecked(SConfig::GetInstance().bJITNoBlockCache);
   connect(m_jit_disable_cache, &QAction::toggled, [this](bool enabled) {
     SConfig::GetInstance().bJITNoBlockCache = enabled;
+    ClearCache();
+  });
+
+  m_jit_disable_fastmem = m_jit->addAction(tr("Disable Fastmem"));
+  m_jit_disable_fastmem->setCheckable(true);
+  m_jit_disable_fastmem->setChecked(!SConfig::GetInstance().bFastmem);
+  connect(m_jit_disable_fastmem, &QAction::toggled, [this](bool enabled) {
+    SConfig::GetInstance().bFastmem = !enabled;
     ClearCache();
   });
 

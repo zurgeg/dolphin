@@ -6,6 +6,8 @@
 #include "Core/IOS/Network/Socket.h"
 
 #include <algorithm>
+#include <numeric>
+
 #include <mbedtls/error.h>
 #ifndef _WIN32
 #include <arpa/inet.h>
@@ -51,7 +53,12 @@ char* WiiSockMan::DecodeError(s32 ErrorCode)
 #endif
 }
 
-static s32 TranslateErrorCode(s32 native_error, bool isRW)
+// The following functions can return
+//  - EAGAIN / EWOULDBLOCK: send(to), recv(from), accept
+//  - EINPROGRESS: connect, bind
+//  - WSAEWOULDBLOCK: send(to), recv(from), accept, connect
+// On Windows is_rw is used to correct the return value for connect
+static s32 TranslateErrorCode(s32 native_error, bool is_rw)
 {
   switch (native_error)
   {
@@ -67,7 +74,7 @@ static s32 TranslateErrorCode(s32 native_error, bool isRW)
   case ERRORCODE(EISCONN):
     return -SO_EISCONN;
   case ERRORCODE(ENOTCONN):
-    return -SO_EAGAIN;  // After proper blocking SO_EAGAIN shouldn't be needed...
+    return -SO_ENOTCONN;
   case ERRORCODE(EINPROGRESS):
     return -SO_EINPROGRESS;
   case ERRORCODE(EALREADY):
@@ -86,14 +93,7 @@ static s32 TranslateErrorCode(s32 native_error, bool isRW)
   case ERRORCODE(ENETRESET):
     return -SO_ENETRESET;
   case EITHER(WSAEWOULDBLOCK, EAGAIN):
-    if (isRW)
-    {
-      return -SO_EAGAIN;  // EAGAIN
-    }
-    else
-    {
-      return -SO_EINPROGRESS;  // EINPROGRESS
-    }
+    return (is_rw) ? (-SO_EAGAIN) : (-SO_EINPROGRESS);
   default:
     return -1;
   }
@@ -154,6 +154,54 @@ void WiiSocket::SetFd(s32 s)
 void WiiSocket::SetWiiFd(s32 s)
 {
   wii_fd = s;
+}
+
+s32 WiiSocket::Shutdown(u32 how)
+{
+  if (how > 2)
+    return -SO_EINVAL;
+
+  // The Wii does nothing and returns 0 for IP_PROTO_UDP
+  int so_type;
+  socklen_t opt_len = sizeof(so_type);
+  if (getsockopt(fd, SOL_SOCKET, SO_TYPE, reinterpret_cast<char*>(&so_type), &opt_len) != 0 ||
+      (so_type != SOCK_STREAM && so_type != SOCK_DGRAM))
+    return -SO_EBADF;
+  if (so_type == SOCK_DGRAM)
+    return SO_SUCCESS;
+
+  // Adjust pending operations
+  // Values based on https://dolp.in/pr8758 hwtest
+  const s32 ret = WiiSockMan::GetNetErrorCode(shutdown(fd, how), "SO_SHUTDOWN", false);
+  const bool shut_read = how == 0 || how == 2;
+  const bool shut_write = how == 1 || how == 2;
+  for (auto& op : pending_sockops)
+  {
+    // TODO: Create hwtest for SSL
+    if (op.is_ssl)
+      continue;
+
+    switch (op.net_type)
+    {
+    case IOCTL_SO_ACCEPT:
+      if (shut_write)
+        op.Abort(-SO_EINVAL);
+      break;
+    case IOCTL_SO_CONNECT:
+      if (shut_write && !nonBlock)
+        op.Abort(-SO_ENETUNREACH);
+      break;
+    case IOCTLV_SO_RECVFROM:
+      if (shut_read)
+        op.Abort(-SO_ENOTCONN);
+      break;
+    case IOCTLV_SO_SENDTO:
+      if (shut_write)
+        op.Abort(-SO_ENOTCONN);
+      break;
+    }
+  }
+  return ret;
 }
 
 s32 WiiSocket::CloseFd()
@@ -586,6 +634,12 @@ void WiiSocket::Update(bool read, bool write, bool except)
       }
     }
 
+    if (it->is_aborted)
+    {
+      it = pending_sockops.erase(it);
+      continue;
+    }
+
     if (nonBlock || forceNonBlock ||
         (!it->is_ssl && ReturnValue != -SO_EAGAIN && ReturnValue != -SO_EINPROGRESS &&
          ReturnValue != -SO_EALREADY) ||
@@ -648,10 +702,22 @@ s32 WiiSockMan::AddSocket(s32 fd, bool is_rw)
     WiiSocket& sock = WiiSockets[wii_fd];
     sock.SetFd(fd);
     sock.SetWiiFd(wii_fd);
+
+#ifdef __APPLE__
+    int opt_no_sigpipe = 1;
+    if (setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &opt_no_sigpipe, sizeof(opt_no_sigpipe)) < 0)
+      ERROR_LOG(IOS_NET, "Failed to set SO_NOSIGPIPE on socket");
+#endif
   }
 
   SetLastNetError(wii_fd);
   return wii_fd;
+}
+
+bool WiiSockMan::IsSocketBlocking(s32 wii_fd) const
+{
+  const auto it = WiiSockets.find(wii_fd);
+  return it != WiiSockets.end() && !it->second.nonBlock;
 }
 
 s32 WiiSockMan::NewSocket(s32 af, s32 type, s32 protocol)
@@ -673,10 +739,18 @@ s32 WiiSockMan::GetHostSocket(s32 wii_fd) const
   return -EBADF;
 }
 
-s32 WiiSockMan::DeleteSocket(s32 s)
+s32 WiiSockMan::ShutdownSocket(s32 wii_fd, u32 how)
+{
+  auto socket_entry = WiiSockets.find(wii_fd);
+  if (socket_entry != WiiSockets.end())
+    return socket_entry->second.Shutdown(how);
+  return -SO_EBADF;
+}
+
+s32 WiiSockMan::DeleteSocket(s32 wii_fd)
 {
   s32 ReturnValue = -SO_EBADF;
-  auto socket_entry = WiiSockets.find(s);
+  auto socket_entry = WiiSockets.find(wii_fd);
   if (socket_entry != WiiSockets.end())
   {
     ReturnValue = socket_entry->second.CloseFd();
@@ -699,7 +773,7 @@ void WiiSockMan::Update()
 
   while (socket_iter != end_socks)
   {
-    WiiSocket& sock = socket_iter->second;
+    const WiiSocket& sock = socket_iter->second;
     if (sock.IsValid())
     {
       FD_SET(sock.fd, &read_fds);
@@ -714,7 +788,8 @@ void WiiSockMan::Update()
       socket_iter = WiiSockets.erase(socket_iter);
     }
   }
-  s32 ret = select(nfds, &read_fds, &write_fds, &except_fds, &t);
+
+  const s32 ret = select(nfds, &read_fds, &write_fds, &except_fds, &t);
 
   if (ret >= 0)
   {
@@ -732,6 +807,87 @@ void WiiSockMan::Update()
       elem.second.Update(false, false, false);
     }
   }
+  UpdatePollCommands();
+}
+
+void WiiSockMan::UpdatePollCommands()
+{
+  static constexpr int error_event = (POLLHUP | POLLERR);
+
+  if (pending_polls.empty())
+    return;
+
+  const auto now = std::chrono::high_resolution_clock::now();
+  const auto elapsed_d = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_time);
+  const auto elapsed = elapsed_d.count();
+  last_time = now;
+
+  for (PollCommand& pcmd : pending_polls)
+  {
+    // Don't touch negative timeouts
+    if (pcmd.timeout > 0)
+      pcmd.timeout = std::max<s64>(0, pcmd.timeout - elapsed);
+  }
+
+  pending_polls.erase(
+      std::remove_if(
+          pending_polls.begin(), pending_polls.end(),
+          [this](PollCommand& pcmd) {
+            const auto request = Request(pcmd.request_addr);
+            auto& pfds = pcmd.wii_fds;
+            int ret = 0;
+
+            // Happens only on savestate load
+            if (pfds[0].revents & error_event)
+            {
+              ret = static_cast<int>(pfds.size());
+            }
+            else
+            {
+              // Make the behavior of poll consistent across platforms by not passing:
+              //  - Set with invalid fds, revents is set to 0 (Linux) or POLLNVAL (Windows)
+              //  - Set without a valid socket, raises an error on Windows
+              std::vector<int> original_order(pfds.size());
+              std::iota(original_order.begin(), original_order.end(), 0);
+              // Select indices with valid fds
+              auto mid = std::partition(original_order.begin(), original_order.end(), [&](auto i) {
+                return GetHostSocket(Memory::Read_U32(pcmd.buffer_out + 0xc * i)) >= 0;
+              });
+              const auto n_valid = std::distance(original_order.begin(), mid);
+
+              // Move all the valid pollfds to the front of the vector
+              for (auto i = 0; i < n_valid; ++i)
+                std::swap(pfds[i], pfds[original_order[i]]);
+
+              if (n_valid > 0)
+                ret = poll(pfds.data(), n_valid, 0);
+              if (ret < 0)
+                ret = GetNetErrorCode(ret, "UpdatePollCommands", false);
+
+              // Move everything back to where they were
+              for (auto i = 0; i < n_valid; ++i)
+                std::swap(pfds[i], pfds[original_order[i]]);
+            }
+
+            if (ret == 0 && pcmd.timeout)
+              return false;
+
+            // Translate native to Wii events,
+            for (u32 i = 0; i < pfds.size(); ++i)
+            {
+              const int revents = ConvertEvents(pfds[i].revents, ConvertDirection::NativeToWii);
+
+              // No need to change fd or events as they are input only.
+              // Memory::Write_U32(ufds[i].fd, request.buffer_out + 0xc*i); //fd
+              // Memory::Write_U32(events, request.buffer_out + 0xc*i + 4); //events
+              Memory::Write_U32(revents, pcmd.buffer_out + 0xc * i + 8);  // revents
+              DEBUG_LOG(IOS_NET, "IOCTL_SO_POLL socket %d wevents %08X events %08X revents %08X", i,
+                        revents, pfds[i].events, pfds[i].revents);
+            }
+            GetIOS()->EnqueueIPCReply(request, ret);
+            return true;
+          }),
+      pending_polls.end());
 }
 
 void WiiSockMan::Convert(WiiSockAddrIn const& from, sockaddr_in& to)
@@ -739,6 +895,43 @@ void WiiSockMan::Convert(WiiSockAddrIn const& from, sockaddr_in& to)
   to.sin_addr.s_addr = from.addr.addr;
   to.sin_family = from.family;
   to.sin_port = from.port;
+}
+
+s32 WiiSockMan::ConvertEvents(s32 events, ConvertDirection dir)
+{
+  constexpr struct
+  {
+    int native;
+    int wii;
+  } mapping[] = {
+      {POLLRDNORM, 0x0001}, {POLLRDBAND, 0x0002}, {POLLPRI, 0x0004}, {POLLWRNORM, 0x0008},
+      {POLLWRBAND, 0x0010}, {POLLERR, 0x0020},    {POLLHUP, 0x0040}, {POLLNVAL, 0x0080},
+  };
+
+  s32 converted_events = 0;
+  s32 unhandled_events = 0;
+
+  if (dir == ConvertDirection::NativeToWii)
+  {
+    for (const auto& map : mapping)
+    {
+      if (events & map.native)
+        converted_events |= map.wii;
+    }
+  }
+  else
+  {
+    unhandled_events = events;
+    for (const auto& map : mapping)
+    {
+      if (events & map.wii)
+        converted_events |= map.native;
+      unhandled_events &= ~map.wii;
+    }
+  }
+  if (unhandled_events)
+    ERROR_LOG(IOS_NET, "SO_POLL: unhandled Wii event types: %04x", unhandled_events);
+  return converted_events;
 }
 
 void WiiSockMan::Convert(sockaddr_in const& from, WiiSockAddrIn& to, s32 addrlen)
@@ -752,6 +945,35 @@ void WiiSockMan::Convert(sockaddr_in const& from, WiiSockAddrIn& to, s32 addrlen
     to.len = addrlen;
 }
 
+void WiiSockMan::DoState(PointerWrap& p)
+{
+  bool saving =
+      p.mode == PointerWrap::Mode::MODE_WRITE || p.mode == PointerWrap::Mode::MODE_MEASURE;
+  auto size = pending_polls.size();
+  p.Do(size);
+  if (!saving)
+    pending_polls.resize(size);
+  for (auto& pcmd : pending_polls)
+  {
+    p.Do(pcmd.request_addr);
+    p.Do(pcmd.buffer_out);
+    p.Do(pcmd.wii_fds);
+  }
+
+  if (saving)
+    return;
+  for (auto& pcmd : pending_polls)
+  {
+    for (auto& wfd : pcmd.wii_fds)
+      wfd.revents = (POLLHUP | POLLERR);
+  }
+}
+
+void WiiSockMan::AddPollCommand(const PollCommand& cmd)
+{
+  pending_polls.push_back(cmd);
+}
+
 void WiiSockMan::UpdateWantDeterminism(bool want)
 {
   // If we switched into movie recording, kill existing sockets.
@@ -759,6 +981,11 @@ void WiiSockMan::UpdateWantDeterminism(bool want)
     Clean();
 }
 
+void WiiSocket::sockop::Abort(s32 value)
+{
+  is_aborted = true;
+  GetIOS()->EnqueueIPCReply(request, value);
+}
 #undef ERRORCODE
 #undef EITHER
 }  // namespace IOS::HLE

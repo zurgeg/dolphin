@@ -37,6 +37,7 @@ add_library(core
   PatchEngine.h
   State.cpp
   State.h
+  SyncIdentifier.h
   SysConf.cpp
   SysConf.h
   TitleDatabase.cpp
@@ -79,6 +80,8 @@ add_library(core
   Debugger/Dump.cpp
   Debugger/Dump.h
   Debugger/GCELF.h
+  Debugger/OSThread.cpp
+  Debugger/OSThread.h
   Debugger/PPCDebugInterface.cpp
   Debugger/PPCDebugInterface.h
   Debugger/RSO.cpp
@@ -221,10 +224,13 @@ add_library(core
   HW/GCMemcard/GCIFile.h
   HW/GCMemcard/GCMemcard.cpp
   HW/GCMemcard/GCMemcard.h
+  HW/GCMemcard/GCMemcardBase.h
   HW/GCMemcard/GCMemcardDirectory.cpp
   HW/GCMemcard/GCMemcardDirectory.h
   HW/GCMemcard/GCMemcardRaw.cpp
   HW/GCMemcard/GCMemcardRaw.h
+  HW/GCMemcard/GCMemcardUtils.cpp
+  HW/GCMemcard/GCMemcardUtils.h
   HW/GCPad.cpp
   HW/GCPad.h
   HW/GCPadEmu.cpp
@@ -551,12 +557,12 @@ PUBLIC
   inputcommon
   ${MBEDTLS_LIBRARIES}
   pugixml
+  RangeSet::RangeSet
   sfml-network
   sfml-system
   videonull
   videoogl
   videosoftware
-  videovulkan
 
 PRIVATE
   fmt::fmt
@@ -576,6 +582,11 @@ if (APPLE)
     ${IOB_LIBRARY}
     ${IOK_LIBRARY}
   )
+elseif (ANDROID)
+  target_link_libraries(core
+  PRIVATE
+    androidcommon
+  )
 endif()
 
 if(LIBUSB_FOUND)
@@ -589,10 +600,15 @@ if(LIBUSB_FOUND)
   )
 endif()
 
+if(ENABLE_VULKAN)
+  target_link_libraries(core PUBLIC videovulkan)
+endif()
+
 if(WIN32)
   target_sources(core PRIVATE
-    HW/EXI/BBA-TAP/TAP_Win32.cpp
-    HW/EXI/BBA-TAP/TAP_Win32.h
+    HW/EXI/BBA/TAP_Win32.cpp
+    HW/EXI/BBA/TAP_Win32.h
+    HW/EXI/BBA/XLINK_KAI_BBA.cpp
     HW/WiimoteReal/IOWin.cpp
     HW/WiimoteReal/IOWin.h
   )
@@ -605,7 +621,8 @@ if(WIN32)
   target_compile_definitions(core PRIVATE "-D_WINSOCK_DEPRECATED_NO_WARNINGS")
 elseif(APPLE)
   target_sources(core PRIVATE
-    HW/EXI/BBA-TAP/TAP_Apple.cpp
+    HW/EXI/BBA/TAP_Apple.cpp
+    HW/EXI/BBA/XLINK_KAI_BBA.cpp
     HW/WiimoteReal/IOdarwin.h
     HW/WiimoteReal/IOdarwin_private.h
     HW/WiimoteReal/IOdarwin.mm
@@ -613,7 +630,8 @@ elseif(APPLE)
   target_link_libraries(core PUBLIC ${IOB_LIBRARY})
 elseif(UNIX)
   target_sources(core PRIVATE
-    HW/EXI/BBA-TAP/TAP_Unix.cpp
+    HW/EXI/BBA/TAP_Unix.cpp
+    HW/EXI/BBA/XLINK_KAI_BBA.cpp
   )
   if(ANDROID)
     target_sources(core PRIVATE
@@ -628,7 +646,7 @@ if(CMAKE_SYSTEM_NAME MATCHES "Linux")
   option(ENABLE_BLUEZ "Enables bluetooth support" ON)
   if(ENABLE_BLUEZ)
     find_package(BlueZ)
-    if(BLUEZ_FOUND)
+    if(BlueZ_FOUND)
       message(STATUS "BlueZ found, enabling bluetooth support")
       target_sources(core PRIVATE
         HW/WiimoteReal/IOLinux.cpp

@@ -48,23 +48,26 @@ WiiTASInputWindow::WiiTASInputWindow(QWidget* parent, int num) : TASInputWindow(
                                     ir_x_shortcut_key_sequence.toString(QKeySequence::NativeText),
                                     ir_y_shortcut_key_sequence.toString(QKeySequence::NativeText)));
 
+  const int ir_x_default = static_cast<int>(std::round(ir_max_x / 2.));
+  const int ir_y_default = static_cast<int>(std::round(ir_max_y / 2.));
+
   auto* x_layout = new QHBoxLayout;
-  m_ir_x_value = CreateSliderValuePair(x_layout, ir_max_x, ir_x_shortcut_key_sequence,
+  m_ir_x_value = CreateSliderValuePair(x_layout, ir_x_default, ir_max_x, ir_x_shortcut_key_sequence,
                                        Qt::Horizontal, m_ir_box, true);
 
   auto* y_layout = new QVBoxLayout;
-  m_ir_y_value = CreateSliderValuePair(y_layout, ir_max_y, ir_y_shortcut_key_sequence, Qt::Vertical,
-                                       m_ir_box, true);
+  m_ir_y_value = CreateSliderValuePair(y_layout, ir_y_default, ir_max_y, ir_y_shortcut_key_sequence,
+                                       Qt::Vertical, m_ir_box, true);
   m_ir_y_value->setMaximumWidth(60);
 
   auto* visual = new IRWidget(this);
+  visual->SetX(ir_x_default);
+  visual->SetY(ir_y_default);
+
   connect(m_ir_x_value, qOverload<int>(&QSpinBox::valueChanged), visual, &IRWidget::SetX);
   connect(m_ir_y_value, qOverload<int>(&QSpinBox::valueChanged), visual, &IRWidget::SetY);
   connect(visual, &IRWidget::ChangedX, m_ir_x_value, &QSpinBox::setValue);
   connect(visual, &IRWidget::ChangedY, m_ir_y_value, &QSpinBox::setValue);
-
-  m_ir_x_value->setValue(static_cast<int>(std::round(ir_max_x / 2.)));
-  m_ir_y_value->setValue(static_cast<int>(std::round(ir_max_y / 2.)));
 
   auto* visual_ar = new AspectRatioWidget(visual, ir_max_x, ir_max_y);
 
@@ -103,20 +106,16 @@ WiiTASInputWindow::WiiTASInputWindow(QWidget* parent, int num) : TASInputWindow(
 
   auto* remote_orientation_x_layout =
       // i18n: Refers to a 3D axis (used when mapping motion controls)
-      CreateSliderValuePairLayout(tr("X"), m_remote_orientation_x_value, 1023, Qt::Key_Q,
+      CreateSliderValuePairLayout(tr("X"), m_remote_orientation_x_value, 512, 1023, Qt::Key_Q,
                                   m_remote_orientation_box);
   auto* remote_orientation_y_layout =
       // i18n: Refers to a 3D axis (used when mapping motion controls)
-      CreateSliderValuePairLayout(tr("Y"), m_remote_orientation_y_value, 1023, Qt::Key_W,
+      CreateSliderValuePairLayout(tr("Y"), m_remote_orientation_y_value, 512, 1023, Qt::Key_W,
                                   m_remote_orientation_box);
   auto* remote_orientation_z_layout =
       // i18n: Refers to a 3D axis (used when mapping motion controls)
-      CreateSliderValuePairLayout(tr("Z"), m_remote_orientation_z_value, 1023, Qt::Key_E,
+      CreateSliderValuePairLayout(tr("Z"), m_remote_orientation_z_value, 616, 1023, Qt::Key_E,
                                   m_remote_orientation_box);
-
-  m_remote_orientation_x_value->setValue(512);
-  m_remote_orientation_y_value->setValue(512);
-  m_remote_orientation_z_value->setValue(616);
 
   auto* remote_orientation_layout = new QVBoxLayout;
   remote_orientation_layout->addLayout(remote_orientation_x_layout);
@@ -128,20 +127,16 @@ WiiTASInputWindow::WiiTASInputWindow(QWidget* parent, int num) : TASInputWindow(
 
   auto* nunchuk_orientation_x_layout =
       // i18n: Refers to a 3D axis (used when mapping motion controls)
-      CreateSliderValuePairLayout(tr("X"), m_nunchuk_orientation_x_value, 1023, Qt::Key_I,
+      CreateSliderValuePairLayout(tr("X"), m_nunchuk_orientation_x_value, 512, 1023, Qt::Key_I,
                                   m_nunchuk_orientation_box);
   auto* nunchuk_orientation_y_layout =
       // i18n: Refers to a 3D axis (used when mapping motion controls)
-      CreateSliderValuePairLayout(tr("Y"), m_nunchuk_orientation_y_value, 1023, Qt::Key_O,
+      CreateSliderValuePairLayout(tr("Y"), m_nunchuk_orientation_y_value, 512, 1023, Qt::Key_O,
                                   m_nunchuk_orientation_box);
   auto* nunchuk_orientation_z_layout =
       // i18n: Refers to a 3D axis (used when mapping motion controls)
-      CreateSliderValuePairLayout(tr("Z"), m_nunchuk_orientation_z_value, 1023, Qt::Key_P,
+      CreateSliderValuePairLayout(tr("Z"), m_nunchuk_orientation_z_value, 512, 1023, Qt::Key_P,
                                   m_nunchuk_orientation_box);
-
-  m_nunchuk_orientation_x_value->setValue(512);
-  m_nunchuk_orientation_y_value->setValue(512);
-  m_nunchuk_orientation_z_value->setValue(512);
 
   auto* nunchuk_orientation_layout = new QVBoxLayout;
   nunchuk_orientation_layout->addLayout(nunchuk_orientation_x_layout);
@@ -150,9 +145,9 @@ WiiTASInputWindow::WiiTASInputWindow(QWidget* parent, int num) : TASInputWindow(
   m_nunchuk_orientation_box->setLayout(nunchuk_orientation_layout);
 
   m_triggers_box = new QGroupBox(tr("Triggers"));
-  auto* l_trigger_layout =
-      CreateSliderValuePairLayout(tr("Left"), m_left_trigger_value, 31, Qt::Key_N, m_triggers_box);
-  auto* r_trigger_layout = CreateSliderValuePairLayout(tr("Right"), m_right_trigger_value, 31,
+  auto* l_trigger_layout = CreateSliderValuePairLayout(tr("Left"), m_left_trigger_value, 0, 31,
+                                                       Qt::Key_N, m_triggers_box);
+  auto* r_trigger_layout = CreateSliderValuePairLayout(tr("Right"), m_right_trigger_value, 0, 31,
                                                        Qt::Key_M, m_triggers_box);
 
   auto* triggers_layout = new QVBoxLayout;
@@ -160,19 +155,19 @@ WiiTASInputWindow::WiiTASInputWindow(QWidget* parent, int num) : TASInputWindow(
   triggers_layout->addLayout(r_trigger_layout);
   m_triggers_box->setLayout(triggers_layout);
 
-  m_a_button = new TASCheckBox(QStringLiteral("&A"));
-  m_b_button = new TASCheckBox(QStringLiteral("&B"));
-  m_1_button = new TASCheckBox(QStringLiteral("&1"));
-  m_2_button = new TASCheckBox(QStringLiteral("&2"));
-  m_plus_button = new TASCheckBox(QStringLiteral("&+"));
-  m_minus_button = new TASCheckBox(QStringLiteral("&-"));
-  m_home_button = new TASCheckBox(QStringLiteral("&HOME"));
-  m_left_button = new TASCheckBox(QStringLiteral("&Left"));
-  m_up_button = new TASCheckBox(QStringLiteral("&Up"));
-  m_down_button = new TASCheckBox(QStringLiteral("&Down"));
-  m_right_button = new TASCheckBox(QStringLiteral("&Right"));
-  m_c_button = new TASCheckBox(QStringLiteral("&C"));
-  m_z_button = new TASCheckBox(QStringLiteral("&Z"));
+  m_a_button = CreateButton(QStringLiteral("&A"));
+  m_b_button = CreateButton(QStringLiteral("&B"));
+  m_1_button = CreateButton(QStringLiteral("&1"));
+  m_2_button = CreateButton(QStringLiteral("&2"));
+  m_plus_button = CreateButton(QStringLiteral("&+"));
+  m_minus_button = CreateButton(QStringLiteral("&-"));
+  m_home_button = CreateButton(QStringLiteral("&HOME"));
+  m_left_button = CreateButton(QStringLiteral("&Left"));
+  m_up_button = CreateButton(QStringLiteral("&Up"));
+  m_down_button = CreateButton(QStringLiteral("&Down"));
+  m_right_button = CreateButton(QStringLiteral("&Right"));
+  m_c_button = CreateButton(QStringLiteral("&C"));
+  m_z_button = CreateButton(QStringLiteral("&Z"));
 
   auto* buttons_layout = new QGridLayout;
   buttons_layout->addWidget(m_a_button, 0, 0);
@@ -201,21 +196,21 @@ WiiTASInputWindow::WiiTASInputWindow(QWidget* parent, int num) : TASInputWindow(
   m_nunchuk_buttons_box = new QGroupBox(tr("Nunchuk Buttons"));
   m_nunchuk_buttons_box->setLayout(nunchuk_buttons_layout);
 
-  m_classic_a_button = new TASCheckBox(QStringLiteral("&A"));
-  m_classic_b_button = new TASCheckBox(QStringLiteral("&B"));
-  m_classic_x_button = new TASCheckBox(QStringLiteral("&X"));
-  m_classic_y_button = new TASCheckBox(QStringLiteral("&Y"));
-  m_classic_l_button = new TASCheckBox(QStringLiteral("&L"));
-  m_classic_r_button = new TASCheckBox(QStringLiteral("&R"));
-  m_classic_zl_button = new TASCheckBox(QStringLiteral("&ZL"));
-  m_classic_zr_button = new TASCheckBox(QStringLiteral("ZR"));
-  m_classic_plus_button = new TASCheckBox(QStringLiteral("&+"));
-  m_classic_minus_button = new TASCheckBox(QStringLiteral("&-"));
-  m_classic_home_button = new TASCheckBox(QStringLiteral("&HOME"));
-  m_classic_left_button = new TASCheckBox(QStringLiteral("L&eft"));
-  m_classic_up_button = new TASCheckBox(QStringLiteral("&Up"));
-  m_classic_down_button = new TASCheckBox(QStringLiteral("&Down"));
-  m_classic_right_button = new TASCheckBox(QStringLiteral("R&ight"));
+  m_classic_a_button = CreateButton(QStringLiteral("&A"));
+  m_classic_b_button = CreateButton(QStringLiteral("&B"));
+  m_classic_x_button = CreateButton(QStringLiteral("&X"));
+  m_classic_y_button = CreateButton(QStringLiteral("&Y"));
+  m_classic_l_button = CreateButton(QStringLiteral("&L"));
+  m_classic_r_button = CreateButton(QStringLiteral("&R"));
+  m_classic_zl_button = CreateButton(QStringLiteral("&ZL"));
+  m_classic_zr_button = CreateButton(QStringLiteral("ZR"));
+  m_classic_plus_button = CreateButton(QStringLiteral("&+"));
+  m_classic_minus_button = CreateButton(QStringLiteral("&-"));
+  m_classic_home_button = CreateButton(QStringLiteral("&HOME"));
+  m_classic_left_button = CreateButton(QStringLiteral("L&eft"));
+  m_classic_up_button = CreateButton(QStringLiteral("&Up"));
+  m_classic_down_button = CreateButton(QStringLiteral("&Down"));
+  m_classic_right_button = CreateButton(QStringLiteral("R&ight"));
 
   auto* classic_buttons_layout = new QGridLayout;
   classic_buttons_layout->addWidget(m_classic_a_button, 0, 0);
@@ -248,7 +243,7 @@ WiiTASInputWindow::WiiTASInputWindow(QWidget* parent, int num) : TASInputWindow(
   layout->addWidget(m_remote_buttons_box);
   layout->addWidget(m_nunchuk_buttons_box);
   layout->addWidget(m_classic_buttons_box);
-  layout->addWidget(m_use_controller);
+  layout->addWidget(m_settings_box);
 
   setLayout(layout);
 

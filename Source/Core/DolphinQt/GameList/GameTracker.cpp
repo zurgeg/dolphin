@@ -8,7 +8,9 @@
 #include <QDirIterator>
 #include <QFile>
 
-#include "Core/ConfigManager.h"
+#include "Common/Config/Config.h"
+
+#include "Core/Config/UISettings.h"
 
 #include "DiscIO/DirectoryBlob.h"
 
@@ -24,6 +26,7 @@ static const QStringList game_filters{
     QStringLiteral("*.[gG][cC][mM]"), QStringLiteral("*.[iI][sS][oO]"),
     QStringLiteral("*.[tT][gG][cC]"), QStringLiteral("*.[cC][iI][sS][oO]"),
     QStringLiteral("*.[gG][cC][zZ]"), QStringLiteral("*.[wW][bB][fF][sS]"),
+    QStringLiteral("*.[wW][iI][aA]"), QStringLiteral("*.[rR][vV][zZ]"),
     QStringLiteral("*.[wW][aA][dD]"), QStringLiteral("*.[eE][lL][fF]"),
     QStringLiteral("*.[dD][oO][lL]")};
 
@@ -34,7 +37,7 @@ GameTracker::GameTracker(QObject* parent) : QFileSystemWatcher(parent)
 
   connect(this, &QFileSystemWatcher::directoryChanged, this, &GameTracker::UpdateDirectory);
   connect(this, &QFileSystemWatcher::fileChanged, this, &GameTracker::UpdateFile);
-  connect(&Settings::Instance(), &Settings::AutoRefreshToggled, [] {
+  connect(&Settings::Instance(), &Settings::AutoRefreshToggled, this, [] {
     const auto paths = Settings::Instance().GetPaths();
 
     for (const auto& path : paths)
@@ -44,7 +47,7 @@ GameTracker::GameTracker(QObject* parent) : QFileSystemWatcher(parent)
     }
   });
 
-  connect(&Settings::Instance(), &Settings::MetadataRefreshRequested, [this] {
+  connect(&Settings::Instance(), &Settings::MetadataRefreshRequested, this, [this] {
     m_load_thread.EmplaceItem(Command{CommandType::UpdateMetadata, {}});
   });
 
@@ -223,7 +226,7 @@ void GameTracker::AddDirectoryInternal(const QString& dir)
 static std::unique_ptr<QDirIterator> GetIterator(const QString& dir)
 {
   return std::make_unique<QDirIterator>(dir, game_filters, QDir::NoFilter,
-                                        SConfig::GetInstance().m_RecursiveISOFolder ?
+                                        Config::Get(Config::MAIN_RECURSIVE_ISO_PATHS) ?
                                             QDirIterator::Subdirectories :
                                             QDirIterator::NoIteratorFlags);
 }

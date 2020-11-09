@@ -17,7 +17,6 @@
 #include "Core/PowerPC/MMU.h"
 #include "Core/PowerPC/PowerPC.h"
 #include "DolphinQt/Host.h"
-#include "DolphinQt/QtUtils/FontMetricsHelper.h"
 #include "DolphinQt/Settings.h"
 
 ThreadWidget::ThreadWidget(QWidget* parent) : QDockWidget(parent)
@@ -42,10 +41,10 @@ ThreadWidget::ThreadWidget(QWidget* parent) : QDockWidget(parent)
 
   connect(Host::GetInstance(), &Host::UpdateDisasmDialog, this, &ThreadWidget::Update);
 
-  connect(&Settings::Instance(), &Settings::ThreadsVisibilityChanged,
+  connect(&Settings::Instance(), &Settings::ThreadsVisibilityChanged, this,
           [this](bool visible) { setHidden(!visible); });
 
-  connect(&Settings::Instance(), &Settings::DebugModeToggled, [this](bool enabled) {
+  connect(&Settings::Instance(), &Settings::DebugModeToggled, this, [this](bool enabled) {
     setHidden(!enabled || !Settings::Instance().IsThreadsVisible());
   });
 }
@@ -135,7 +134,7 @@ QLineEdit* ThreadWidget::CreateLineEdit() const
   QLineEdit* line_edit = new QLineEdit(QLatin1Literal("00000000"));
   line_edit->setReadOnly(true);
   line_edit->setFixedWidth(
-      FontMetricsWidth(line_edit->fontMetrics(), QLatin1Literal(" 00000000 ")));
+      line_edit->fontMetrics().boundingRect(QLatin1Literal(" 00000000 ")).width());
   return line_edit;
 }
 
@@ -253,29 +252,26 @@ void ThreadWidget::Update()
   if (!isVisible())
     return;
 
-  const auto state = Core::GetState();
-  if (state == Core::State::Stopping)
+  const auto emu_state = Core::GetState();
+  if (emu_state == Core::State::Stopping)
   {
     m_thread_table->setRowCount(0);
     UpdateThreadContext({});
     UpdateThreadCallstack({});
   }
-  if (state != Core::State::Paused)
+  if (emu_state != Core::State::Paused)
     return;
 
   const auto format_hex = [](u32 value) {
     return QStringLiteral("%1").arg(value, 8, 16, QLatin1Char('0'));
   };
-  const auto format_f64_as_u64 = [](double value) {
-    return QStringLiteral("%1").arg(Common::BitCast<u64>(value), 16, 16, QLatin1Char('0'));
-  };
   const auto format_hex_from = [&format_hex](u32 addr) {
     addr = PowerPC::HostIsRAMAddress(addr) ? PowerPC::HostRead_U32(addr) : 0;
     return format_hex(addr);
   };
-  const auto get_state = [](u16 state) {
+  const auto get_state = [](u16 thread_state) {
     QString state_name;
-    switch (state)
+    switch (thread_state)
     {
     case 1:
       state_name = tr("READY");
@@ -292,7 +288,7 @@ void ThreadWidget::Update()
     default:
       state_name = tr("UNKNOWN");
     }
-    return QStringLiteral("%1 (%2)").arg(QString::number(state), state_name);
+    return QStringLiteral("%1 (%2)").arg(QString::number(thread_state), state_name);
   };
   const auto get_priority = [](u16 base, u16 effective) {
     return QStringLiteral("%1 (%2)").arg(QString::number(base), QString::number(effective));
@@ -469,7 +465,7 @@ void ThreadWidget::OnSelectionChanged(int row)
 {
   Common::Debug::PartialContext context;
 
-  if (row >= 0 && row < m_threads.size())
+  if (row >= 0 && size_t(row) < m_threads.size())
     context = m_threads[row]->GetContext();
 
   UpdateThreadContext(context);

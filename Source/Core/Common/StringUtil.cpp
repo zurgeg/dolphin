@@ -5,6 +5,7 @@
 #include "Common/StringUtil.h"
 
 #include <algorithm>
+#include <codecvt>
 #include <cstdarg>
 #include <cstddef>
 #include <cstdio>
@@ -17,6 +18,7 @@
 #include <locale>
 #include <sstream>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include <fmt/format.h>
@@ -29,10 +31,10 @@
 
 #ifdef _WIN32
 #include <Windows.h>
+#include <shellapi.h>
 constexpr u32 CODEPAGE_SHIFT_JIS = 932;
 constexpr u32 CODEPAGE_WINDOWS_1252 = 1252;
 #else
-#include <codecvt>
 #include <errno.h>
 #include <iconv.h>
 #include <locale.h>
@@ -177,7 +179,7 @@ std::string StringFromFormatV(const char* format, va_list args)
 #endif
   if (vasprintf(&buf, format, args) < 0)
   {
-    ERROR_LOG(COMMON, "Unable to allocate memory for string");
+    ERROR_LOG_FMT(COMMON, "Unable to allocate memory for string");
     buf = nullptr;
   }
 
@@ -412,6 +414,12 @@ void StringPopBackIf(std::string* s, char c)
     s->pop_back();
 }
 
+size_t StringUTF8CodePointCount(const std::string& str)
+{
+  return str.size() -
+         std::count_if(str.begin(), str.end(), [](char c) -> bool { return (c & 0xC0) == 0x80; });
+}
+
 #ifdef _WIN32
 
 std::wstring CPToUTF16(u32 code_page, std::string_view input)
@@ -434,52 +442,50 @@ std::wstring CPToUTF16(u32 code_page, std::string_view input)
 
 std::string UTF16ToCP(u32 code_page, std::wstring_view input)
 {
-  std::string output;
+  if (input.empty())
+    return {};
 
-  if (0 != input.size())
+  // "If cchWideChar [input buffer size] is set to 0, the function fails." -MSDN
+  auto const size = WideCharToMultiByte(code_page, 0, input.data(), static_cast<int>(input.size()),
+                                        nullptr, 0, nullptr, nullptr);
+
+  std::string output(size, '\0');
+
+  if (size != WideCharToMultiByte(code_page, 0, input.data(), static_cast<int>(input.size()),
+                                  output.data(), static_cast<int>(output.size()), nullptr, nullptr))
   {
-    // "If cchWideChar [input buffer size] is set to 0, the function fails." -MSDN
-    auto const size = WideCharToMultiByte(
-        code_page, 0, input.data(), static_cast<int>(input.size()), nullptr, 0, nullptr, nullptr);
-
-    output.resize(size);
-
-    if (size != WideCharToMultiByte(code_page, 0, input.data(), static_cast<int>(input.size()),
-                                    &output[0], static_cast<int>(output.size()), nullptr, nullptr))
-    {
-      const DWORD error_code = GetLastError();
-      ERROR_LOG(COMMON, "WideCharToMultiByte Error in String '%s': %lu",
-                std::wstring(input).c_str(), error_code);
-      output.clear();
-    }
+    const DWORD error_code = GetLastError();
+    ERROR_LOG_FMT(COMMON, "WideCharToMultiByte Error in String '{}': {}", WStringToUTF8(input),
+                  error_code);
+    return {};
   }
 
   return output;
 }
 
-std::wstring UTF8ToUTF16(std::string_view input)
+std::wstring UTF8ToWString(std::string_view input)
 {
   return CPToUTF16(CP_UTF8, input);
 }
 
-std::string UTF16ToUTF8(std::wstring_view input)
+std::string WStringToUTF8(std::wstring_view input)
 {
   return UTF16ToCP(CP_UTF8, input);
 }
 
 std::string SHIFTJISToUTF8(std::string_view input)
 {
-  return UTF16ToUTF8(CPToUTF16(CODEPAGE_SHIFT_JIS, input));
+  return WStringToUTF8(CPToUTF16(CODEPAGE_SHIFT_JIS, input));
 }
 
 std::string UTF8ToSHIFTJIS(std::string_view input)
 {
-  return UTF16ToCP(CODEPAGE_SHIFT_JIS, UTF8ToUTF16(input));
+  return UTF16ToCP(CODEPAGE_SHIFT_JIS, UTF8ToWString(input));
 }
 
 std::string CP1252ToUTF8(std::string_view input)
 {
-  return UTF16ToUTF8(CPToUTF16(CODEPAGE_WINDOWS_1252, input));
+  return WStringToUTF8(CPToUTF16(CODEPAGE_WINDOWS_1252, input));
 }
 
 std::string UTF16BEToUTF8(const char16_t* str, size_t max_size)
@@ -487,7 +493,7 @@ std::string UTF16BEToUTF8(const char16_t* str, size_t max_size)
   const char16_t* str_end = std::find(str, str + max_size, '\0');
   std::wstring result(static_cast<size_t>(str_end - str), '\0');
   std::transform(str, str_end, result.begin(), static_cast<u16 (&)(u16)>(Common::swap16));
-  return UTF16ToUTF8(result);
+  return WStringToUTF8(result);
 }
 
 #else
@@ -500,7 +506,7 @@ std::string CodeTo(const char* tocode, const char* fromcode, std::basic_string_v
   iconv_t const conv_desc = iconv_open(tocode, fromcode);
   if ((iconv_t)-1 == conv_desc)
   {
-    ERROR_LOG(COMMON, "Iconv initialization failure [%s]: %s", fromcode, strerror(errno));
+    ERROR_LOG_FMT(COMMON, "Iconv initialization failure [{}]: {}", fromcode, strerror(errno));
   }
   else
   {
@@ -533,7 +539,7 @@ std::string CodeTo(const char* tocode, const char* fromcode, std::basic_string_v
         }
         else
         {
-          ERROR_LOG(COMMON, "iconv failure [%s]: %s", fromcode, strerror(errno));
+          ERROR_LOG_FMT(COMMON, "iconv failure [{}]: {}", fromcode, strerror(errno));
           break;
         }
       }
@@ -572,9 +578,12 @@ std::string UTF8ToSHIFTJIS(std::string_view input)
   return CodeTo("SJIS", "UTF-8", input);
 }
 
-std::string UTF16ToUTF8(std::wstring_view input)
+std::string WStringToUTF8(std::wstring_view input)
 {
-  std::wstring_convert<std::codecvt_utf8<wchar_t>, wchar_t> converter;
+  using codecvt = std::conditional_t<sizeof(wchar_t) == 2, std::codecvt_utf8_utf16<wchar_t>,
+                                     std::codecvt_utf8<wchar_t>>;
+
+  std::wstring_convert<codecvt, wchar_t> converter;
   return converter.to_bytes(input.data(), input.data() + input.size());
 }
 
@@ -586,12 +595,24 @@ std::string UTF16BEToUTF8(const char16_t* str, size_t max_size)
 
 #endif
 
+std::string UTF16ToUTF8(std::u16string_view input)
+{
+  std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t> converter;
+  return converter.to_bytes(input.data(), input.data() + input.size());
+}
+
+std::u16string UTF8ToUTF16(std::string_view input)
+{
+  std::wstring_convert<std::codecvt_utf8_utf16<char16_t>, char16_t> converter;
+  return converter.from_bytes(input.data(), input.data() + input.size());
+}
+
 #ifdef HAS_STD_FILESYSTEM
 // This is a replacement for path::u8path, which is deprecated starting with C++20.
 std::filesystem::path StringToPath(std::string_view path)
 {
 #ifdef _MSC_VER
-  return std::filesystem::path(UTF8ToUTF16(path));
+  return std::filesystem::path(UTF8ToWString(path));
 #else
   return std::filesystem::path(path);
 #endif
@@ -602,9 +623,28 @@ std::filesystem::path StringToPath(std::string_view path)
 std::string PathToString(const std::filesystem::path& path)
 {
 #ifdef _MSC_VER
-  return UTF16ToUTF8(path.native());
+  return WStringToUTF8(path.native());
 #else
   return path.native();
 #endif
+}
+#endif
+
+#ifdef _WIN32
+std::vector<std::string> CommandLineToUtf8Argv(const wchar_t* command_line)
+{
+  int nargs;
+  LPWSTR* tokenized = CommandLineToArgvW(command_line, &nargs);
+  if (!tokenized)
+    return {};
+
+  std::vector<std::string> argv(nargs);
+  for (size_t i = 0; i < nargs; ++i)
+  {
+    argv[i] = WStringToUTF8(tokenized[i]);
+  }
+
+  LocalFree(tokenized);
+  return argv;
 }
 #endif

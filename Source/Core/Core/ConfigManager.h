@@ -76,7 +76,6 @@ struct SConfig
 
   // ISO folder
   std::vector<std::string> m_ISOFolder;
-  bool m_RecursiveISOFolder;
 
   // Settings
   bool bEnableDebugging = false;
@@ -149,14 +148,7 @@ struct SConfig
   // Interface settings
   bool bConfirmStop = false;
   bool bHideCursor = false;
-  bool bUsePanicHandlers = true;
-  bool bOnScreenDisplayMessages = true;
   std::string theme_name;
-
-  // Analytics settings.
-  std::string m_analytics_id;
-  bool m_analytics_enabled = false;
-  bool m_analytics_permission_asked = false;
 
   // Bluetooth passthrough mode settings
   bool m_bt_passthrough_enabled = false;
@@ -196,6 +188,7 @@ struct SConfig
   bool m_disc_booted_from_game_list = false;
 
   const std::string& GetGameID() const { return m_game_id; }
+  const std::string& GetTitleName() const { return m_title_name; }
   const std::string& GetTitleDescription() const { return m_title_description; }
   u64 GetTitleID() const { return m_title_id; }
   u16 GetRevision() const { return m_revision; }
@@ -226,7 +219,10 @@ struct SConfig
   std::string m_strGbaCartB;
   ExpansionInterface::TEXIDevices m_EXIDevice[3];
   SerialInterface::SIDevices m_SIDevice[4];
+
   std::string m_bba_mac;
+  std::string m_bba_xlink_ip;
+  bool m_bba_xlink_chat_osd = true;
 
   // interface language
   std::string m_InterfaceLanguage;
@@ -271,6 +267,9 @@ struct SConfig
   bool m_showIDColumn;
   bool m_showRegionColumn;
   bool m_showSizeColumn;
+  bool m_showFileFormatColumn;
+  bool m_showBlockSizeColumn;
+  bool m_showCompressionColumn;
   bool m_showTagsColumn;
 
   std::string m_WirelessMac;
@@ -337,7 +336,6 @@ private:
   void SaveInputSettings(IniFile& ini);
   void SaveMovieSettings(IniFile& ini);
   void SaveFifoPlayerSettings(IniFile& ini);
-  void SaveAnalyticsSettings(IniFile& ini);
   void SaveBluetoothPassthroughSettings(IniFile& ini);
   void SaveUSBPassthroughSettings(IniFile& ini);
   void SaveAutoUpdateSettings(IniFile& ini);
@@ -351,7 +349,6 @@ private:
   void LoadInputSettings(IniFile& ini);
   void LoadMovieSettings(IniFile& ini);
   void LoadFifoPlayerSettings(IniFile& ini);
-  void LoadAnalyticsSettings(IniFile& ini);
   void LoadBluetoothPassthroughSettings(IniFile& ini);
   void LoadUSBPassthroughSettings(IniFile& ini);
   void LoadAutoUpdateSettings(IniFile& ini);
@@ -364,6 +361,7 @@ private:
 
   std::string m_game_id;
   std::string m_gametdb_id;
+  std::string m_title_name;
   std::string m_title_description;
   u64 m_title_id;
   u16 m_revision;

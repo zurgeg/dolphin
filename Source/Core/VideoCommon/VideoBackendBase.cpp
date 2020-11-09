@@ -16,16 +16,12 @@
 #include "Common/CommonTypes.h"
 #include "Common/Config/Config.h"
 #include "Common/Event.h"
+#include "Common/FileUtil.h"
 #include "Common/Logging/Log.h"
 
 #include "Core/Config/MainSettings.h"
 #include "Core/ConfigManager.h"
 #include "Core/Core.h"
-
-// OpenGL is not available on Windows-on-ARM64
-#if !defined(_WIN32) || !defined(_M_ARM64)
-#define HAS_OPENGL 1
-#endif
 
 // TODO: ugly
 #ifdef _WIN32
@@ -37,7 +33,9 @@
 #include "VideoBackends/OGL/VideoBackend.h"
 #include "VideoBackends/Software/VideoBackend.h"
 #endif
+#ifdef HAS_VULKAN
 #include "VideoBackends/Vulkan/VideoBackend.h"
+#endif
 
 #include "VideoCommon/AsyncRequests.h"
 #include "VideoCommon/BPStructs.h"
@@ -58,9 +56,7 @@
 #include "VideoCommon/VideoConfig.h"
 #include "VideoCommon/VideoState.h"
 
-std::vector<std::unique_ptr<VideoBackendBase>> g_available_video_backends;
 VideoBackendBase* g_video_backend = nullptr;
-static VideoBackendBase* s_default_backend = nullptr;
 
 #ifdef _WIN32
 #include <windows.h>
@@ -68,8 +64,11 @@ static VideoBackendBase* s_default_backend = nullptr;
 // Nvidia drivers >= v302 will check if the application exports a global
 // variable named NvOptimusEnablement to know if it should run the app in high
 // performance graphics mode or using the IGP.
+// AMD drivers >= 13.35 do the same, but for the variable
+// named AmdPowerXpressRequestHighPerformance instead.
 extern "C" {
 __declspec(dllexport) DWORD NvOptimusEnablement = 1;
+__declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
 }
 #endif
 
@@ -197,49 +196,61 @@ u16 VideoBackendBase::Video_GetBoundingBox(int index)
   return result;
 }
 
-void VideoBackendBase::PopulateList()
+static VideoBackendBase* GetDefaultVideoBackend()
 {
-  // OGL > D3D11 > Vulkan > SW > Null
-#ifdef HAS_OPENGL
-  g_available_video_backends.push_back(std::make_unique<OGL::VideoBackend>());
-#endif
-#ifdef _WIN32
-  g_available_video_backends.push_back(std::make_unique<DX11::VideoBackend>());
-  g_available_video_backends.push_back(std::make_unique<DX12::VideoBackend>());
-#endif
-  g_available_video_backends.push_back(std::make_unique<Vulkan::VideoBackend>());
-#ifdef HAS_OPENGL
-  g_available_video_backends.push_back(std::make_unique<SW::VideoSoftware>());
-#endif
-  g_available_video_backends.push_back(std::make_unique<Null::VideoBackend>());
-
-  const auto iter =
-      std::find_if(g_available_video_backends.begin(), g_available_video_backends.end(),
-                   [](const auto& backend) { return backend != nullptr; });
-
-  if (iter == g_available_video_backends.end())
-    return;
-
-  s_default_backend = iter->get();
-  g_video_backend = iter->get();
+  const auto& backends = VideoBackendBase::GetAvailableBackends();
+  if (backends.empty())
+    return nullptr;
+  return backends.front().get();
 }
 
-void VideoBackendBase::ClearList()
+std::string VideoBackendBase::GetDefaultBackendName()
 {
-  g_available_video_backends.clear();
+  auto* default_backend = GetDefaultVideoBackend();
+  return default_backend ? default_backend->GetName() : "";
+}
+
+const std::vector<std::unique_ptr<VideoBackendBase>>& VideoBackendBase::GetAvailableBackends()
+{
+  static auto s_available_backends = [] {
+    std::vector<std::unique_ptr<VideoBackendBase>> backends;
+
+    // OGL > D3D11 > D3D12 > Vulkan > SW > Null
+#ifdef HAS_OPENGL
+    backends.push_back(std::make_unique<OGL::VideoBackend>());
+#endif
+#ifdef _WIN32
+    backends.push_back(std::make_unique<DX11::VideoBackend>());
+    backends.push_back(std::make_unique<DX12::VideoBackend>());
+#endif
+#ifdef HAS_VULKAN
+    backends.push_back(std::make_unique<Vulkan::VideoBackend>());
+#endif
+#ifdef HAS_OPENGL
+    backends.push_back(std::make_unique<SW::VideoSoftware>());
+#endif
+    backends.push_back(std::make_unique<Null::VideoBackend>());
+
+    if (!backends.empty())
+      g_video_backend = backends.front().get();
+
+    return backends;
+  }();
+  return s_available_backends;
 }
 
 void VideoBackendBase::ActivateBackend(const std::string& name)
 {
   // If empty, set it to the default backend (expected behavior)
   if (name.empty())
-    g_video_backend = s_default_backend;
+    g_video_backend = GetDefaultVideoBackend();
 
-  const auto iter =
-      std::find_if(g_available_video_backends.begin(), g_available_video_backends.end(),
-                   [&name](const auto& backend) { return name == backend->GetName(); });
+  const auto& backends = GetAvailableBackends();
+  const auto iter = std::find_if(backends.begin(), backends.end(), [&name](const auto& backend) {
+    return name == backend->GetName();
+  });
 
-  if (iter == g_available_video_backends.end())
+  if (iter == backends.end())
     return;
 
   g_video_backend = iter->get();

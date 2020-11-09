@@ -137,6 +137,17 @@ void TextureCacheBase::Invalidate()
   texture_pool.clear();
 }
 
+void TextureCacheBase::ForceReload()
+{
+  Invalidate();
+
+  // Clear all current hires textures, they are invalid
+  HiresTexture::Clear();
+
+  // Load fresh
+  HiresTexture::Update();
+}
+
 void TextureCacheBase::OnConfigChanged(const VideoConfig& config)
 {
   if (config.bHiresTextures != backup_config.hires_textures ||
@@ -920,7 +931,14 @@ void TextureCacheBase::DumpTexture(TCacheEntry* entry, std::string basename, uns
 
   if (level > 0)
   {
+    if (!g_ActiveConfig.bDumpMipmapTextures)
+      return;
     basename += fmt::format("_mip{}", level);
+  }
+  else
+  {
+    if (!g_ActiveConfig.bDumpBaseTextures)
+      return;
   }
 
   const std::string filename = fmt::format("{}/{}.png", szDir, basename);

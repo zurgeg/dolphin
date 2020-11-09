@@ -74,7 +74,7 @@ static Common::Event g_compressAndDumpStateSyncEvent;
 static std::thread g_save_thread;
 
 // Don't forget to increase this after doing changes on the savestate system
-constexpr u32 STATE_VERSION = 115;  // Last changed in PR 8722
+constexpr u32 STATE_VERSION = 124;  // Last changed in PR 9097
 
 // Maps savestate versions to Dolphin versions.
 // Versions after 42 don't need to be added to this list,
@@ -213,10 +213,6 @@ static void DoState(PointerWrap& p)
   p.DoMarker("Wiimote");
   Gecko::DoState(p);
   p.DoMarker("Gecko");
-
-#if defined(HAVE_FFMPEG)
-  FrameDump::DoState();
-#endif
 }
 
 void LoadFromBuffer(std::vector<u8>& buffer)
@@ -480,6 +476,17 @@ std::string GetInfoStringOfSlot(int slot, bool translate)
     return translate ? Common::GetStringT("Unknown") : "Unknown";
 
   return Common::Timer::GetDateTimeFormatted(header.time);
+}
+
+u64 GetUnixTimeOfSlot(int slot)
+{
+  State::StateHeader header;
+  if (!ReadHeader(MakeStateFilename(slot), header))
+    return 0;
+
+  constexpr u64 MS_PER_SEC = 1000;
+  return static_cast<u64>(header.time * MS_PER_SEC) +
+         (Common::Timer::DOUBLE_TIME_OFFSET * MS_PER_SEC);
 }
 
 static void LoadFileStateData(const std::string& filename, std::vector<u8>& ret_data)

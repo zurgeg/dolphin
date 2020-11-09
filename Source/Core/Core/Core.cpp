@@ -79,10 +79,15 @@
 
 #include "VideoCommon/AsyncRequests.h"
 #include "VideoCommon/Fifo.h"
+#include "VideoCommon/HiresTextures.h"
 #include "VideoCommon/OnScreenDisplay.h"
 #include "VideoCommon/RenderBase.h"
 #include "VideoCommon/VideoBackendBase.h"
 #include "VideoCommon/VideoConfig.h"
+
+#ifdef ANDROID
+#include "jni/AndroidCommon/IDCache.h"
+#endif
 
 namespace Core
 {
@@ -97,7 +102,6 @@ static bool s_is_stopping = false;
 static bool s_hardware_initialized = false;
 static bool s_is_started = false;
 static Common::Flag s_is_booting;
-static Common::Event s_done_booting;
 static std::thread s_emu_thread;
 static StateChangedCallbackFunc s_on_state_changed_callback;
 
@@ -239,7 +243,6 @@ bool Init(std::unique_ptr<BootParameters> boot, const WindowSystemInfo& wsi)
   g_video_backend->PrepareWindow(prepared_wsi);
 
   // Start the emu thread
-  s_done_booting.Reset();
   s_is_booting.Set();
   s_emu_thread = std::thread(EmuThread, std::move(boot), prepared_wsi);
   return true;
@@ -328,6 +331,12 @@ static void CpuThread(const std::optional<std::string>& savestate_path, bool del
 
   // This needs to be delayed until after the video backend is ready.
   DolphinAnalytics::Instance().ReportGameStart();
+
+#ifdef ANDROID
+  // For some reason, calling the JNI function AttachCurrentThread from the CPU thread after a
+  // certain point causes a crash if fastmem is enabled. Let's call it early to avoid that problem.
+  static_cast<void>(IDCache::GetEnvForThread());
+#endif
 
   if (_CoreParameter.bFastmem)
     EMM::InstallExceptionHandler();  // Let's run under memory watch
@@ -419,7 +428,6 @@ static void EmuThread(std::unique_ptr<BootParameters> boot, WindowSystemInfo wsi
     s_on_state_changed_callback(State::Starting);
   Common::ScopeGuard flag_guard{[] {
     s_is_booting.Clear();
-    s_done_booting.Set();
     s_is_started = false;
     s_is_stopping = false;
     s_wants_determinism = false;
@@ -435,54 +443,6 @@ static void EmuThread(std::unique_ptr<BootParameters> boot, WindowSystemInfo wsi
   // For a time this acts as the CPU thread...
   DeclareAsCPUThread();
   s_frame_step = false;
-
-  Movie::Init(*boot);
-  Common::ScopeGuard movie_guard{&Movie::Shutdown};
-
-  HW::Init();
-
-  Common::ScopeGuard hw_guard{[] {
-    // We must set up this flag before executing HW::Shutdown()
-    s_hardware_initialized = false;
-    INFO_LOG(CONSOLE, "%s", StopMessage(false, "Shutting down HW").c_str());
-    HW::Shutdown();
-    INFO_LOG(CONSOLE, "%s", StopMessage(false, "HW shutdown").c_str());
-
-    // Clear on screen messages that haven't expired
-    OSD::ClearMessages();
-
-    // The config must be restored only after the whole HW has shut down,
-    // not when it is still running.
-    BootManager::RestoreConfig();
-
-    PatchEngine::Shutdown();
-    HLE::Clear();
-  }};
-
-  VideoBackendBase::PopulateBackendInfo();
-
-  if (!g_video_backend->Initialize(wsi))
-  {
-    PanicAlert("Failed to initialize video backend!");
-    return;
-  }
-  Common::ScopeGuard video_guard{[] { g_video_backend->Shutdown(); }};
-
-  // Render a single frame without anything on it to clear the screen.
-  // This avoids the game list being displayed while the core is finishing initializing.
-  g_renderer->BeginUIFrame();
-  g_renderer->EndUIFrame();
-
-  if (cpu_info.HTT)
-    SConfig::GetInstance().bDSPThread = cpu_info.num_cores > 4;
-  else
-    SConfig::GetInstance().bDSPThread = cpu_info.num_cores > 2;
-
-  if (!DSP::GetDSPEmulator()->Initialize(core_parameter.bWii, core_parameter.bDSPThread))
-  {
-    PanicAlert("Failed to initialize DSP emulation!");
-    return;
-  }
 
   // The frontend will likely have initialized the controller interface, as it needs
   // it to provide the configuration dialogs. In this case, instead of re-initializing
@@ -542,13 +502,64 @@ static void EmuThread(std::unique_ptr<BootParameters> boot, WindowSystemInfo wsi
     g_controller_interface.Shutdown();
   }};
 
+  Movie::Init(*boot);
+  Common::ScopeGuard movie_guard{&Movie::Shutdown};
+
+  HW::Init();
+
+  Common::ScopeGuard hw_guard{[] {
+    // We must set up this flag before executing HW::Shutdown()
+    s_hardware_initialized = false;
+    INFO_LOG(CONSOLE, "%s", StopMessage(false, "Shutting down HW").c_str());
+    HW::Shutdown();
+    INFO_LOG(CONSOLE, "%s", StopMessage(false, "HW shutdown").c_str());
+
+    // Clear on screen messages that haven't expired
+    OSD::ClearMessages();
+
+    // The config must be restored only after the whole HW has shut down,
+    // not when it is still running.
+    BootManager::RestoreConfig();
+
+    PatchEngine::Shutdown();
+    HLE::Clear();
+  }};
+
+  VideoBackendBase::PopulateBackendInfo();
+
+  if (!g_video_backend->Initialize(wsi))
+  {
+    PanicAlert("Failed to initialize video backend!");
+    return;
+  }
+  Common::ScopeGuard video_guard{[] { g_video_backend->Shutdown(); }};
+
+  // Render a single frame without anything on it to clear the screen.
+  // This avoids the game list being displayed while the core is finishing initializing.
+  g_renderer->BeginUIFrame();
+  g_renderer->EndUIFrame();
+
+  if (cpu_info.HTT)
+    SConfig::GetInstance().bDSPThread = cpu_info.num_cores > 4;
+  else
+    SConfig::GetInstance().bDSPThread = cpu_info.num_cores > 2;
+
+  if (!DSP::GetDSPEmulator()->Initialize(core_parameter.bWii, core_parameter.bDSPThread))
+  {
+    PanicAlert("Failed to initialize DSP emulation!");
+    return;
+  }
+
+  // Inputs loading may have generated custom dynamic textures
+  // it's now ok to initialize any custom textures
+  HiresTexture::Update();
+
   AudioCommon::InitSoundStream();
   Common::ScopeGuard audio_guard{&AudioCommon::ShutdownSoundStream};
 
   // The hardware is initialized.
   s_hardware_initialized = true;
   s_is_booting.Clear();
-  s_done_booting.Set();
 
   // Set execution state to known values (CPU/FIFO/Audio Paused)
   CPU::Break();
@@ -672,12 +683,6 @@ State GetState()
   return State::Uninitialized;
 }
 
-void WaitUntilDoneBooting()
-{
-  if (s_is_booting.IsSet() || !s_hardware_initialized)
-    s_done_booting.Wait();
-}
-
 static std::string GenerateScreenshotFolderPath()
 {
   const std::string& gameId = SConfig::GetInstance().GetGameID();
@@ -713,26 +718,25 @@ static std::string GenerateScreenshotName()
   return name;
 }
 
-void SaveScreenShot(bool wait_for_completion)
+void SaveScreenShot()
 {
   const bool bPaused = GetState() == State::Paused;
 
   SetState(State::Paused);
 
-  g_renderer->SaveScreenshot(GenerateScreenshotName(), wait_for_completion);
+  g_renderer->SaveScreenshot(GenerateScreenshotName());
 
   if (!bPaused)
     SetState(State::Running);
 }
 
-void SaveScreenShot(std::string_view name, bool wait_for_completion)
+void SaveScreenShot(std::string_view name)
 {
   const bool bPaused = GetState() == State::Paused;
 
   SetState(State::Paused);
 
-  g_renderer->SaveScreenshot(fmt::format("{}{}.png", GenerateScreenshotFolderPath(), name),
-                             wait_for_completion);
+  g_renderer->SaveScreenshot(fmt::format("{}{}.png", GenerateScreenshotFolderPath(), name));
 
   if (!bPaused)
     SetState(State::Running);

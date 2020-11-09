@@ -157,13 +157,18 @@ public:
   DirectoryBlobReader& operator=(DirectoryBlobReader&&) = default;
 
   bool Read(u64 offset, u64 length, u8* buffer) override;
-  bool SupportsReadWiiDecrypted() const override;
+  bool SupportsReadWiiDecrypted(u64 offset, u64 size, u64 partition_data_offset) const override;
   bool ReadWiiDecrypted(u64 offset, u64 size, u8* buffer, u64 partition_data_offset) override;
 
   BlobType GetBlobType() const override;
+
   u64 GetRawSize() const override;
   u64 GetDataSize() const override;
   bool IsDataSizeAccurate() const override { return true; }
+
+  u64 GetBlockSize() const override { return 0; }
+  bool HasFastRandomAccessInBlock() const override { return true; }
+  std::string GetCompressionMethod() const override { return {}; }
 
 private:
   struct PartitionWithType
@@ -179,6 +184,8 @@ private:
 
   explicit DirectoryBlobReader(const std::string& game_partition_root,
                                const std::string& true_root);
+
+  const DirectoryBlobPartition* GetPartition(u64 offset, u64 size, u64 partition_data_offset) const;
 
   bool EncryptPartitionData(u64 offset, u64 size, u8* buffer, u64 partition_data_offset,
                             u64 partition_data_decrypted_size);
